@@ -2,6 +2,149 @@
 
 import { useState, useEffect } from 'react';
 
+// Info Modal component for displaying metric details
+function InfoModal({
+  info,
+  onClose,
+}: {
+  info: { title: string; description: string; impact: string; tips: string[] };
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+      <div
+        className="relative bg-gray-900 rounded-2xl p-6 max-w-md w-full border border-gray-700 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-gray-500 hover:text-white transition-colors text-xl"
+        >
+          ×
+        </button>
+        <h2 className="text-xl font-bold text-white mb-3">{info.title}</h2>
+        <p className="text-gray-400 text-sm mb-4">{info.description}</p>
+        <div className="mb-4">
+          <h3 className="text-gray-500 text-xs mb-1">HEALTH IMPACT</h3>
+          <p className="text-gray-300 text-sm">{info.impact}</p>
+        </div>
+        <div>
+          <h3 className="text-gray-500 text-xs mb-2">TIPS</h3>
+          <ul className="space-y-2">
+            {info.tips.map((tip, i) => (
+              <li key={i} className="text-gray-400 text-sm flex gap-2">
+                <span className="text-teal-400">•</span>
+                <span>{tip}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Info button component
+function InfoButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className="w-5 h-5 rounded-full bg-gray-700 hover:bg-gray-600 text-gray-400 hover:text-white text-xs flex items-center justify-center transition-colors"
+      aria-label="More info"
+    >
+      ?
+    </button>
+  );
+}
+
+// Metric info content
+const METRIC_INFO: Record<string, { title: string; description: string; impact: string; tips: string[] }> = {
+  recovery: {
+    title: 'Recovery Score',
+    description: 'Your recovery score (0-100%) measures how ready your body is to perform today. It combines HRV, sleep quality, and body battery to estimate your physiological readiness.',
+    impact: 'Higher recovery means your nervous system is balanced and your body has restored energy. Low recovery suggests accumulated stress or insufficient rest.',
+    tips: [
+      'Green (67-100%): Push hard - ideal for intense workouts',
+      'Yellow (34-66%): Moderate effort - technique work or steady cardio',
+      'Red (0-33%): Recovery focus - rest, mobility, light yoga',
+    ],
+  },
+  strain: {
+    title: 'Strain Score',
+    description: 'Strain (0-21) measures the cardiovascular load on your body throughout the day. It combines steps, intensity minutes, and energy expenditure.',
+    impact: 'The scale is logarithmic - going from 18 to 19 is much harder than 5 to 6. This prevents overtraining by making high strain harder to achieve.',
+    tips: [
+      'Match strain to recovery for optimal adaptation',
+      'Higher recovery days = higher strain targets',
+      'Consistent moderate strain beats occasional extreme strain',
+    ],
+  },
+  sleep: {
+    title: 'Sleep',
+    description: 'Sleep duration and quality are crucial for recovery. We track total hours, sleep stages (deep, REM, light), and efficiency (time asleep vs time in bed).',
+    impact: 'Deep sleep restores physical energy and repairs muscles. REM sleep consolidates memory and regulates mood. Both are essential for full recovery.',
+    tips: [
+      'Aim for your personal baseline, not a fixed 8 hours',
+      'Higher strain days require more sleep',
+      'Consistency matters more than occasional long sleeps',
+    ],
+  },
+  hrv: {
+    title: 'Heart Rate Variability (HRV)',
+    description: 'HRV measures the variation in time between heartbeats (in milliseconds). Higher HRV generally indicates better cardiovascular fitness and recovery.',
+    impact: 'HRV reflects your autonomic nervous system balance. High HRV = parasympathetic (rest) dominant. Low HRV = sympathetic (stress) dominant.',
+    tips: [
+      'Compare to YOUR baseline, not population averages',
+      'Sudden drops may indicate stress, illness, or overtraining',
+      'HRV naturally varies - look at 7-day trends',
+    ],
+  },
+  rhr: {
+    title: 'Resting Heart Rate (RHR)',
+    description: 'Your resting heart rate is measured during sleep. Lower RHR generally indicates better cardiovascular fitness and recovery.',
+    impact: 'Elevated RHR (above your baseline) can signal stress, dehydration, illness, or overtraining. It\'s an early warning system for your body.',
+    tips: [
+      'Lower is generally better for RHR',
+      'A spike of 5+ bpm above baseline warrants attention',
+      'Alcohol, late meals, and stress all elevate RHR',
+    ],
+  },
+  body_battery: {
+    title: 'Body Battery',
+    description: 'Body Battery (0-100) tracks your energy levels throughout the day. It charges during rest and sleep, and drains during activity and stress.',
+    impact: 'High morning body battery indicates good overnight recovery. Tracking drain rate helps understand how activities affect your energy.',
+    tips: [
+      'Aim to start the day with 60+ body battery',
+      'High stress drains battery even without physical activity',
+      'Matches well with subjective energy feelings',
+    ],
+  },
+  sleep_stages: {
+    title: 'Sleep Stages',
+    description: 'Sleep cycles through stages: Light (N1/N2), Deep (N3), and REM. Each serves different recovery functions.',
+    impact: 'Deep sleep (15-20%): Physical restoration, muscle repair, immune function. REM (20-25%): Mental recovery, memory consolidation, emotional regulation.',
+    tips: [
+      'Alcohol suppresses REM sleep',
+      'Late exercise can reduce deep sleep',
+      'Cool room temperature promotes better deep sleep',
+    ],
+  },
+  sleep_debt: {
+    title: 'Sleep Debt',
+    description: 'Sleep debt accumulates when you sleep less than your body needs. It represents the total hours of missed sleep over recent days.',
+    impact: 'Accumulated sleep debt impairs cognitive function, mood, and physical recovery. It takes multiple nights of good sleep to fully repay.',
+    tips: [
+      'Spread debt repayment over several nights',
+      'Add 10-15 mins per night to gradually repay',
+      'Sleeping in on weekends doesn\'t fully repay weekday debt',
+    ],
+  },
+};
+
 interface DirectionIndicator {
   direction: 'up' | 'down' | 'stable';
   change_pct: number;
@@ -382,6 +525,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState<DayData | null>(null);
   const [view, setView] = useState<'overview' | 'sleep' | 'strain' | 'recovery'>('overview');
+  const [activeInfoModal, setActiveInfoModal] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/wellness/history?days=14')
@@ -465,6 +609,7 @@ export default function Dashboard() {
             avgStrain={avgStrain}
             avgSleep={avgSleep}
             onSelectDay={setSelectedDay}
+            onShowInfo={setActiveInfoModal}
           />
         )}
         {view === 'recovery' && (
@@ -474,6 +619,7 @@ export default function Dashboard() {
             recovery={recovery}
             recoveryColor={recoveryColor}
             onSelectDay={setSelectedDay}
+            onShowInfo={setActiveInfoModal}
           />
         )}
         {view === 'strain' && (
@@ -482,6 +628,7 @@ export default function Dashboard() {
             history={history}
             strain={strain}
             onSelectDay={setSelectedDay}
+            onShowInfo={setActiveInfoModal}
           />
         )}
         {view === 'sleep' && (
@@ -489,9 +636,18 @@ export default function Dashboard() {
             selectedDay={selectedDay}
             history={history}
             onSelectDay={setSelectedDay}
+            onShowInfo={setActiveInfoModal}
           />
         )}
       </main>
+
+      {/* Info Modal */}
+      {activeInfoModal && METRIC_INFO[activeInfoModal] && (
+        <InfoModal
+          info={METRIC_INFO[activeInfoModal]}
+          onClose={() => setActiveInfoModal(null)}
+        />
+      )}
     </div>
   );
 }
@@ -506,6 +662,7 @@ function OverviewView({
   avgStrain,
   avgSleep,
   onSelectDay,
+  onShowInfo,
 }: {
   selectedDay: DayData;
   history: DayData[];
@@ -516,6 +673,7 @@ function OverviewView({
   avgStrain: number;
   avgSleep: number;
   onSelectDay: (day: DayData) => void;
+  onShowInfo: (key: string) => void;
 }) {
   const strainTarget = getStrainTarget(recovery);
 
@@ -592,6 +750,10 @@ function OverviewView({
       {/* Main Recovery Display */}
       <div className="flex flex-col items-center py-4">
         <div className="relative w-52 h-52">
+          {/* Info button */}
+          <div className="absolute top-0 right-0 z-10">
+            <InfoButton onClick={() => onShowInfo('recovery')} />
+          </div>
           <svg className="w-full h-full transform -rotate-90">
             <circle cx="104" cy="104" r="92" fill="none" stroke="#1a1a1a" strokeWidth="16" />
             <circle
@@ -630,6 +792,8 @@ function OverviewView({
           unit="of 21"
           color="#3B82F6"
           progress={strain / 21}
+          infoKey="strain"
+          onShowInfo={onShowInfo}
         />
         <StatCard
           label="SLEEP"
@@ -639,6 +803,8 @@ function OverviewView({
           progress={(selectedDay.sleep?.total_hours || 0) / (selectedDay.baselines?.sleep_7d_avg || 8)}
           direction={selectedDay.sleep?.direction}
           baselineLabel="vs your avg"
+          infoKey="sleep"
+          onShowInfo={onShowInfo}
         />
         <StatCard
           label="HRV"
@@ -647,6 +813,8 @@ function OverviewView({
           color="#10B981"
           direction={selectedDay.hrv?.direction}
           baselineLabel="vs your avg"
+          infoKey="hrv"
+          onShowInfo={onShowInfo}
         />
         <StatCard
           label="RHR"
@@ -655,6 +823,8 @@ function OverviewView({
           color="#EF4444"
           direction={selectedDay.rhr_direction}
           baselineLabel="vs your avg"
+          infoKey="rhr"
+          onShowInfo={onShowInfo}
         />
       </div>
 
@@ -684,12 +854,14 @@ function RecoveryView({
   recovery,
   recoveryColor,
   onSelectDay,
+  onShowInfo,
 }: {
   selectedDay: DayData;
   history: DayData[];
   recovery: number;
   recoveryColor: string;
   onSelectDay: (day: DayData) => void;
+  onShowInfo: (key: string) => void;
 }) {
   const recoveryHistory = history.map(d => calculateRecovery(d)).reverse();
   const maxRecovery = Math.max(...recoveryHistory, 100);
@@ -699,6 +871,10 @@ function RecoveryView({
       {/* Recovery Gauge */}
       <div className="flex flex-col items-center py-4">
         <div className="relative w-44 h-44">
+          {/* Info button */}
+          <div className="absolute top-0 right-0 z-10">
+            <InfoButton onClick={() => onShowInfo('recovery')} />
+          </div>
           <svg className="w-full h-full transform -rotate-90">
             <circle cx="88" cy="88" r="76" fill="none" stroke="#1a1a1a" strokeWidth="14" />
             <circle
@@ -793,11 +969,13 @@ function StrainView({
   history,
   strain,
   onSelectDay,
+  onShowInfo,
 }: {
   selectedDay: DayData;
   history: DayData[];
   strain: number;
   onSelectDay: (day: DayData) => void;
+  onShowInfo: (key: string) => void;
 }) {
   const strainHistory = history.map(d => calculateStrain(d)).reverse();
   const maxStrain = Math.max(...strainHistory, 21);
@@ -810,7 +988,10 @@ function StrainView({
   return (
     <div className="p-4 space-y-6">
       {/* Strain Display */}
-      <div className="flex flex-col items-center py-4">
+      <div className="flex flex-col items-center py-4 relative">
+        <div className="absolute top-4 right-4">
+          <InfoButton onClick={() => onShowInfo('strain')} />
+        </div>
         <div className="text-7xl font-bold text-blue-400">{strain}</div>
         <div className="text-gray-500 text-sm">of 21.0 max strain</div>
 
@@ -913,10 +1094,12 @@ function SleepView({
   selectedDay,
   history,
   onSelectDay,
+  onShowInfo,
 }: {
   selectedDay: DayData;
   history: DayData[];
   onSelectDay: (day: DayData) => void;
+  onShowInfo: (key: string) => void;
 }) {
   const sleep = selectedDay.sleep;
   const sleepHistory = history.map(d => d.sleep?.total_hours || 0).reverse();
@@ -965,8 +1148,11 @@ function SleepView({
       </div>
 
       {/* Tonight's Sleep Target - PERSONALIZED */}
-      <div className="bg-gradient-to-br from-purple-900/40 to-gray-900 rounded-2xl p-4 border border-purple-800/30">
-        <div className="text-gray-400 text-xs mb-3">TONIGHT&apos;S TARGET</div>
+      <div className="bg-gradient-to-br from-purple-900/40 to-gray-900 rounded-2xl p-4 border border-purple-800/30 relative">
+        <div className="flex justify-between items-start mb-3">
+          <div className="text-gray-400 text-xs">TONIGHT&apos;S TARGET</div>
+          <InfoButton onClick={() => onShowInfo('sleep_debt')} />
+        </div>
         <div className="flex items-baseline justify-center mb-4">
           <span className="text-4xl font-bold text-purple-400">{formatHoursMinutes(sleepTarget)}</span>
         </div>
@@ -997,8 +1183,11 @@ function SleepView({
 
       {/* Sleep Stages */}
       {sleep && (
-        <div className="bg-gray-900 rounded-2xl p-4">
-          <div className="text-gray-500 text-xs mb-3">SLEEP STAGES</div>
+        <div className="bg-gray-900 rounded-2xl p-4 relative">
+          <div className="flex justify-between items-start mb-3">
+            <div className="text-gray-500 text-xs">SLEEP STAGES</div>
+            <InfoButton onClick={() => onShowInfo('sleep_stages')} />
+          </div>
 
           {/* Stage Bar */}
           <div className="h-8 rounded-lg overflow-hidden flex">
@@ -1100,6 +1289,8 @@ function StatCard({
   subtext,
   direction,
   baselineLabel,
+  infoKey,
+  onShowInfo,
 }: {
   label: string;
   value: string;
@@ -1109,10 +1300,17 @@ function StatCard({
   subtext?: string;
   direction?: DirectionIndicator | null;
   baselineLabel?: string;
+  infoKey?: string;
+  onShowInfo?: (key: string) => void;
 }) {
   return (
-    <div className="bg-gray-900 rounded-2xl p-4">
-      <div className="text-gray-500 text-xs mb-2">{label}</div>
+    <div className="bg-gray-900 rounded-2xl p-4 relative">
+      <div className="flex justify-between items-start mb-2">
+        <div className="text-gray-500 text-xs">{label}</div>
+        {infoKey && onShowInfo && (
+          <InfoButton onClick={() => onShowInfo(infoKey)} />
+        )}
+      </div>
       <div className="flex items-baseline gap-1">
         <span className="text-2xl font-bold" style={{ color }}>{value}</span>
         <span className="text-gray-600 text-sm">{unit}</span>
