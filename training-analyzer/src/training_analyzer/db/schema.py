@@ -50,6 +50,38 @@ CREATE TABLE IF NOT EXISTS activity_metrics (
 CREATE INDEX IF NOT EXISTS idx_activity_metrics_date ON activity_metrics(date);
 CREATE INDEX IF NOT EXISTS idx_fitness_metrics_date ON fitness_metrics(date);
 
+-- Race goals table for tracking target races
+CREATE TABLE IF NOT EXISTS race_goals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    race_date TEXT NOT NULL,
+    distance TEXT NOT NULL,
+    target_time_sec INTEGER NOT NULL,
+    notes TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Weekly summaries for historical analysis
+CREATE TABLE IF NOT EXISTS weekly_summaries (
+    week_start TEXT PRIMARY KEY,
+    total_distance_km REAL,
+    total_duration_min REAL,
+    total_load REAL,
+    activity_count INTEGER,
+    zone_distribution TEXT,  -- JSON with zone1_pct through zone5_pct
+    ctl_start REAL,
+    ctl_end REAL,
+    ctl_change REAL,
+    atl_change REAL,
+    week_over_week_change REAL,
+    is_recovery_week INTEGER DEFAULT 0,
+    insights TEXT,           -- JSON array of insight strings
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create indexes for new tables
+CREATE INDEX IF NOT EXISTS idx_race_goals_date ON race_goals(race_date);
+CREATE INDEX IF NOT EXISTS idx_weekly_summaries_start ON weekly_summaries(week_start);
+
 -- Insert default profile if not exists (using INSERT OR IGNORE)
 INSERT OR IGNORE INTO user_profile (id, max_hr, rest_hr, threshold_hr, age, gender)
 VALUES (1, 185, 55, 165, 30, 'male');

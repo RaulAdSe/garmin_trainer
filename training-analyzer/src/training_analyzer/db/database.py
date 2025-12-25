@@ -414,3 +414,167 @@ class TrainingDatabase:
                     "latest": fitness_range["max_date"],
                 },
             }
+
+    # === Race Goals Methods ===
+
+    def save_race_goal(
+        self,
+        race_date: str,
+        distance: str,
+        target_time_sec: int,
+        notes: Optional[str] = None,
+    ) -> int:
+        """
+        Save a new race goal.
+
+        Args:
+            race_date: Race date (YYYY-MM-DD)
+            distance: Distance identifier (e.g., "5k", "half_marathon")
+            target_time_sec: Target finish time in seconds
+            notes: Optional notes about the goal
+
+        Returns:
+            ID of the created goal
+        """
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO race_goals (race_date, distance, target_time_sec, notes)
+                VALUES (?, ?, ?, ?)
+                """,
+                (race_date, distance, target_time_sec, notes),
+            )
+            return cursor.lastrowid
+
+    def get_race_goals(self, upcoming_only: bool = True) -> List[Dict[str, Any]]:
+        """
+        Get race goals.
+
+        Args:
+            upcoming_only: If True, only return future goals
+
+        Returns:
+            List of goal dictionaries
+        """
+        with self._get_connection() as conn:
+            if upcoming_only:
+                today = date.today().isoformat()
+                rows = conn.execute(
+                    """
+                    SELECT * FROM race_goals
+                    WHERE race_date >= ?
+                    ORDER BY race_date ASC
+                    """,
+                    (today,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM race_goals ORDER BY race_date DESC"
+                ).fetchall()
+
+            return [dict(row) for row in rows]
+
+    def get_race_goal(self, goal_id: int) -> Optional[Dict[str, Any]]:
+        """Get a specific race goal by ID."""
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM race_goals WHERE id = ?",
+                (goal_id,),
+            ).fetchone()
+
+            return dict(row) if row else None
+
+    def delete_race_goal(self, goal_id: int) -> bool:
+        """Delete a race goal by ID."""
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "DELETE FROM race_goals WHERE id = ?",
+                (goal_id,),
+            )
+            return cursor.rowcount > 0
+
+    # === Weekly Summary Methods ===
+
+    def save_weekly_summary(
+        self,
+        week_start: str,
+        total_distance_km: float,
+        total_duration_min: float,
+        total_load: float,
+        activity_count: int,
+        zone_distribution: str,  # JSON string
+        ctl_start: float,
+        ctl_end: float,
+        ctl_change: float,
+        atl_change: float,
+        week_over_week_change: float,
+        is_recovery_week: bool,
+        insights: str,  # JSON string
+    ) -> None:
+        """Save or update a weekly summary."""
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO weekly_summaries
+                (week_start, total_distance_km, total_duration_min, total_load,
+                 activity_count, zone_distribution, ctl_start, ctl_end,
+                 ctl_change, atl_change, week_over_week_change, is_recovery_week,
+                 insights, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                (
+                    week_start,
+                    total_distance_km,
+                    total_duration_min,
+                    total_load,
+                    activity_count,
+                    zone_distribution,
+                    ctl_start,
+                    ctl_end,
+                    ctl_change,
+                    atl_change,
+                    week_over_week_change,
+                    1 if is_recovery_week else 0,
+                    insights,
+                ),
+            )
+
+    def get_weekly_summary(self, week_start: str) -> Optional[Dict[str, Any]]:
+        """Get a weekly summary by week start date."""
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM weekly_summaries WHERE week_start = ?",
+                (week_start,),
+            ).fetchone()
+
+            return dict(row) if row else None
+
+    def get_weekly_summaries(
+        self, start_date: str, end_date: str
+    ) -> List[Dict[str, Any]]:
+        """Get weekly summaries for a date range."""
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM weekly_summaries
+                WHERE week_start >= ? AND week_start <= ?
+                ORDER BY week_start DESC
+                """,
+                (start_date, end_date),
+            ).fetchall()
+
+            return [dict(row) for row in rows]
+
+    def get_recent_weekly_summaries(self, weeks: int = 8) -> List[Dict[str, Any]]:
+        """Get the most recent weekly summaries."""
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM weekly_summaries
+                ORDER BY week_start DESC
+                LIMIT ?
+                """,
+                (weeks,),
+            ).fetchall()
+
+            return [dict(row) for row in rows]
