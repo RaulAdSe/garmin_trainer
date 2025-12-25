@@ -1,11 +1,10 @@
 # Environment and secrets
 .env
 .env.*
-*.env
 
 # Garth tokens (OAuth cache)
 .garth_tokens/
-scripts/.garth_tokens/
+shared/.garth_tokens/
 
 # Python
 __pycache__/
@@ -13,19 +12,29 @@ __pycache__/
 *$py.class
 .venv/
 venv/
-env/
+*.egg-info/
+build/
+dist/
 
-# IDE
+# SQLite databases
+*.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE & OS
 .idea/
 .vscode/
 *.swp
-*.swo
-
-# OS
 .DS_Store
-Thumbs.db
 
-# Temp files
+# Next.js
+node_modules/
+.next/
+out/
+
+# Temp
 *.tmp
 *.log
-/tmp/
