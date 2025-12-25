@@ -1,0 +1,31 @@
+# Environment and secrets
+.env
+.env.*
+*.env
+
+# Garth tokens (OAuth cache)
+.garth_tokens/
+scripts/.garth_tokens/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp files
+*.tmp
+*.log
+/tmp/

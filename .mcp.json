@@ -1,0 +1,11 @@
+{
+    "mcpServers": {
+      "n8n": {
+        "type": "http",
+        "url": "https://n8n.servitecingenieria.com/mcp-server/http",
+        "headers": {
+          "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNGYwMTJmMy0yMmZiLTQyYTgtYTg1NC01YTlmNzhjMDg5NGUiLCJpc3MiOiJuOG4iLCJhdWQiOiJtY3Atc2VydmVyLWFwaSIsImp0aSI6ImM2NGZiMzU5LTI2YWQtNGVhNS05ZTU0LTMwNTU4ODViZmRjYSIsImlhdCI6MTc2NjY1ODkyMH0.T4msF1zSOyplhrbdFj1sRFUtHLQX5IgPrqxT1vF1LvY"
+        }
+      }
+    }
+  } 

@@ -1,0 +1,103 @@
+{
+  "name": "raw_activities",
+  "description": "Raw activity data from Garmin Connect",
+  "columns": [
+    {
+      "name": "activity_id",
+      "type": "string",
+      "description": "Unique activity ID from Garmin (Primary Key)",
+      "required": true,
+      "unique": true
+    },
+    {
+      "name": "activity_type",
+      "type": "string",
+      "description": "Activity type key (running, trail_running, cycling, etc.)"
+    },
+    {
+      "name": "activity_name",
+      "type": "string",
+      "description": "User-facing activity name"
+    },
+    {
+      "name": "start_time",
+      "type": "datetime",
+      "description": "Activity start time (local timezone)"
+    },
+    {
+      "name": "distance_m",
+      "type": "number",
+      "description": "Total distance in meters"
+    },
+    {
+      "name": "duration_s",
+      "type": "number",
+      "description": "Total duration in seconds"
+    },
+    {
+      "name": "avg_hr",
+      "type": "number",
+      "description": "Average heart rate (bpm)"
+    },
+    {
+      "name": "max_hr",
+      "type": "number",
+      "description": "Maximum heart rate (bpm)"
+    },
+    {
+      "name": "avg_cadence",
+      "type": "number",
+      "description": "Average running cadence (steps per minute)"
+    },
+    {
+      "name": "avg_pace_sec_per_km",
+      "type": "number",
+      "description": "Average pace in seconds per kilometer"
+    },
+    {
+      "name": "elevation_gain_m",
+      "type": "number",
+      "description": "Total elevation gain in meters"
+    },
+    {
+      "name": "elevation_loss_m",
+      "type": "number",
+      "description": "Total elevation loss in meters"
+    },
+    {
+      "name": "training_effect_aerobic",
+      "type": "number",
+      "description": "Aerobic training effect (0-5 scale)"
+    },
+    {
+      "name": "training_effect_anaerobic",
+      "type": "number",
+      "description": "Anaerobic training effect (0-5 scale)"
+    },
+    {
+      "name": "vo2max",
+      "type": "number",
+      "description": "VO2max estimate from this activity"
+    },
+    {
+      "name": "calories",
+      "type": "number",
+      "description": "Calories burned"
+    },
+    {
+      "name": "raw_json",
+      "type": "text",
+      "description": "Full raw JSON payload from Garmin for future analysis"
+    },
+    {
+      "name": "synced_at",
+      "type": "datetime",
+      "description": "Timestamp when this record was synced"
+    }
+  ],
+  "notes": [
+    "Create this table manually in n8n before importing workflows",
+    "Set activity_id as the primary/unique column for deduplication",
+    "The raw_json field stores the complete Garmin API response"
+  ]
+}

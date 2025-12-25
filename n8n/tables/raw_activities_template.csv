@@ -1,0 +1,2 @@
+activity_id,activity_type,activity_name,start_time,distance_m,duration_s,avg_hr,max_hr,avg_cadence,avg_pace_sec_per_km,elevation_gain_m,elevation_loss_m,training_effect_aerobic,training_effect_anaerobic,vo2max,calories,raw_json,synced_at
+21259568013,running,Barcelona Carrera,2025-12-14T19:03:06,2420,732,145,162,172,302.5,15,12,2.4,1.2,48,185,{},2025-12-25T10:00:00Z
