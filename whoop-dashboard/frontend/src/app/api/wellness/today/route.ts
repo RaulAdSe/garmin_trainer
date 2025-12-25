@@ -157,6 +157,604 @@ function calculateSleepDebt(
   return Math.round(debt * 100) / 100;
 }
 
+// Phase 4: Causality Engine Types
+interface Correlation {
+  pattern_type: 'positive' | 'negative';
+  category: string;
+  title: string;
+  description: string;
+  impact: number;
+  confidence: number;
+  sample_size: number;
+}
+
+interface Streak {
+  name: string;
+  current_count: number;
+  best_count: number;
+  is_active: boolean;
+  last_date: string;
+}
+
+interface TrendAlert {
+  metric: string;
+  direction: 'declining' | 'improving';
+  days: number;
+  change_pct: number;
+  severity: 'warning' | 'concern' | 'positive';
+}
+
+interface WeeklySummary {
+  green_days: number;
+  yellow_days: number;
+  red_days: number;
+  avg_recovery: number;
+  avg_strain: number;
+  avg_sleep: number;
+  total_sleep_debt: number;
+  best_day: string;
+  worst_day: string;
+  correlations: Correlation[];
+  streaks: Streak[];
+  trend_alerts: TrendAlert[];
+}
+
+// Calculate strain from activity data
+function calculateStrain(
+  bbDrained: number | null,
+  steps: number | null,
+  intensityMins: number | null
+): number {
+  let strain = 0;
+  if (steps !== null) strain += Math.min(8, steps / 2000);
+  if (bbDrained !== null) strain += Math.min(8, bbDrained / 12);
+  if (intensityMins !== null) strain += Math.min(5, intensityMins / 20);
+  return Math.round(Math.min(21, strain) * 10) / 10;
+}
+
+// Detect sleep consistency impact on HRV
+function detectSleepConsistencyImpact(
+  db: InstanceType<typeof Database>,
+  days: number = 30
+): Correlation | null {
+  const rows = db.prepare(`
+    SELECT
+      s.date,
+      s.total_sleep_seconds / 3600.0 as sleep_hours,
+      h.hrv_last_night_avg as hrv
+    FROM sleep_data s
+    LEFT JOIN hrv_data h ON s.date = h.date
+    WHERE s.date >= date('now', ?)
+    AND h.hrv_last_night_avg IS NOT NULL
+    ORDER BY s.date DESC
+  `).all(`-${days} days`) as { date: string; sleep_hours: number | null; hrv: number | null }[];
+
+  if (rows.length < 10) return null;
+
+  const consistentHrvs: number[] = [];
+  const inconsistentHrvs: number[] = [];
+
+  for (let i = 0; i < rows.length - 4; i++) {
+    const window = rows.slice(i, i + 5);
+    const windowSleep = window.map(r => r.sleep_hours).filter((s): s is number => s !== null);
+    if (windowSleep.length < 5) continue;
+
+    const hrv = rows[i].hrv;
+    if (hrv === null) continue;
+
+    if (windowSleep.every(s => s >= 7.0)) {
+      consistentHrvs.push(hrv);
+    } else if (windowSleep.some(s => s < 6.0)) {
+      inconsistentHrvs.push(hrv);
+    }
+  }
+
+  if (consistentHrvs.length < 3 || inconsistentHrvs.length < 3) return null;
+
+  const avgConsistent = consistentHrvs.reduce((a, b) => a + b, 0) / consistentHrvs.length;
+  const avgInconsistent = inconsistentHrvs.reduce((a, b) => a + b, 0) / inconsistentHrvs.length;
+
+  if (avgInconsistent === 0) return null;
+
+  const impact = ((avgConsistent - avgInconsistent) / avgInconsistent) * 100;
+  if (Math.abs(impact) < 5) return null;
+
+  const sampleSize = consistentHrvs.length + inconsistentHrvs.length;
+  const confidence = Math.min(1.0, sampleSize / 10);
+
+  return {
+    pattern_type: impact > 0 ? 'positive' : 'negative',
+    category: 'sleep',
+    title: 'Sleep consistency impact',
+    description: `5+ days of 7h+ sleep: HRV baseline ${impact > 0 ? 'up' : 'down'} ${Math.abs(impact).toFixed(0)}%`,
+    impact: Math.round(impact * 10) / 10,
+    confidence: Math.round(confidence * 100) / 100,
+    sample_size: sampleSize,
+  };
+}
+
+// Detect step count correlation with recovery
+function detectStepCountCorrelation(
+  db: InstanceType<typeof Database>,
+  days: number = 30
+): Correlation | null {
+  const rows = db.prepare(`
+    SELECT
+      a.date,
+      a.steps,
+      h2.hrv_last_night_avg as next_hrv,
+      st2.body_battery_charged as next_bb
+    FROM activity_data a
+    JOIN hrv_data h2 ON date(a.date, '+1 day') = h2.date
+    LEFT JOIN stress_data st2 ON date(a.date, '+1 day') = st2.date
+    WHERE a.date >= date('now', ?)
+    AND a.steps IS NOT NULL
+    ORDER BY a.date DESC
+  `).all(`-${days} days`) as { date: string; steps: number; next_hrv: number | null; next_bb: number | null }[];
+
+  if (rows.length < 5) return null;
+
+  const highStepRecoveries: number[] = [];
+  const lowStepRecoveries: number[] = [];
+  const stepThreshold = 8000;
+
+  for (const row of rows) {
+    // Simple recovery proxy using body battery
+    const recovery = row.next_bb || 0;
+    if (recovery === 0) continue;
+
+    if (row.steps >= stepThreshold) {
+      highStepRecoveries.push(recovery);
+    } else if (row.steps < 5000) {
+      lowStepRecoveries.push(recovery);
+    }
+  }
+
+  if (highStepRecoveries.length < 3 || lowStepRecoveries.length < 3) return null;
+
+  const avgHigh = highStepRecoveries.reduce((a, b) => a + b, 0) / highStepRecoveries.length;
+  const avgLow = lowStepRecoveries.reduce((a, b) => a + b, 0) / lowStepRecoveries.length;
+
+  if (avgLow === 0) return null;
+
+  const impact = ((avgHigh - avgLow) / avgLow) * 100;
+  if (Math.abs(impact) < 5) return null;
+
+  const sampleSize = highStepRecoveries.length + lowStepRecoveries.length;
+  const confidence = Math.min(1.0, sampleSize / 10);
+
+  return {
+    pattern_type: impact > 0 ? 'positive' : 'negative',
+    category: 'activity',
+    title: `${stepThreshold / 1000}k+ step days`,
+    description: `High step days (${stepThreshold / 1000}k+) correlate with ${impact > 0 ? '+' : ''}${impact.toFixed(0)}% recovery`,
+    impact: Math.round(impact * 10) / 10,
+    confidence: Math.round(confidence * 100) / 100,
+    sample_size: sampleSize,
+  };
+}
+
+// Calculate green day streak
+function calculateGreenDayStreak(
+  db: InstanceType<typeof Database>,
+  baselines: { hrv_7d_avg: number | null; sleep_7d_avg: number | null }
+): Streak {
+  const rows = db.prepare(`
+    SELECT
+      h.date,
+      h.hrv_last_night_avg as hrv,
+      st.body_battery_charged as bb,
+      s.total_sleep_seconds / 3600.0 as sleep_hours
+    FROM hrv_data h
+    LEFT JOIN stress_data st ON h.date = st.date
+    LEFT JOIN sleep_data s ON h.date = s.date
+    WHERE h.date >= date('now', '-60 days')
+    ORDER BY h.date DESC
+  `).all() as { date: string; hrv: number | null; bb: number | null; sleep_hours: number | null }[];
+
+  if (!rows.length) {
+    return { name: 'green_days', current_count: 0, best_count: 0, is_active: false, last_date: '' };
+  }
+
+  let currentStreak = 0;
+  let bestStreak = 0;
+  let lastDate = '';
+  let inStreak = true;
+
+  for (const row of rows) {
+    const recovery = calculateRecovery(
+      row.hrv,
+      row.sleep_hours,
+      row.bb,
+      { hrv_7d_avg: baselines.hrv_7d_avg, sleep_7d_avg: baselines.sleep_7d_avg, recovery_7d_avg: null }
+    );
+
+    const isGreen = recovery >= 67;
+
+    if (inStreak && isGreen) {
+      currentStreak++;
+      if (currentStreak === 1) lastDate = row.date;
+    } else if (inStreak && !isGreen) {
+      inStreak = false;
+    }
+
+    if (isGreen) {
+      let tempStreak = 1;
+      const idx = rows.indexOf(row);
+      for (let i = idx + 1; i < rows.length; i++) {
+        const nextRecovery = calculateRecovery(
+          rows[i].hrv,
+          rows[i].sleep_hours,
+          rows[i].bb,
+          { hrv_7d_avg: baselines.hrv_7d_avg, sleep_7d_avg: baselines.sleep_7d_avg, recovery_7d_avg: null }
+        );
+        if (nextRecovery >= 67) tempStreak++;
+        else break;
+      }
+      bestStreak = Math.max(bestStreak, tempStreak);
+    }
+  }
+
+  return {
+    name: 'green_days',
+    current_count: currentStreak,
+    best_count: bestStreak,
+    is_active: currentStreak > 0,
+    last_date: lastDate,
+  };
+}
+
+// Calculate sleep consistency streak
+function calculateSleepConsistencyStreak(
+  db: InstanceType<typeof Database>,
+  thresholdHours: number = 7.0
+): Streak {
+  const rows = db.prepare(`
+    SELECT date, total_sleep_seconds / 3600.0 as sleep_hours
+    FROM sleep_data
+    WHERE date >= date('now', '-60 days')
+    AND total_sleep_seconds IS NOT NULL
+    ORDER BY date DESC
+  `).all() as { date: string; sleep_hours: number }[];
+
+  if (!rows.length) {
+    return { name: 'sleep_consistency', current_count: 0, best_count: 0, is_active: false, last_date: '' };
+  }
+
+  let currentStreak = 0;
+  let bestStreak = 0;
+  let lastDate = '';
+  let inStreak = true;
+
+  for (let i = 0; i < rows.length; i++) {
+    const meetsTarget = rows[i].sleep_hours >= thresholdHours;
+
+    if (inStreak && meetsTarget) {
+      currentStreak++;
+      if (currentStreak === 1) lastDate = rows[i].date;
+    } else if (inStreak && !meetsTarget) {
+      inStreak = false;
+    }
+
+    if (meetsTarget) {
+      let tempStreak = 1;
+      for (let j = i + 1; j < rows.length; j++) {
+        if (rows[j].sleep_hours >= thresholdHours) tempStreak++;
+        else break;
+      }
+      bestStreak = Math.max(bestStreak, tempStreak);
+    }
+  }
+
+  return {
+    name: 'sleep_consistency',
+    current_count: currentStreak,
+    best_count: bestStreak,
+    is_active: currentStreak > 0,
+    last_date: lastDate,
+  };
+}
+
+// Calculate step goal streak
+function calculateStepGoalStreak(db: InstanceType<typeof Database>): Streak {
+  const rows = db.prepare(`
+    SELECT date, steps, steps_goal
+    FROM activity_data
+    WHERE date >= date('now', '-60 days')
+    AND steps IS NOT NULL
+    ORDER BY date DESC
+  `).all() as { date: string; steps: number; steps_goal: number | null }[];
+
+  if (!rows.length) {
+    return { name: 'step_goal', current_count: 0, best_count: 0, is_active: false, last_date: '' };
+  }
+
+  let currentStreak = 0;
+  let bestStreak = 0;
+  let lastDate = '';
+  let inStreak = true;
+
+  for (let i = 0; i < rows.length; i++) {
+    const goal = rows[i].steps_goal || 10000;
+    const hitGoal = rows[i].steps >= goal;
+
+    if (inStreak && hitGoal) {
+      currentStreak++;
+      if (currentStreak === 1) lastDate = rows[i].date;
+    } else if (inStreak && !hitGoal) {
+      inStreak = false;
+    }
+
+    if (hitGoal) {
+      let tempStreak = 1;
+      for (let j = i + 1; j < rows.length; j++) {
+        const nextGoal = rows[j].steps_goal || 10000;
+        if (rows[j].steps >= nextGoal) tempStreak++;
+        else break;
+      }
+      bestStreak = Math.max(bestStreak, tempStreak);
+    }
+  }
+
+  return {
+    name: 'step_goal',
+    current_count: currentStreak,
+    best_count: bestStreak,
+    is_active: currentStreak > 0,
+    last_date: lastDate,
+  };
+}
+
+// Detect HRV trend
+function detectHrvTrend(db: InstanceType<typeof Database>, days: number = 7): TrendAlert | null {
+  const rows = db.prepare(`
+    SELECT date, hrv_last_night_avg as hrv
+    FROM hrv_data
+    WHERE date >= date('now', ?)
+    AND hrv_last_night_avg IS NOT NULL
+    ORDER BY date DESC
+  `).all(`-${days} days`) as { date: string; hrv: number }[];
+
+  if (rows.length < 3) return null;
+
+  let decliningDays = 0;
+  let improvingDays = 0;
+
+  for (let i = 0; i < rows.length - 1; i++) {
+    if (rows[i].hrv < rows[i + 1].hrv) decliningDays++;
+    else if (rows[i].hrv > rows[i + 1].hrv) improvingDays++;
+  }
+
+  const firstHrv = rows[0].hrv;
+  const lastHrv = rows[rows.length - 1].hrv;
+
+  if (lastHrv === 0) return null;
+
+  const changePct = ((firstHrv - lastHrv) / lastHrv) * 100;
+
+  if (decliningDays >= 3 && changePct < -10) {
+    return {
+      metric: 'HRV',
+      direction: 'declining',
+      days: decliningDays,
+      change_pct: Math.round(changePct * 10) / 10,
+      severity: changePct < -15 ? 'concern' : 'warning',
+    };
+  } else if (improvingDays >= 3 && changePct > 10) {
+    return {
+      metric: 'HRV',
+      direction: 'improving',
+      days: improvingDays,
+      change_pct: Math.round(changePct * 10) / 10,
+      severity: 'positive',
+    };
+  }
+
+  return null;
+}
+
+// Detect recovery trend
+function detectRecoveryTrend(
+  db: InstanceType<typeof Database>,
+  baselines: { hrv_7d_avg: number | null; sleep_7d_avg: number | null },
+  days: number = 7
+): TrendAlert | null {
+  const rows = db.prepare(`
+    SELECT
+      h.date,
+      h.hrv_last_night_avg as hrv,
+      st.body_battery_charged as bb,
+      s.total_sleep_seconds / 3600.0 as sleep_hours
+    FROM hrv_data h
+    LEFT JOIN stress_data st ON h.date = st.date
+    LEFT JOIN sleep_data s ON h.date = s.date
+    WHERE h.date >= date('now', ?)
+    ORDER BY h.date DESC
+  `).all(`-${days} days`) as { date: string; hrv: number | null; bb: number | null; sleep_hours: number | null }[];
+
+  if (rows.length < 3) return null;
+
+  const recoveries: number[] = [];
+  for (const row of rows) {
+    const recovery = calculateRecovery(
+      row.hrv,
+      row.sleep_hours,
+      row.bb,
+      { hrv_7d_avg: baselines.hrv_7d_avg, sleep_7d_avg: baselines.sleep_7d_avg, recovery_7d_avg: null }
+    );
+    if (recovery > 0) recoveries.push(recovery);
+  }
+
+  if (recoveries.length < 3) return null;
+
+  let decliningDays = 0;
+  let improvingDays = 0;
+
+  for (let i = 0; i < recoveries.length - 1; i++) {
+    if (recoveries[i] < recoveries[i + 1] - 5) decliningDays++;
+    else if (recoveries[i] > recoveries[i + 1] + 5) improvingDays++;
+  }
+
+  const firstRecovery = recoveries[0];
+  const lastRecovery = recoveries[recoveries.length - 1];
+
+  if (lastRecovery === 0) return null;
+
+  const changePct = ((firstRecovery - lastRecovery) / lastRecovery) * 100;
+
+  if (decliningDays >= 3 && changePct < -10) {
+    return {
+      metric: 'Recovery',
+      direction: 'declining',
+      days: decliningDays,
+      change_pct: Math.round(changePct * 10) / 10,
+      severity: changePct < -20 ? 'concern' : 'warning',
+    };
+  } else if (improvingDays >= 3 && changePct > 10) {
+    return {
+      metric: 'Recovery',
+      direction: 'improving',
+      days: improvingDays,
+      change_pct: Math.round(changePct * 10) / 10,
+      severity: 'positive',
+    };
+  }
+
+  return null;
+}
+
+// Generate weekly summary
+function generateWeeklySummary(
+  db: InstanceType<typeof Database>,
+  baselines: { hrv_7d_avg: number | null; sleep_7d_avg: number | null }
+): WeeklySummary {
+  const rows = db.prepare(`
+    SELECT
+      h.date,
+      h.hrv_last_night_avg as hrv,
+      st.body_battery_charged as bb,
+      st.body_battery_drained as bb_drained,
+      s.total_sleep_seconds / 3600.0 as sleep_hours,
+      a.steps,
+      a.intensity_minutes
+    FROM hrv_data h
+    LEFT JOIN stress_data st ON h.date = st.date
+    LEFT JOIN sleep_data s ON h.date = s.date
+    LEFT JOIN activity_data a ON h.date = a.date
+    WHERE h.date >= date('now', '-7 days')
+    ORDER BY h.date DESC
+  `).all() as {
+    date: string;
+    hrv: number | null;
+    bb: number | null;
+    bb_drained: number | null;
+    sleep_hours: number | null;
+    steps: number | null;
+    intensity_minutes: number | null;
+  }[];
+
+  let greenDays = 0;
+  let yellowDays = 0;
+  let redDays = 0;
+  const recoveries: number[] = [];
+  const strains: number[] = [];
+  const sleeps: number[] = [];
+  let sleepDebt = 0;
+  let bestDay = { date: '', recovery: 0 };
+  let worstDay = { date: '', recovery: 100 };
+  const sleepBaseline = baselines.sleep_7d_avg || 7.5;
+
+  for (const row of rows) {
+    const recovery = calculateRecovery(
+      row.hrv,
+      row.sleep_hours,
+      row.bb,
+      { hrv_7d_avg: baselines.hrv_7d_avg, sleep_7d_avg: baselines.sleep_7d_avg, recovery_7d_avg: null }
+    );
+    recoveries.push(recovery);
+
+    const strain = calculateStrain(row.bb_drained, row.steps, row.intensity_minutes);
+    strains.push(strain);
+
+    if (row.sleep_hours !== null) {
+      sleeps.push(row.sleep_hours);
+      if (row.sleep_hours < sleepBaseline) {
+        sleepDebt += sleepBaseline - row.sleep_hours;
+      }
+    }
+
+    if (recovery >= 67) greenDays++;
+    else if (recovery >= 34) yellowDays++;
+    else redDays++;
+
+    if (recovery > bestDay.recovery) bestDay = { date: row.date, recovery };
+    if (recovery < worstDay.recovery) worstDay = { date: row.date, recovery };
+  }
+
+  const avgRecovery = recoveries.length > 0
+    ? Math.round(recoveries.reduce((a, b) => a + b, 0) / recoveries.length * 10) / 10
+    : 0;
+  const avgStrain = strains.length > 0
+    ? Math.round(strains.reduce((a, b) => a + b, 0) / strains.length * 10) / 10
+    : 0;
+  const avgSleep = sleeps.length > 0
+    ? Math.round(sleeps.reduce((a, b) => a + b, 0) / sleeps.length * 100) / 100
+    : 0;
+
+  // Get correlations
+  const correlations: Correlation[] = [];
+  try {
+    const sleepCorr = detectSleepConsistencyImpact(db);
+    if (sleepCorr) correlations.push(sleepCorr);
+  } catch { /* ignore */ }
+  try {
+    const stepCorr = detectStepCountCorrelation(db);
+    if (stepCorr) correlations.push(stepCorr);
+  } catch { /* ignore */ }
+  correlations.sort((a, b) => b.confidence - a.confidence);
+
+  // Get streaks
+  const streaks: Streak[] = [];
+  try {
+    const greenStreak = calculateGreenDayStreak(db, baselines);
+    if (greenStreak.current_count > 0) streaks.push(greenStreak);
+  } catch { /* ignore */ }
+  try {
+    const sleepStreak = calculateSleepConsistencyStreak(db);
+    if (sleepStreak.current_count > 0) streaks.push(sleepStreak);
+  } catch { /* ignore */ }
+  try {
+    const stepStreak = calculateStepGoalStreak(db);
+    if (stepStreak.current_count > 0) streaks.push(stepStreak);
+  } catch { /* ignore */ }
+
+  // Get trend alerts
+  const trendAlerts: TrendAlert[] = [];
+  try {
+    const hrvTrend = detectHrvTrend(db);
+    if (hrvTrend) trendAlerts.push(hrvTrend);
+  } catch { /* ignore */ }
+  try {
+    const recoveryTrend = detectRecoveryTrend(db, baselines);
+    if (recoveryTrend) trendAlerts.push(recoveryTrend);
+  } catch { /* ignore */ }
+
+  return {
+    green_days: greenDays,
+    yellow_days: yellowDays,
+    red_days: redDays,
+    avg_recovery: avgRecovery,
+    avg_strain: avgStrain,
+    avg_sleep: avgSleep,
+    total_sleep_debt: Math.round(sleepDebt * 100) / 100,
+    best_day: bestDay.date,
+    worst_day: worstDay.date,
+    correlations,
+    streaks,
+    trend_alerts: trendAlerts,
+  };
+}
+
 export async function GET() {
   try {
     // Connect to SQLite database in project root
@@ -282,6 +880,9 @@ export async function GET() {
       strainYesterday
     );
 
+    // Phase 4: Generate weekly summary with causality data
+    const weeklySummary = generateWeeklySummary(db, baselines);
+
     db.close();
 
     const sleepData = sleep ? {
@@ -334,6 +935,8 @@ export async function GET() {
         sleep_target: insight.sleep_target,
       },
       sleep_debt: sleepDebt,
+      // Phase 4: Causality Engine
+      weekly_summary: weeklySummary,
     });
 
   } catch (error) {
