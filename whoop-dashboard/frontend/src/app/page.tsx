@@ -134,6 +134,58 @@ function getRecoveryZone(recovery: number): string {
   return 'RED';
 }
 
+// Strain target based on recovery zone
+function getStrainTarget(recovery: number): [number, number] {
+  if (recovery >= 67) return [14, 21];
+  if (recovery >= 34) return [8, 14];
+  return [0, 8];
+}
+
+// Strain recommendation text
+function getStrainRecommendation(recovery: number): string {
+  if (recovery >= 67) return "Great day for intervals or racing";
+  if (recovery >= 34) return "Steady cardio or technique work";
+  return "Rest, mobility, light yoga";
+}
+
+// Decision text based on recovery
+function getDecisionText(recovery: number): string {
+  if (recovery >= 67) return "GO FOR IT";
+  if (recovery >= 34) return "MODERATE";
+  return "RECOVER";
+}
+
+// Get insight text based on recovery and HRV
+function getInsightText(recovery: number, day: DayData): string {
+  if (recovery >= 67) {
+    const hrvStatus = day.hrv?.direction?.direction === 'up' ? 'HRV trending up' : 'HRV at baseline';
+    return `Your body is primed for intensity. ${hrvStatus}. Push hard today.`;
+  }
+  if (recovery >= 34) {
+    return "Your body can handle moderate effort. Avoid all-out intensity.";
+  }
+  const sleepNote = day.sleep && day.sleep.total_hours < 6 ? ` Only ${day.sleep.total_hours.toFixed(1)}h sleep is limiting you.` : '';
+  return `Focus on recovery today.${sleepNote} Light movement is fine.`;
+}
+
+// Calculate sleep target for tonight
+function calculateSleepTarget(
+  sleepBaseline: number,
+  strainYesterday: number,
+  sleepDebt: number
+): number {
+  const strainAdjustment = Math.max(0, (strainYesterday - 10) * 0.05);
+  const debtRepayment = Math.max(0, sleepDebt) / 7;
+  return Math.round((sleepBaseline + strainAdjustment + debtRepayment) * 100) / 100;
+}
+
+// Format hours as "Xh Ym"
+function formatHoursMinutes(hours: number): string {
+  const h = Math.floor(hours);
+  const m = Math.round((hours - h) * 60);
+  return `${h}h ${m.toString().padStart(2, '0')}m`;
+}
+
 export default function Dashboard() {
   const [history, setHistory] = useState<DayData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -274,8 +326,32 @@ function OverviewView({
   avgSleep: number;
   onSelectDay: (day: DayData) => void;
 }) {
+  const strainTarget = getStrainTarget(recovery);
+
   return (
     <div className="p-4 space-y-6">
+      {/* Hero Decision Component - THE FIRST THING YOU SEE */}
+      <div className="text-center py-6 bg-gradient-to-b from-gray-900 to-black rounded-2xl">
+        <div className={`text-5xl sm:text-6xl font-bold mb-3 ${
+          recovery >= 67 ? 'text-green-400' :
+          recovery >= 34 ? 'text-yellow-400' : 'text-red-400'
+        }`}>
+          {getDecisionText(recovery)}
+        </div>
+        <p className="text-gray-400 text-base max-w-xs mx-auto px-4">
+          {getInsightText(recovery, selectedDay)}
+        </p>
+        <div className="mt-4 flex items-center justify-center gap-4 text-sm">
+          <div className="text-gray-500">
+            Target strain: <span className="text-white font-medium">{strainTarget[0]}-{strainTarget[1]}</span>
+          </div>
+          <div className="w-px h-4 bg-gray-700" />
+          <div className="text-gray-500">
+            {getStrainRecommendation(recovery)}
+          </div>
+        </div>
+      </div>
+
       {/* Weekly Summary Bar */}
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-gray-900 rounded-xl p-3 text-center">
@@ -531,6 +607,11 @@ function StrainView({
 }) {
   const strainHistory = history.map(d => calculateStrain(d)).reverse();
   const maxStrain = Math.max(...strainHistory, 21);
+  const recovery = calculateRecovery(selectedDay);
+  const strainTarget = getStrainTarget(recovery);
+  const isInTarget = strain >= strainTarget[0] && strain <= strainTarget[1];
+  const isBelowTarget = strain < strainTarget[0];
+  const isAboveTarget = strain > strainTarget[1];
 
   return (
     <div className="p-4 space-y-6">
@@ -539,12 +620,27 @@ function StrainView({
         <div className="text-7xl font-bold text-blue-400">{strain}</div>
         <div className="text-gray-500 text-sm">of 21.0 max strain</div>
 
-        {/* Strain Bar */}
-        <div className="w-full max-w-xs mt-6 h-3 bg-gray-800 rounded-full overflow-hidden">
+        {/* Strain Bar with Target Zone */}
+        <div className="w-full max-w-xs mt-6 relative">
+          {/* Target zone indicator */}
           <div
-            className="h-full bg-gradient-to-r from-blue-600 to-blue-400 rounded-full transition-all duration-500"
-            style={{ width: `${(strain / 21) * 100}%` }}
+            className="absolute h-5 bg-gray-700/50 rounded-sm -top-1"
+            style={{
+              left: `${(strainTarget[0] / 21) * 100}%`,
+              width: `${((strainTarget[1] - strainTarget[0]) / 21) * 100}%`,
+            }}
           />
+          {/* Strain bar */}
+          <div className="h-3 bg-gray-800 rounded-full overflow-hidden relative z-10">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${
+                isInTarget ? 'bg-gradient-to-r from-green-600 to-green-400' :
+                isAboveTarget ? 'bg-gradient-to-r from-red-600 to-red-400' :
+                'bg-gradient-to-r from-blue-600 to-blue-400'
+              }`}
+              style={{ width: `${(strain / 21) * 100}%` }}
+            />
+          </div>
         </div>
 
         <div className="flex justify-between w-full max-w-xs mt-1 text-[10px] text-gray-600">
@@ -552,6 +648,21 @@ function StrainView({
           <span>Moderate</span>
           <span>High</span>
           <span>All Out</span>
+        </div>
+
+        {/* Target Status */}
+        <div className={`mt-4 px-4 py-2 rounded-lg text-sm ${
+          isInTarget ? 'bg-green-900/30 text-green-400' :
+          isBelowTarget ? 'bg-gray-800 text-gray-400' :
+          'bg-red-900/30 text-red-400'
+        }`}>
+          {isInTarget ? (
+            <>In target zone ({strainTarget[0]}-{strainTarget[1]})</>
+          ) : isBelowTarget ? (
+            <>Target: {strainTarget[0]}-{strainTarget[1]} | {(strainTarget[0] - strain).toFixed(1)} more to go</>
+          ) : (
+            <>Above target ({strainTarget[0]}-{strainTarget[1]}) - Consider recovery</>
+          )}
         </div>
       </div>
 
@@ -617,6 +728,23 @@ function SleepView({
   const sleepHistory = history.map(d => d.sleep?.total_hours || 0).reverse();
   const maxSleep = Math.max(...sleepHistory, 10);
 
+  // Calculate sleep debt and tonight's target
+  const sleepBaseline = selectedDay.baselines?.sleep_7d_avg || 7.5;
+  const strainYesterday = history[1] ? calculateStrain(history[1]) : 10;
+  const sleepDebt = sleepBaseline - (sleep?.total_hours || sleepBaseline);
+  const sleepDebtPositive = Math.max(0, sleepDebt);
+
+  // Calculate accumulated debt over last 7 days
+  const accumulatedDebt = history.slice(0, 7).reduce((debt, day) => {
+    const dayBaseline = day.baselines?.sleep_7d_avg || sleepBaseline;
+    const daySleep = day.sleep?.total_hours || 0;
+    return debt + Math.max(0, dayBaseline - daySleep);
+  }, 0);
+
+  const sleepTarget = calculateSleepTarget(sleepBaseline, strainYesterday, accumulatedDebt);
+  const strainAdjustmentMins = Math.round(Math.max(0, (strainYesterday - 10) * 0.05) * 60);
+  const debtRepaymentMins = Math.round((Math.max(0, accumulatedDebt) / 7) * 60);
+
   return (
     <div className="p-4 space-y-6">
       {/* Sleep Display */}
@@ -638,6 +766,37 @@ function SleepView({
         {selectedDay.baselines?.sleep_7d_avg && (
           <div className="text-gray-600 text-xs mt-1">
             Your avg: {selectedDay.baselines.sleep_7d_avg.toFixed(1)}h
+          </div>
+        )}
+      </div>
+
+      {/* Tonight's Sleep Target - PERSONALIZED */}
+      <div className="bg-gradient-to-br from-purple-900/40 to-gray-900 rounded-2xl p-4 border border-purple-800/30">
+        <div className="text-gray-400 text-xs mb-3">TONIGHT&apos;S TARGET</div>
+        <div className="flex items-baseline justify-center mb-4">
+          <span className="text-4xl font-bold text-purple-400">{formatHoursMinutes(sleepTarget)}</span>
+        </div>
+        <div className="space-y-2 text-sm">
+          <div className="flex justify-between text-gray-500">
+            <span>Your baseline</span>
+            <span className="text-gray-300">{formatHoursMinutes(sleepBaseline)}</span>
+          </div>
+          {strainAdjustmentMins > 0 && (
+            <div className="flex justify-between text-gray-500">
+              <span>Strain adjustment (strain was {strainYesterday.toFixed(1)})</span>
+              <span className="text-purple-400">+{strainAdjustmentMins}m</span>
+            </div>
+          )}
+          {accumulatedDebt > 0 && (
+            <div className="flex justify-between text-gray-500">
+              <span>Debt repayment ({formatHoursMinutes(accumulatedDebt)} total)</span>
+              <span className="text-purple-400">+{debtRepaymentMins}m</span>
+            </div>
+          )}
+        </div>
+        {accumulatedDebt > 0.5 && (
+          <div className="mt-4 pt-3 border-t border-gray-800 text-xs text-gray-500 text-center">
+            Sleep debt: {formatHoursMinutes(accumulatedDebt)} accumulated over 7 days
           </div>
         )}
       </div>

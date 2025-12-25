@@ -117,10 +117,20 @@ class Database:
                     FOREIGN KEY (date) REFERENCES daily_wellness(date)
                 );
 
+                -- Sleep tracking for debt calculation and personalized targets
+                CREATE TABLE IF NOT EXISTS sleep_tracking (
+                    date TEXT PRIMARY KEY,
+                    sleep_need REAL,
+                    sleep_actual REAL,
+                    sleep_debt_accumulated REAL,
+                    FOREIGN KEY (date) REFERENCES daily_wellness(date)
+                );
+
                 -- Indexes for common queries
                 CREATE INDEX IF NOT EXISTS idx_wellness_date ON daily_wellness(date);
                 CREATE INDEX IF NOT EXISTS idx_sleep_date ON sleep_data(date);
                 CREATE INDEX IF NOT EXISTS idx_baselines_date ON baselines(date);
+                CREATE INDEX IF NOT EXISTS idx_sleep_tracking_date ON sleep_tracking(date);
             """)
 
     @contextmanager
