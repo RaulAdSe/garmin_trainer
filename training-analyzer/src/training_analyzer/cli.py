@@ -9,16 +9,20 @@ Usage:
     training-analyzer enrich --days 30
     training-analyzer fitness --days 7
     training-analyzer status
+    training-analyzer today           # Get today's training recommendation
+    training-analyzer summary --days 7    # Weekly training summary
+    training-analyzer why             # Explain today's recommendation
 """
 
 import argparse
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from pathlib import Path
 from typing import Optional
 
 from .db.database import TrainingDatabase
 from .services.enrichment import EnrichmentService
+from .services.coach import CoachService
 from .metrics.zones import calculate_hr_zones_karvonen, estimate_max_hr_from_age
 
 
@@ -42,6 +46,16 @@ def get_risk_color(risk_zone: str) -> str:
         "danger": Colors.RED,
     }
     return colors.get(risk_zone, Colors.RESET)
+
+
+def get_zone_color(zone: str) -> str:
+    """Get color for readiness zone."""
+    colors = {
+        "green": Colors.GREEN,
+        "yellow": Colors.YELLOW,
+        "red": Colors.RED,
+    }
+    return colors.get(zone, Colors.RESET)
 
 
 def format_tsb(tsb: float) -> str:
@@ -310,6 +324,169 @@ def cmd_stats(args, db: TrainingDatabase):
     print()
 
 
+def cmd_today(args, db: TrainingDatabase):
+    """Get today's training recommendation."""
+    print()
+    print(f"{Colors.BOLD}Training Analyzer - Today's Briefing{Colors.RESET}")
+    print("=" * 50)
+    print()
+
+    coach = CoachService(training_db=db)
+
+    try:
+        briefing = coach.get_daily_briefing()
+    except Exception as e:
+        print(f"{Colors.RED}Error getting briefing: {e}{Colors.RESET}")
+        sys.exit(1)
+
+    # Data availability
+    sources = briefing["data_sources"]
+    if not sources["wellness_available"] and not sources["fitness_available"]:
+        print(f"{Colors.YELLOW}Limited data available.{Colors.RESET}")
+        print("For better recommendations:")
+        print("  - Run 'training-analyzer enrich' for training load data")
+        print("  - Set WELLNESS_DB_PATH for recovery data")
+        print()
+
+    # Readiness section
+    readiness = briefing["readiness"]
+    zone_color = get_zone_color(readiness["zone"])
+    print(f"  {Colors.BOLD}Date:{Colors.RESET}           {briefing['date']}")
+    print(f"  {Colors.BOLD}Readiness:{Colors.RESET}      {zone_color}{readiness['score']:.0f}/100 ({readiness['zone'].upper()}){Colors.RESET}")
+    print()
+
+    # Recommendation section
+    rec = briefing["recommendation"]
+    workout_type = rec["workout_type"].upper()
+    duration = rec["duration_min"]
+
+    print(f"  {Colors.BOLD}Recommended:{Colors.RESET}    {Colors.CYAN}{workout_type}{Colors.RESET}")
+    if duration > 0:
+        print(f"  {Colors.BOLD}Duration:{Colors.RESET}       {duration} minutes")
+    print(f"  {Colors.BOLD}Intensity:{Colors.RESET}      {rec['intensity_description']}")
+    if rec["hr_zone_target"]:
+        print(f"  {Colors.BOLD}Target:{Colors.RESET}         {rec['hr_zone_target']}")
+    print()
+    print(f"  {Colors.BOLD}Reason:{Colors.RESET}         {rec['reason']}")
+    print()
+
+    # Alternatives
+    if rec["alternatives"]:
+        print(f"  {Colors.BOLD}Alternatives:{Colors.RESET}   {', '.join(rec['alternatives'])}")
+
+    # Warnings
+    if rec["warnings"]:
+        for warning in rec["warnings"]:
+            print(f"  {Colors.YELLOW}!{Colors.RESET} {warning}")
+
+    print()
+
+    # Training status (if available)
+    if briefing["training_status"]:
+        ts = briefing["training_status"]
+        print(f"  {Colors.BOLD}Training Status:{Colors.RESET}")
+        print(f"    CTL: {ts['ctl']:.1f}  |  ATL: {ts['atl']:.1f}  |  TSB: {ts['tsb']:+.1f}  |  ACWR: {ts['acwr']:.2f}")
+        print()
+
+    # Weekly load
+    wl = briefing["weekly_load"]
+    if wl["target"] > 0:
+        pct = (wl["current"] / wl["target"]) * 100
+        print(f"  {Colors.BOLD}Weekly Load:{Colors.RESET}    {wl['current']:.0f} / {wl['target']:.0f} ({pct:.0f}%)")
+    print()
+
+    # Narrative
+    print(f"{Colors.BOLD}Summary:{Colors.RESET}")
+    print()
+    print(f"  {briefing['narrative']}")
+    print()
+
+
+def cmd_summary(args, db: TrainingDatabase):
+    """Show weekly training summary."""
+    print()
+    print(f"{Colors.BOLD}Training Analyzer - Weekly Summary{Colors.RESET}")
+    print("=" * 50)
+    print()
+
+    coach = CoachService(training_db=db)
+
+    try:
+        # Calculate weeks_back from days
+        weeks_back = 0
+        if args.days > 7:
+            weeks_back = (args.days - 1) // 7
+
+        summary = coach.get_weekly_summary(weeks_back=weeks_back)
+    except Exception as e:
+        print(f"{Colors.RED}Error getting summary: {e}{Colors.RESET}")
+        sys.exit(1)
+
+    print(f"  Week: {summary['week_start']} to {summary['week_end']}")
+    print()
+
+    # Load summary
+    print(f"  {Colors.BOLD}Total Load:{Colors.RESET}      {summary['total_load']:.0f}")
+    if summary['target_load'] > 0:
+        pct = (summary['total_load'] / summary['target_load']) * 100
+        print(f"  {Colors.BOLD}Target Load:{Colors.RESET}     {summary['target_load']:.0f} ({pct:.0f}% achieved)")
+    print(f"  {Colors.BOLD}Workouts:{Colors.RESET}        {summary['workout_count']}")
+    print(f"  {Colors.BOLD}Duration:{Colors.RESET}        {summary['total_duration_min']:.0f} minutes")
+    print(f"  {Colors.BOLD}Distance:{Colors.RESET}        {summary['total_distance_km']:.1f} km")
+    print()
+
+    # Distribution
+    print(f"  {Colors.BOLD}Distribution:{Colors.RESET}")
+    print(f"    Hard days:  {summary['hard_days']}")
+    print(f"    Easy days:  {summary['easy_days']}")
+    print(f"    Rest days:  {summary['rest_days']}")
+    print()
+
+    # Fitness change
+    if summary['ctl_start'] > 0 or summary['ctl_end'] > 0:
+        print(f"  {Colors.BOLD}Fitness Change:{Colors.RESET}")
+        change = summary['ctl_change']
+        if change > 0:
+            change_color = Colors.GREEN
+            change_symbol = "+"
+        elif change < 0:
+            change_color = Colors.RED
+            change_symbol = ""
+        else:
+            change_color = Colors.RESET
+            change_symbol = ""
+        print(
+            f"    CTL: {summary['ctl_start']:.1f} -> {summary['ctl_end']:.1f} "
+            f"({change_color}{change_symbol}{change:.1f}{Colors.RESET})"
+        )
+        print()
+
+    # Narrative
+    print(f"{Colors.BOLD}Summary:{Colors.RESET}")
+    print()
+    print(f"  {summary['narrative']}")
+    print()
+
+
+def cmd_why(args, db: TrainingDatabase):
+    """Explain why today's workout was recommended."""
+    print()
+    print(f"{Colors.BOLD}Training Analyzer - Recommendation Explained{Colors.RESET}")
+    print("=" * 50)
+    print()
+
+    coach = CoachService(training_db=db)
+
+    try:
+        explanation = coach.get_why_explanation()
+    except Exception as e:
+        print(f"{Colors.RED}Error generating explanation: {e}{Colors.RESET}")
+        sys.exit(1)
+
+    print(explanation)
+    print()
+
+
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -321,6 +498,9 @@ Examples:
   training-analyzer enrich --days 30
   training-analyzer fitness --days 7
   training-analyzer status
+  training-analyzer today
+  training-analyzer summary --days 7
+  training-analyzer why
         """,
     )
 
@@ -364,6 +544,18 @@ Examples:
     # Stats command
     subparsers.add_parser("stats", help="Show database statistics")
 
+    # Today command
+    subparsers.add_parser("today", help="Get today's training recommendation")
+
+    # Summary command
+    summary_p = subparsers.add_parser("summary", help="Show weekly training summary")
+    summary_p.add_argument(
+        "--days", "-d", type=int, default=7, help="Days to summarize"
+    )
+
+    # Why command
+    subparsers.add_parser("why", help="Explain why today's workout was recommended")
+
     args = parser.parse_args()
 
     # Initialize database
@@ -380,6 +572,12 @@ Examples:
         cmd_status(args, db)
     elif args.command == "stats":
         cmd_stats(args, db)
+    elif args.command == "today":
+        cmd_today(args, db)
+    elif args.command == "summary":
+        cmd_summary(args, db)
+    elif args.command == "why":
+        cmd_why(args, db)
     else:
         parser.print_help()
 
