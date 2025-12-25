@@ -131,6 +131,35 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_sleep_date ON sleep_data(date);
                 CREATE INDEX IF NOT EXISTS idx_baselines_date ON baselines(date);
                 CREATE INDEX IF NOT EXISTS idx_sleep_tracking_date ON sleep_tracking(date);
+
+                -- Phase 4: Causality engine tables
+
+                -- Detected correlations (patterns in YOUR data)
+                CREATE TABLE IF NOT EXISTS correlations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    detected_at TEXT NOT NULL,
+                    pattern_type TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    impact REAL NOT NULL,
+                    confidence REAL NOT NULL,
+                    sample_size INTEGER NOT NULL,
+                    is_active INTEGER DEFAULT 1
+                );
+
+                -- Streak tracking (consecutive achievement tracking)
+                CREATE TABLE IF NOT EXISTS streaks (
+                    name TEXT PRIMARY KEY,
+                    current_count INTEGER DEFAULT 0,
+                    best_count INTEGER DEFAULT 0,
+                    last_date TEXT,
+                    is_active INTEGER DEFAULT 1
+                );
+
+                -- Indexes for causality tables
+                CREATE INDEX IF NOT EXISTS idx_correlations_active ON correlations(is_active);
+                CREATE INDEX IF NOT EXISTS idx_correlations_category ON correlations(category);
             """)
 
     @contextmanager

@@ -9,6 +9,47 @@ interface DirectionIndicator {
   current: number;
 }
 
+interface CorrelationData {
+  pattern_type: 'positive' | 'negative';
+  category: string;
+  title: string;
+  description: string;
+  impact: number;
+  confidence: number;
+  sample_size: number;
+}
+
+interface StreakData {
+  name: string;
+  current_count: number;
+  best_count: number;
+  is_active: boolean;
+  last_date: string;
+}
+
+interface TrendAlertData {
+  metric: string;
+  direction: 'declining' | 'improving';
+  days: number;
+  change_pct: number;
+  severity: 'warning' | 'concern' | 'positive';
+}
+
+interface WeeklySummaryData {
+  green_days: number;
+  yellow_days: number;
+  red_days: number;
+  avg_recovery: number;
+  avg_strain: number;
+  avg_sleep: number;
+  total_sleep_debt: number;
+  best_day: string;
+  worst_day: string;
+  correlations: CorrelationData[];
+  streaks: StreakData[];
+  trend_alerts: TrendAlertData[];
+}
+
 interface Baselines {
   hrv_7d_avg: number | null;
   hrv_30d_avg: number | null;
@@ -50,6 +91,7 @@ interface DayData {
   resting_hr: number | null;
   rhr_direction?: DirectionIndicator | null;
   baselines?: Baselines;
+  weekly_summary?: WeeklySummaryData;
 }
 
 function calculateRecovery(day: DayData): number {
@@ -184,6 +226,155 @@ function formatHoursMinutes(hours: number): string {
   const h = Math.floor(hours);
   const m = Math.round((hours - h) * 60);
   return `${h}h ${m.toString().padStart(2, '0')}m`;
+}
+
+// Get streak display info
+function getStreakInfo(streak: StreakData): { icon: string; label: string } {
+  switch (streak.name) {
+    case 'green_days':
+      return { icon: '!', label: `${streak.current_count}-day green streak` };
+    case 'sleep_consistency':
+      return { icon: '~', label: `${streak.current_count} days of 7h+ sleep` };
+    case 'step_goal':
+      return { icon: '#', label: `${streak.current_count} days hitting step goal` };
+    default:
+      return { icon: '*', label: `${streak.current_count}-day streak` };
+  }
+}
+
+// Zone badge component
+function ZoneBadge({ color, count, label }: { color: 'green' | 'yellow' | 'red'; count: number; label: string }) {
+  const bgColors = {
+    green: 'bg-green-900/40 border-green-700',
+    yellow: 'bg-yellow-900/40 border-yellow-700',
+    red: 'bg-red-900/40 border-red-700',
+  };
+  const textColors = {
+    green: 'text-green-400',
+    yellow: 'text-yellow-400',
+    red: 'text-red-400',
+  };
+
+  return (
+    <div className={`flex-1 px-3 py-2 rounded-lg border ${bgColors[color]}`}>
+      <div className={`text-xl font-bold ${textColors[color]}`}>{count}</div>
+      <div className="text-gray-500 text-xs">{label}</div>
+    </div>
+  );
+}
+
+// Weekly Insights component - Phase 4 Causality Engine
+function WeeklyInsights({ history, weeklySummary }: { history: DayData[]; weeklySummary?: WeeklySummaryData }) {
+  const weekData = history.slice(0, 7);
+  const greenDays = weeklySummary?.green_days ?? weekData.filter(d => calculateRecovery(d) >= 67).length;
+  const yellowDays = weeklySummary?.yellow_days ?? weekData.filter(d => {
+    const r = calculateRecovery(d);
+    return r >= 34 && r < 67;
+  }).length;
+  const redDays = weeklySummary?.red_days ?? weekData.filter(d => calculateRecovery(d) < 34).length;
+
+  // Calculate this week's avg vs last week
+  const thisWeekRecoveries = weekData.map(d => calculateRecovery(d));
+  const avgRecovery = weeklySummary?.avg_recovery ??
+    (thisWeekRecoveries.length > 0
+      ? Math.round(thisWeekRecoveries.reduce((a, b) => a + b, 0) / thisWeekRecoveries.length)
+      : 0);
+
+  // Get last week data for comparison
+  const lastWeekData = history.slice(7, 14);
+  const lastWeekRecoveries = lastWeekData.map(d => calculateRecovery(d));
+  const lastWeekAvg = lastWeekRecoveries.length > 0
+    ? Math.round(lastWeekRecoveries.reduce((a, b) => a + b, 0) / lastWeekRecoveries.length)
+    : avgRecovery;
+
+  const recoveryDiff = avgRecovery - lastWeekAvg;
+
+  // Get correlations and alerts from weekly summary
+  const correlations = weeklySummary?.correlations || [];
+  const streaks = weeklySummary?.streaks || [];
+  const alerts = weeklySummary?.trend_alerts || [];
+
+  // Get the most confident correlation to display
+  const topCorrelation = correlations.length > 0 ? correlations[0] : null;
+
+  return (
+    <div className="bg-gray-900 rounded-2xl p-4 space-y-4">
+      <div className="text-gray-500 text-xs">THIS WEEK</div>
+
+      {/* Zone breakdown */}
+      <div className="flex gap-2">
+        <ZoneBadge color="green" count={greenDays} label="Green" />
+        <ZoneBadge color="yellow" count={yellowDays} label="Yellow" />
+        <ZoneBadge color="red" count={redDays} label="Red" />
+      </div>
+
+      {/* Trend indicator */}
+      {recoveryDiff !== 0 && (
+        <div className={`text-sm ${recoveryDiff > 0 ? 'text-green-400' : 'text-red-400'}`}>
+          {recoveryDiff > 0 ? '+' : ''}{recoveryDiff}% recovery vs last week
+        </div>
+      )}
+
+      {/* Active Streaks */}
+      {streaks.length > 0 && (
+        <div className="space-y-2">
+          {streaks.slice(0, 3).map((streak, i) => {
+            const { icon, label } = getStreakInfo(streak);
+            return (
+              <div key={i} className="flex items-center gap-2 text-sm">
+                <span className="text-orange-400 font-bold">{icon}</span>
+                <span className="text-gray-300">{label}</span>
+                {streak.current_count >= streak.best_count && streak.best_count > 0 && (
+                  <span className="text-yellow-400 text-xs">(Personal best!)</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Trend Alerts */}
+      {alerts.length > 0 && (
+        <div className="space-y-2 pt-2 border-t border-gray-800">
+          {alerts.map((alert, i) => (
+            <div
+              key={i}
+              className={`flex items-start gap-2 text-sm ${
+                alert.severity === 'positive' ? 'text-green-400' :
+                alert.severity === 'concern' ? 'text-red-400' : 'text-yellow-400'
+              }`}
+            >
+              <span>{alert.severity === 'positive' ? '^' : '!'}</span>
+              <span>
+                {alert.metric} {alert.direction} for {alert.days} days ({alert.change_pct > 0 ? '+' : ''}{alert.change_pct.toFixed(0)}%)
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Pattern detected */}
+      {topCorrelation && (
+        <div className={`border-l-2 pl-3 ${
+          topCorrelation.pattern_type === 'negative' ? 'border-yellow-400' : 'border-green-400'
+        }`}>
+          <div className={`text-sm font-medium ${
+            topCorrelation.pattern_type === 'negative' ? 'text-yellow-400' : 'text-green-400'
+          }`}>
+            Pattern Detected
+          </div>
+          <div className="text-gray-400 text-sm">
+            {topCorrelation.description}
+          </div>
+          {topCorrelation.confidence >= 0.7 && (
+            <div className="text-gray-600 text-xs mt-1">
+              Based on {topCorrelation.sample_size} data points
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function Dashboard() {
@@ -480,6 +671,9 @@ function OverviewView({
           )}
         </p>
       </div>
+
+      {/* Weekly Insights - Phase 4 Causality Engine */}
+      <WeeklyInsights history={history} weeklySummary={selectedDay.weekly_summary} />
     </div>
   );
 }

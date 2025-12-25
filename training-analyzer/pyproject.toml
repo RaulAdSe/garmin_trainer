@@ -3,17 +3,16 @@ name = "training-analyzer"
 version = "0.1.0"
 description = "AI-powered workout analysis from Garmin data"
 requires-python = ">=3.10"
-dependencies = [
-    "garmin-client",  # Local shared package
-]
+dependencies = []
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
+    "pytest-cov>=4.0",
 ]
 
 [project.scripts]
-training = "training_analyzer.cli:main"
+training-analyzer = "training_analyzer.cli:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -25,3 +24,4 @@ packages = ["src/training_analyzer"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+addopts = "-v"
