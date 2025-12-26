@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useEffect, useState } from 'react';
+import { useMemo, useEffect, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import type { GPSCoordinate } from '@/types/workout-detail';
 
@@ -22,15 +22,25 @@ const CircleMarker = dynamic(
   { ssr: false }
 );
 
-// Intensity colors for route
+// Route colors
 const ROUTE_COLOR = '#14b8a6'; // teal-500
+const ACTIVE_MARKER_COLOR = '#fbbf24'; // amber-400
 
 interface RouteMapProps {
   gpsData: GPSCoordinate[];
   className?: string;
+  activeIndex?: number | null;
+  chartDataLength?: number; // Length of chart data for index mapping
+  onHoverIndex?: (index: number | null) => void;
 }
 
-export function RouteMap({ gpsData, className = '' }: RouteMapProps) {
+export function RouteMap({
+  gpsData,
+  className = '',
+  activeIndex = null,
+  chartDataLength,
+  onHoverIndex,
+}: RouteMapProps) {
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
@@ -65,9 +75,53 @@ export function RouteMap({ gpsData, className = '' }: RouteMapProps) {
     return gpsData.map(p => [p.lat, p.lon] as [number, number]);
   }, [gpsData]);
 
+  // Map chart index to GPS index (they may have different lengths)
+  const getGPSIndex = useCallback((chartIdx: number | null): number | null => {
+    if (chartIdx === null || gpsData.length === 0) return null;
+
+    const dataLen = chartDataLength || 400; // Default downsampled chart length
+    const ratio = gpsData.length / dataLen;
+    const gpsIdx = Math.round(chartIdx * ratio);
+
+    return Math.min(gpsIdx, gpsData.length - 1);
+  }, [gpsData.length, chartDataLength]);
+
+  // Map GPS index to chart index
+  const getChartIndex = useCallback((gpsIdx: number): number => {
+    const dataLen = chartDataLength || 400;
+    const ratio = dataLen / gpsData.length;
+    return Math.round(gpsIdx * ratio);
+  }, [gpsData.length, chartDataLength]);
+
+  // Find nearest GPS point to a lat/lon
+  const findNearestGPSIndex = useCallback((lat: number, lon: number): number => {
+    let minDistance = Infinity;
+    let nearestIndex = 0;
+
+    gpsData.forEach((point, index) => {
+      const distance = Math.sqrt(
+        Math.pow(lat - point.lat, 2) +
+        Math.pow(lon - point.lon, 2)
+      );
+      if (distance < minDistance) {
+        minDistance = distance;
+        nearestIndex = index;
+      }
+    });
+
+    return nearestIndex;
+  }, [gpsData]);
+
+  // Get active GPS point
+  const activeGPSIndex = getGPSIndex(activeIndex);
+  const activePoint = activeGPSIndex !== null ? gpsData[activeGPSIndex] : null;
+
   // Start and end points
   const startPoint = gpsData[0];
   const endPoint = gpsData[gpsData.length - 1];
+
+  // Map height classes - taller as requested
+  const heightClass = "h-96 sm:h-[500px]";
 
   if (!isClient) {
     return (
@@ -78,7 +132,7 @@ export function RouteMap({ gpsData, className = '' }: RouteMapProps) {
           </svg>
           <h3 className="text-sm font-medium text-gray-200">Route Map</h3>
         </div>
-        <div className="h-64 sm:h-80 bg-gray-800 rounded-lg animate-pulse flex items-center justify-center">
+        <div className={`${heightClass} bg-gray-800 rounded-lg animate-pulse flex items-center justify-center`}>
           <svg className="w-8 h-8 text-gray-600 animate-spin" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
@@ -97,7 +151,7 @@ export function RouteMap({ gpsData, className = '' }: RouteMapProps) {
           </svg>
           <h3 className="text-sm font-medium text-gray-200">Route Map</h3>
         </div>
-        <div className="h-64 sm:h-80 bg-gray-800 rounded-lg flex items-center justify-center">
+        <div className={`${heightClass} bg-gray-800 rounded-lg flex items-center justify-center`}>
           <div className="text-center">
             <svg className="w-10 h-10 text-gray-600 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -109,6 +163,14 @@ export function RouteMap({ gpsData, className = '' }: RouteMapProps) {
       </div>
     );
   }
+
+  // Handle polyline click/hover
+  const handlePolylineClick = (e: { latlng: { lat: number; lng: number } }) => {
+    if (!onHoverIndex) return;
+    const gpsIdx = findNearestGPSIndex(e.latlng.lat, e.latlng.lng);
+    const chartIdx = getChartIndex(gpsIdx);
+    onHoverIndex(chartIdx);
+  };
 
   return (
     <div className={`bg-gray-900 rounded-xl border border-gray-800 p-4 ${className}`}>
@@ -128,9 +190,15 @@ export function RouteMap({ gpsData, className = '' }: RouteMapProps) {
             <span className="w-2 h-2 rounded-full bg-red-500"></span>
             Finish
           </span>
+          {activePoint && (
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+              Position
+            </span>
+          )}
         </div>
       </div>
-      <div className="h-64 sm:h-80 rounded-lg overflow-hidden">
+      <div className={`${heightClass} rounded-lg overflow-hidden`}>
         <MapContainer
           center={center}
           bounds={bounds || undefined}
@@ -140,18 +208,23 @@ export function RouteMap({ gpsData, className = '' }: RouteMapProps) {
           scrollWheelZoom={true}
           zoomControl={true}
         >
-          {/* Dark theme map tiles */}
+          {/* Terrain map tiles - Esri World Topo (good terrain colors, not too intense) */}
           <TileLayer
-            attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+            attribution='&copy; <a href="https://www.esri.com/">Esri</a> &mdash; Sources: Esri, HERE, Garmin, USGS, NGA'
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}"
+            maxZoom={18}
           />
 
-          {/* Route polyline */}
+          {/* Route polyline - interactive */}
           <Polyline
             positions={positions}
             color={ROUTE_COLOR}
-            weight={3}
+            weight={4}
             opacity={0.9}
+            eventHandlers={{
+              click: handlePolylineClick,
+              mouseover: handlePolylineClick,
+            }}
           />
 
           {/* Start marker */}
@@ -175,6 +248,18 @@ export function RouteMap({ gpsData, className = '' }: RouteMapProps) {
               fillOpacity={1}
               color="#fff"
               weight={2}
+            />
+          )}
+
+          {/* Active position marker - shows when hovering charts */}
+          {activePoint && (
+            <CircleMarker
+              center={[activePoint.lat, activePoint.lon]}
+              radius={10}
+              fillColor={ACTIVE_MARKER_COLOR}
+              fillOpacity={0.9}
+              color="#fff"
+              weight={3}
             />
           )}
         </MapContainer>

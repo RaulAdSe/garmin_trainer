@@ -55,6 +55,9 @@ export default function WorkoutDetailPage({ params }: WorkoutDetailPageProps) {
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [detailsError, setDetailsError] = useState<string | null>(null);
 
+  // Synchronized hover state for charts and map
+  const [activeHoverIndex, setActiveHoverIndex] = useState<number | null>(null);
+
   // Fetch activity details when workout is loaded
   useEffect(() => {
     if (!workout) return;
@@ -228,38 +231,98 @@ export default function WorkoutDetailPage({ params }: WorkoutDetailPageProps) {
           </div>
         </section>
 
-        {/* Interactive Charts and Route Map */}
-        {isLoadingDetails ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 h-80 animate-pulse">
-              <div className="h-6 bg-gray-800 rounded w-32 mb-4"></div>
-              <div className="h-full bg-gray-800 rounded"></div>
-            </div>
-            <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 h-80 animate-pulse">
-              <div className="h-6 bg-gray-800 rounded w-32 mb-4"></div>
-              <div className="h-full bg-gray-800 rounded"></div>
-            </div>
+        {/* Route Map + AI Analysis side by side */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          {/* Route Map - Left side (3/5 width) */}
+          <div className="lg:col-span-3">
+            {isLoadingDetails ? (
+              <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 h-[500px] animate-pulse">
+                <div className="h-6 bg-gray-800 rounded w-32 mb-4"></div>
+                <div className="h-full bg-gray-800 rounded"></div>
+              </div>
+            ) : activityDetails ? (
+              <RouteMap
+                gpsData={activityDetails.gps_coordinates}
+                activeIndex={activeHoverIndex}
+                chartDataLength={400}
+                onHoverIndex={setActiveHoverIndex}
+              />
+            ) : detailsError ? (
+              <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 h-[500px] flex items-center justify-center">
+                <p className="text-gray-400">{detailsError}</p>
+              </div>
+            ) : null}
           </div>
-        ) : activityDetails ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Interactive Charts */}
-            <WorkoutCharts
-              timeSeries={activityDetails.time_series}
-              isRunning={isRunning}
-              className="lg:col-span-1"
-            />
 
-            {/* Route Map */}
-            <RouteMap
-              gpsData={activityDetails.gps_coordinates}
-              className="lg:col-span-1"
-            />
+          {/* AI Analysis - Right side (2/5 width) */}
+          <div className="lg:col-span-2">
+            <section className="bg-gray-900 rounded-xl border border-gray-800 p-6 h-full">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-gray-100 flex items-center gap-2">
+                  <SparklesIcon className="text-teal-400" />
+                  AI Analysis
+                </h2>
+              </div>
+
+              {isStreaming || streamContent ? (
+                <StreamingAnalysis
+                  content={streamContent}
+                  isStreaming={isStreaming}
+                  isComplete={isComplete}
+                  error={streamError}
+                />
+              ) : isLoadingAnalysis ? (
+                <WorkoutAnalysisSkeleton />
+              ) : analysis ? (
+                <WorkoutAnalysis analysis={analysis} workout={workout} />
+              ) : (
+                <div className="text-center py-8">
+                  <div className="inline-flex items-center justify-center w-12 h-12 bg-teal-900/50 rounded-full mb-4">
+                    <SparklesIcon className="w-6 h-6 text-teal-400" />
+                  </div>
+                  <h3 className="text-sm font-medium text-gray-100 mb-2">
+                    No Analysis Yet
+                  </h3>
+                  <p className="text-sm text-gray-400 mb-4">
+                    Get AI-powered insights about your workout performance.
+                  </p>
+                  <button
+                    onClick={() => handleAnalyze()}
+                    disabled={isAnalyzing}
+                    className={cn(
+                      'inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors',
+                      isAnalyzing
+                        ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
+                        : 'bg-teal-600 text-white hover:bg-teal-700'
+                    )}
+                  >
+                    {isAnalyzing ? (
+                      <>
+                        <LoadingSpinner />
+                        Analyzing...
+                      </>
+                    ) : (
+                      <>
+                        <SparklesIcon className="w-4 h-4" />
+                        Generate Analysis
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+            </section>
           </div>
-        ) : detailsError ? (
-          <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 text-center">
-            <p className="text-gray-400">{detailsError}</p>
-          </div>
-        ) : null}
+        </div>
+
+        {/* Interactive Charts - Full width */}
+        {activityDetails && (
+          <WorkoutCharts
+            timeSeries={activityDetails.time_series}
+            isRunning={isRunning}
+            activeIndex={activeHoverIndex}
+            onHoverIndexChange={setActiveHoverIndex}
+          />
+        )}
 
         {/* Splits Table */}
         {activityDetails?.splits && activityDetails.splits.length > 0 && (
@@ -269,115 +332,53 @@ export default function WorkoutDetailPage({ params }: WorkoutDetailPageProps) {
           />
         )}
 
-        {/* Two column layout for HR zones and AI Analysis */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left column - HR Zones and Notes */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* HR Zones */}
-            {workout.hrZones && workout.hrZones.length > 0 && (
-              <section className="bg-gray-900 rounded-xl border border-gray-800 p-4 sm:p-6">
-                <h2 className="text-lg font-semibold text-gray-100 mb-4">
-                  Heart Rate Zones
-                </h2>
-                <div className="space-y-3">
-                  {workout.hrZones.map((zone) => (
-                    <div key={zone.zone} className="flex items-center gap-3 sm:gap-4">
-                      <div className="w-16 sm:w-20 text-sm font-medium text-gray-300">
-                        {getHRZoneLabel(zone.zone)}
-                      </div>
-                      <div className="flex-1">
-                        <div className="h-5 sm:h-6 bg-gray-800 rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full transition-all duration-500"
-                            style={{
-                              width: `${zone.percentage}%`,
-                              backgroundColor: getHRZoneColor(zone.zone),
-                            }}
-                          />
-                        </div>
-                      </div>
-                      <div className="w-12 sm:w-16 text-right text-sm text-gray-400">
-                        {zone.percentage.toFixed(1)}%
-                      </div>
-                      <div className="hidden sm:block w-20 text-right text-sm text-gray-500">
-                        {formatDuration(zone.duration)}
+        {/* HR Zones and Notes */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* HR Zones */}
+          {workout.hrZones && workout.hrZones.length > 0 && (
+            <section className="bg-gray-900 rounded-xl border border-gray-800 p-4 sm:p-6">
+              <h2 className="text-lg font-semibold text-gray-100 mb-4">
+                Heart Rate Zones
+              </h2>
+              <div className="space-y-3">
+                {workout.hrZones.map((zone) => (
+                  <div key={zone.zone} className="flex items-center gap-3 sm:gap-4">
+                    <div className="w-16 sm:w-20 text-sm font-medium text-gray-300">
+                      {getHRZoneLabel(zone.zone)}
+                    </div>
+                    <div className="flex-1">
+                      <div className="h-5 sm:h-6 bg-gray-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{
+                            width: `${zone.percentage}%`,
+                            backgroundColor: getHRZoneColor(zone.zone),
+                          }}
+                        />
                       </div>
                     </div>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* Notes */}
-            {workout.notes && (
-              <section className="bg-gray-900 rounded-xl border border-gray-800 p-4 sm:p-6">
-                <h2 className="text-lg font-semibold text-gray-100 mb-4">
-                  Notes
-                </h2>
-                <p className="text-gray-300 whitespace-pre-wrap">{workout.notes}</p>
-              </section>
-            )}
-          </div>
-
-        {/* Right column - AI Analysis */}
-        <div className="space-y-6">
-          <section className="bg-gray-900 rounded-lg border border-gray-800 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-100 flex items-center gap-2">
-                <SparklesIcon className="text-teal-400" />
-                AI Analysis
-              </h2>
-            </div>
-
-            {isStreaming || streamContent ? (
-              <StreamingAnalysis
-                content={streamContent}
-                isStreaming={isStreaming}
-                isComplete={isComplete}
-                error={streamError}
-              />
-            ) : isLoadingAnalysis ? (
-              <WorkoutAnalysisSkeleton />
-            ) : analysis ? (
-              <WorkoutAnalysis analysis={analysis} workout={workout} />
-            ) : (
-              <div className="text-center py-8">
-                <div className="inline-flex items-center justify-center w-12 h-12 bg-teal-900/50 rounded-full mb-4">
-                  <SparklesIcon className="w-6 h-6 text-teal-400" />
-                </div>
-                <h3 className="text-sm font-medium text-gray-100 mb-2">
-                  No Analysis Yet
-                </h3>
-                <p className="text-sm text-gray-400 mb-4">
-                  Get AI-powered insights about your workout performance.
-                </p>
-                <button
-                  onClick={() => handleAnalyze()}
-                  disabled={isAnalyzing}
-                  className={cn(
-                    'inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors',
-                    isAnalyzing
-                      ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-                      : 'bg-teal-600 text-white hover:bg-teal-700'
-                  )}
-                >
-                  {isAnalyzing ? (
-                    <>
-                      <LoadingSpinner />
-                      Analyzing...
-                    </>
-                  ) : (
-                    <>
-                      <SparklesIcon className="w-4 h-4" />
-                      Generate Analysis
-                    </>
-                  )}
-                </button>
+                    <div className="w-12 sm:w-16 text-right text-sm text-gray-400">
+                      {zone.percentage.toFixed(1)}%
+                    </div>
+                    <div className="hidden sm:block w-20 text-right text-sm text-gray-500">
+                      {formatDuration(zone.duration)}
+                    </div>
+                  </div>
+                ))}
               </div>
-            )}
-          </section>
+            </section>
+          )}
+
+          {/* Notes */}
+          {workout.notes && (
+            <section className="bg-gray-900 rounded-xl border border-gray-800 p-4 sm:p-6">
+              <h2 className="text-lg font-semibold text-gray-100 mb-4">
+                Notes
+              </h2>
+              <p className="text-gray-300 whitespace-pre-wrap">{workout.notes}</p>
+            </section>
+          )}
         </div>
-      </div>
       </div>
     </div>
   );

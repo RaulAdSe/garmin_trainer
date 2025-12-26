@@ -41,6 +41,8 @@ interface WorkoutChartsProps {
   isRunning: boolean;
   maxHR?: number;
   className?: string;
+  activeIndex?: number | null;
+  onHoverIndexChange?: (index: number | null) => void;
 }
 
 export function WorkoutCharts({
@@ -48,24 +50,34 @@ export function WorkoutCharts({
   isRunning,
   maxHR = 185,
   className = '',
+  activeIndex: externalActiveIndex,
+  onHoverIndexChange,
 }: WorkoutChartsProps) {
-  const [syncedHover, setSyncedHover] = useState<SyncedHoverState>({
+  const [internalHover, setInternalHover] = useState<SyncedHoverState>({
     activeIndex: null,
     activeLabel: null,
   });
 
+  // Use external index if provided, otherwise internal
+  const syncedHover: SyncedHoverState = {
+    activeIndex: externalActiveIndex ?? internalHover.activeIndex,
+    activeLabel: internalHover.activeLabel,
+  };
+
   const handleMouseMove = useCallback((data: { activeTooltipIndex?: number; activeLabel?: string }) => {
     if (data.activeTooltipIndex !== undefined) {
-      setSyncedHover({
+      setInternalHover({
         activeIndex: data.activeTooltipIndex,
         activeLabel: data.activeLabel || null,
       });
+      onHoverIndexChange?.(data.activeTooltipIndex);
     }
-  }, []);
+  }, [onHoverIndexChange]);
 
   const handleMouseLeave = useCallback(() => {
-    setSyncedHover({ activeIndex: null, activeLabel: null });
-  }, []);
+    setInternalHover({ activeIndex: null, activeLabel: null });
+    onHoverIndexChange?.(null);
+  }, [onHoverIndexChange]);
 
   // Check data availability
   const hasHRData = timeSeries.heart_rate.length > 0;
