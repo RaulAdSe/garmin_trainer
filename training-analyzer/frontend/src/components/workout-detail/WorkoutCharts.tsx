@@ -169,13 +169,30 @@ function HeartRateChart({ data, maxHR, syncedHover, onMouseMove, onMouseLeave }:
     { pct: 90, color: '#f97316' },
   ];
 
+  // Get synced position data
+  const syncedData = useMemo(() => {
+    if (syncedHover.activeIndex === null || syncedHover.activeIndex >= chartData.length) return null;
+    const point = chartData[syncedHover.activeIndex];
+    return { timestamp: point.timestamp, value: point.hr };
+  }, [syncedHover.activeIndex, chartData]);
+
   return (
     <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-        </svg>
-        <h3 className="text-sm font-medium text-gray-200">Heart Rate</h3>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+          </svg>
+          <h3 className="text-sm font-medium text-gray-200">Heart Rate</h3>
+        </div>
+        {/* Synced value display */}
+        {syncedData && (
+          <div className="text-sm text-gray-300">
+            <span className="text-gray-500">{formatElapsedTime(syncedData.timestamp)}</span>
+            <span className="mx-2 text-gray-600">|</span>
+            <span className="text-red-400 font-medium">{syncedData.value} bpm</span>
+          </div>
+        )}
       </div>
       <div className="h-40 sm:h-48">
         <ResponsiveContainer width="100%" height="100%">
@@ -218,6 +235,15 @@ function HeartRateChart({ data, maxHR, syncedHover, onMouseMove, onMouseLeave }:
                 strokeOpacity={0.4}
               />
             ))}
+            {/* Synced vertical reference line */}
+            {syncedData && (
+              <ReferenceLine
+                x={syncedData.timestamp}
+                stroke="#fbbf24"
+                strokeDasharray="4 4"
+                strokeWidth={2}
+              />
+            )}
             <Line
               type="monotone"
               dataKey="hr"
@@ -225,6 +251,7 @@ function HeartRateChart({ data, maxHR, syncedHover, onMouseMove, onMouseLeave }:
               strokeWidth={1.5}
               dot={false}
               activeDot={{ r: 4, fill: COLORS.heartRate, stroke: '#fff', strokeWidth: 2 }}
+              isAnimationActive={false}
             />
           </LineChart>
         </ResponsiveContainer>
@@ -282,13 +309,34 @@ function PaceSpeedChart({ data, isRunning, syncedHover, onMouseMove, onMouseLeav
   const unit = isRunning ? ' /km' : ' km/h';
   const iconColor = isRunning ? 'text-blue-500' : 'text-green-500';
 
+  // Get synced position data
+  const syncedData = useMemo(() => {
+    if (syncedHover.activeIndex === null || syncedHover.activeIndex >= chartData.length) return null;
+    const point = chartData[syncedHover.activeIndex];
+    return { timestamp: point.timestamp, value: point.value };
+  }, [syncedHover.activeIndex, chartData]);
+
+  const formatValue = isRunning ? (v: number) => formatPace(v) : (v: number) => v.toFixed(1);
+
   return (
     <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <svg className={`w-5 h-5 ${iconColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-        </svg>
-        <h3 className="text-sm font-medium text-gray-200">{title}</h3>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <svg className={`w-5 h-5 ${iconColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          <h3 className="text-sm font-medium text-gray-200">{title}</h3>
+        </div>
+        {/* Synced value display */}
+        {syncedData && (
+          <div className="text-sm text-gray-300">
+            <span className="text-gray-500">{formatElapsedTime(syncedData.timestamp)}</span>
+            <span className="mx-2 text-gray-600">|</span>
+            <span className={`${isRunning ? 'text-blue-400' : 'text-green-400'} font-medium`}>
+              {formatValue(syncedData.value)}{unit}
+            </span>
+          </div>
+        )}
       </div>
       <div className="h-40 sm:h-48">
         <ResponsiveContainer width="100%" height="100%">
@@ -323,11 +371,20 @@ function PaceSpeedChart({ data, isRunning, syncedHover, onMouseMove, onMouseLeav
                 <CustomTooltip
                   label={title}
                   unit={unit}
-                  valueFormatter={isRunning ? (v: number) => formatPace(v) : (v: number) => v.toFixed(1)}
+                  valueFormatter={formatValue}
                 />
               }
               cursor={{ stroke: '#6b7280', strokeDasharray: '3 3' }}
             />
+            {/* Synced vertical reference line */}
+            {syncedData && (
+              <ReferenceLine
+                x={syncedData.timestamp}
+                stroke="#fbbf24"
+                strokeDasharray="4 4"
+                strokeWidth={2}
+              />
+            )}
             <Line
               type="monotone"
               dataKey="value"
@@ -335,6 +392,7 @@ function PaceSpeedChart({ data, isRunning, syncedHover, onMouseMove, onMouseLeav
               strokeWidth={1.5}
               dot={false}
               activeDot={{ r: 4, fill: chartColor, stroke: '#fff', strokeWidth: 2 }}
+              isAnimationActive={false}
             />
           </LineChart>
         </ResponsiveContainer>
@@ -383,6 +441,13 @@ function ElevationChart({ data, syncedHover, onMouseMove, onMouseLeave }: Elevat
     };
   }, [chartData]);
 
+  // Get synced position data
+  const syncedData = useMemo(() => {
+    if (syncedHover.activeIndex === null || syncedHover.activeIndex >= chartData.length) return null;
+    const point = chartData[syncedHover.activeIndex];
+    return { timestamp: point.timestamp, value: point.elevation };
+  }, [syncedHover.activeIndex, chartData]);
+
   return (
     <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
       <div className="flex items-center justify-between mb-3">
@@ -391,6 +456,14 @@ function ElevationChart({ data, syncedHover, onMouseMove, onMouseLeave }: Elevat
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
           </svg>
           <h3 className="text-sm font-medium text-gray-200">Elevation</h3>
+          {/* Synced value display */}
+          {syncedData && (
+            <span className="ml-2 text-sm text-gray-300">
+              <span className="text-gray-500">{formatElapsedTime(syncedData.timestamp)}</span>
+              <span className="mx-2 text-gray-600">|</span>
+              <span className="text-stone-400 font-medium">{syncedData.value.toFixed(0)}m</span>
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-3 text-xs text-gray-400">
           <span className="flex items-center gap-1">
@@ -444,12 +517,22 @@ function ElevationChart({ data, syncedHover, onMouseMove, onMouseLeave }: Elevat
               content={<CustomTooltip label="Elevation" unit="m" valueFormatter={(v: number) => v.toFixed(0)} />}
               cursor={{ stroke: '#6b7280', strokeDasharray: '3 3' }}
             />
+            {/* Synced vertical reference line */}
+            {syncedData && (
+              <ReferenceLine
+                x={syncedData.timestamp}
+                stroke="#fbbf24"
+                strokeDasharray="4 4"
+                strokeWidth={2}
+              />
+            )}
             <Area
               type="monotone"
               dataKey="elevation"
               stroke={COLORS.elevation}
               strokeWidth={1.5}
               fill="url(#elevationGradient)"
+              isAnimationActive={false}
             />
           </AreaChart>
         </ResponsiveContainer>

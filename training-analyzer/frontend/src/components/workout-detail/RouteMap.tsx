@@ -164,12 +164,17 @@ export function RouteMap({
     );
   }
 
-  // Handle polyline click/hover
-  const handlePolylineClick = (e: { latlng: { lat: number; lng: number } }) => {
+  // Handle polyline hover/move
+  const handlePolylineHover = (e: { latlng: { lat: number; lng: number } }) => {
     if (!onHoverIndex) return;
     const gpsIdx = findNearestGPSIndex(e.latlng.lat, e.latlng.lng);
     const chartIdx = getChartIndex(gpsIdx);
     onHoverIndex(chartIdx);
+  };
+
+  // Handle mouse leave
+  const handlePolylineLeave = () => {
+    onHoverIndex?.(null);
   };
 
   return (
@@ -215,15 +220,17 @@ export function RouteMap({
             maxZoom={18}
           />
 
-          {/* Route polyline - interactive */}
+          {/* Route polyline - interactive with continuous hover tracking */}
           <Polyline
             positions={positions}
             color={ROUTE_COLOR}
             weight={4}
             opacity={0.9}
             eventHandlers={{
-              click: handlePolylineClick,
-              mouseover: handlePolylineClick,
+              click: handlePolylineHover,
+              mouseover: handlePolylineHover,
+              mousemove: handlePolylineHover,
+              mouseout: handlePolylineLeave,
             }}
           />
 
