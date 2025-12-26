@@ -384,6 +384,34 @@ class WorkoutData:
     elevation_gain: Optional[float] = None
     calories: Optional[int] = None
 
+    # ==========================================================================
+    # Phase 2: Multi-sport Extensions
+    # ==========================================================================
+
+    # Sport classification (more specific than activity_type)
+    sport_type: Optional[str] = None  # running, cycling, swimming, strength, etc.
+
+    # Power metrics (cycling/running with power meter)
+    avg_power: Optional[int] = None
+    max_power: Optional[int] = None
+    normalized_power: Optional[int] = None
+    tss: Optional[float] = None  # Training Stress Score (power-based)
+    intensity_factor: Optional[float] = None
+    variability_index: Optional[float] = None
+
+    # Speed metrics
+    avg_speed_kmh: Optional[float] = None
+
+    # Elevation
+    elevation_gain_m: Optional[float] = None
+
+    # Swimming metrics
+    pool_length_m: Optional[int] = None
+    total_strokes: Optional[int] = None
+    avg_swolf: Optional[float] = None
+    avg_stroke_rate: Optional[float] = None
+    css_pace_sec: Optional[int] = None  # Critical Swim Speed pace
+
     def format_pace(self) -> str:
         """Format pace as min:sec/km."""
         if not self.pace_sec_per_km:
@@ -403,10 +431,26 @@ class WorkoutData:
         ]
         return ", ".join(f"{name}: {pct:.0f}%" for name, pct in zones if pct > 0)
 
+    def format_speed(self) -> str:
+        """Format speed as km/h."""
+        if not self.avg_speed_kmh:
+            return "N/A"
+        return f"{self.avg_speed_kmh:.1f} km/h"
+
+    def format_swim_pace(self) -> str:
+        """Format CSS pace as min:sec/100m."""
+        if not self.css_pace_sec:
+            return "N/A"
+        pace_min = self.css_pace_sec // 60
+        pace_sec = self.css_pace_sec % 60
+        return f"{pace_min}:{pace_sec:02d}/100m"
+
     def to_prompt_data(self) -> str:
         """Convert to formatted string for LLM prompt."""
+        sport = self.sport_type or self.activity_type
         lines = [
             f"Activity: {self.activity_type}",
+            f"Sport Type: {sport}" if self.sport_type and self.sport_type != self.activity_type else None,
             f"Date: {self.date}",
             f"Name: {self.activity_name}" if self.activity_name else None,
             f"Duration: {self.duration_min:.0f} minutes",
@@ -415,6 +459,8 @@ class WorkoutData:
 
         if self.pace_sec_per_km:
             lines.append(f"Avg Pace: {self.format_pace()}")
+        if self.avg_speed_kmh:
+            lines.append(f"Avg Speed: {self.format_speed()}")
 
         if self.avg_hr:
             lines.append(f"Avg HR: {self.avg_hr} bpm")
@@ -429,10 +475,38 @@ class WorkoutData:
         if self.trimp:
             lines.append(f"TRIMP: {self.trimp:.1f}")
 
+        # Power metrics (cycling/running power)
+        if self.avg_power:
+            lines.append(f"Avg Power: {self.avg_power} W")
+        if self.max_power:
+            lines.append(f"Max Power: {self.max_power} W")
+        if self.normalized_power:
+            lines.append(f"Normalized Power: {self.normalized_power} W")
+        if self.tss:
+            lines.append(f"TSS: {self.tss:.1f}")
+        if self.intensity_factor:
+            lines.append(f"Intensity Factor: {self.intensity_factor:.2f}")
+        if self.variability_index:
+            lines.append(f"Variability Index: {self.variability_index:.2f}")
+
         if self.cadence:
             lines.append(f"Avg Cadence: {self.cadence} spm")
         if self.elevation_gain:
             lines.append(f"Elevation Gain: {self.elevation_gain:.0f} m")
+        if self.elevation_gain_m:
+            lines.append(f"Elevation Gain: {self.elevation_gain_m:.0f} m")
+
+        # Swimming metrics
+        if self.pool_length_m:
+            lines.append(f"Pool Length: {self.pool_length_m} m")
+        if self.total_strokes:
+            lines.append(f"Total Strokes: {self.total_strokes}")
+        if self.avg_swolf:
+            lines.append(f"Avg SWOLF: {self.avg_swolf:.1f}")
+        if self.avg_stroke_rate:
+            lines.append(f"Avg Stroke Rate: {self.avg_stroke_rate:.1f} spm")
+        if self.css_pace_sec:
+            lines.append(f"CSS Pace: {self.format_swim_pace()}")
 
         return "\n".join(line for line in lines if line is not None)
 
@@ -459,4 +533,19 @@ class WorkoutData:
             cadence=data.get("cadence"),
             elevation_gain=data.get("elevation_gain"),
             calories=data.get("calories"),
+            # Phase 2: Multi-sport extensions
+            sport_type=data.get("sport_type"),
+            avg_power=data.get("avg_power"),
+            max_power=data.get("max_power"),
+            normalized_power=data.get("normalized_power"),
+            tss=data.get("tss"),
+            intensity_factor=data.get("intensity_factor"),
+            variability_index=data.get("variability_index"),
+            avg_speed_kmh=data.get("avg_speed_kmh"),
+            elevation_gain_m=data.get("elevation_gain_m"),
+            pool_length_m=data.get("pool_length_m"),
+            total_strokes=data.get("total_strokes"),
+            avg_swolf=data.get("avg_swolf"),
+            avg_stroke_rate=data.get("avg_stroke_rate"),
+            css_pace_sec=data.get("css_pace_sec"),
         )

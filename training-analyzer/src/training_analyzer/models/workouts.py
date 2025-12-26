@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 import uuid
 
 
@@ -329,3 +329,228 @@ class AthleteContext:
                 for i in range(1, 6)
             },
         }
+
+
+class SwimStrokeType(str, Enum):
+    """Swimming stroke types."""
+    FREESTYLE = "freestyle"
+    BACKSTROKE = "backstroke"
+    BREASTSTROKE = "breaststroke"
+    BUTTERFLY = "butterfly"
+    INDIVIDUAL_MEDLEY = "im"
+    MIXED = "mixed"
+
+
+class PoolLength(int, Enum):
+    """Standard pool lengths in meters."""
+    SCM = 25   # Short Course Meters
+    LCM = 50   # Long Course Meters
+    SCY = 25   # Short Course Yards (converted to ~23m)
+
+
+@dataclass
+class SwimWorkoutInterval(WorkoutInterval):
+    """
+    A swim-specific interval within a structured swim workout.
+
+    Extends WorkoutInterval with swimming-specific attributes like
+    stroke type, drill indicators, and equipment requirements.
+    """
+    stroke_type: SwimStrokeType = SwimStrokeType.FREESTYLE
+    is_drill: bool = False
+    drill_name: Optional[str] = None
+    equipment: Optional[List[str]] = None  # e.g., ["pull_buoy", "paddles", "fins"]
+    target_swolf: Optional[int] = None
+    target_stroke_count: Optional[int] = None
+    target_pace_per_100m: Optional[Tuple[int, int]] = None  # (min, max) sec/100m
+
+    def __post_init__(self):
+        """Validate swim interval after initialization."""
+        super().__post_init__()
+        if isinstance(self.stroke_type, str):
+            self.stroke_type = SwimStrokeType(self.stroke_type)
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization."""
+        base_dict = super().to_dict()
+        base_dict.update({
+            "stroke_type": self.stroke_type.value if isinstance(self.stroke_type, SwimStrokeType) else self.stroke_type,
+            "is_drill": self.is_drill,
+            "drill_name": self.drill_name,
+            "equipment": self.equipment,
+            "target_swolf": self.target_swolf,
+            "target_stroke_count": self.target_stroke_count,
+            "target_pace_per_100m": list(self.target_pace_per_100m) if self.target_pace_per_100m else None,
+        })
+        return base_dict
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "SwimWorkoutInterval":
+        """Create from dictionary."""
+        return cls(
+            type=IntervalType(data["type"]),
+            duration_sec=data.get("duration_sec"),
+            distance_m=data.get("distance_m"),
+            target_pace_range=tuple(data["target_pace_range"]) if data.get("target_pace_range") else None,
+            target_hr_range=tuple(data["target_hr_range"]) if data.get("target_hr_range") else None,
+            repetitions=data.get("repetitions", 1),
+            notes=data.get("notes"),
+            intensity_zone=IntensityZone(data["intensity_zone"]) if data.get("intensity_zone") else None,
+            stroke_type=SwimStrokeType(data.get("stroke_type", "freestyle")),
+            is_drill=data.get("is_drill", False),
+            drill_name=data.get("drill_name"),
+            equipment=data.get("equipment"),
+            target_swolf=data.get("target_swolf"),
+            target_stroke_count=data.get("target_stroke_count"),
+            target_pace_per_100m=tuple(data["target_pace_per_100m"]) if data.get("target_pace_per_100m") else None,
+        )
+
+
+@dataclass
+class SwimAthleteContext:
+    """
+    Swim-specific athlete context for personalized swim workout design.
+
+    Contains CSS (Critical Swim Speed), preferred stroke, pool preferences,
+    and swim-specific training zones.
+    """
+    # Critical Swim Speed (threshold pace in sec/100m)
+    css_pace: int = 100  # 1:40/100m default
+
+    # CSS test times (for recalculation)
+    css_test_400m_sec: Optional[float] = None
+    css_test_200m_sec: Optional[float] = None
+
+    # Preferences
+    preferred_stroke: SwimStrokeType = SwimStrokeType.FREESTYLE
+    preferred_pool_length: PoolLength = PoolLength.SCM
+
+    # Fitness metrics (swim-specific)
+    swim_ctl: float = 30.0  # Swim-specific Chronic Training Load
+    swim_atl: float = 30.0  # Swim-specific Acute Training Load
+
+    # Stroke efficiencies (average SWOLF per stroke type)
+    freestyle_swolf: Optional[int] = None
+    backstroke_swolf: Optional[int] = None
+    breaststroke_swolf: Optional[int] = None
+    butterfly_swolf: Optional[int] = None
+
+    # Swim paces by zone (sec/100m)
+    recovery_pace: Optional[int] = None   # Zone 1
+    aerobic_pace: Optional[int] = None    # Zone 2
+    threshold_pace: Optional[int] = None  # Zone 3 (same as CSS)
+    vo2max_pace: Optional[int] = None     # Zone 4
+    sprint_pace: Optional[int] = None     # Zone 5
+
+    def __post_init__(self):
+        """Initialize zone paces from CSS if not provided."""
+        if isinstance(self.preferred_stroke, str):
+            self.preferred_stroke = SwimStrokeType(self.preferred_stroke)
+        if isinstance(self.preferred_pool_length, int) and self.preferred_pool_length not in [25, 50]:
+            self.preferred_pool_length = PoolLength.SCM
+        elif isinstance(self.preferred_pool_length, int):
+            self.preferred_pool_length = PoolLength(self.preferred_pool_length)
+
+        # Set default zone paces based on CSS if not provided
+        if self.threshold_pace is None:
+            self.threshold_pace = self.css_pace
+        if self.recovery_pace is None:
+            self.recovery_pace = int(self.css_pace * 1.20)  # 120% CSS
+        if self.aerobic_pace is None:
+            self.aerobic_pace = int(self.css_pace * 1.10)   # 110% CSS
+        if self.vo2max_pace is None:
+            self.vo2max_pace = int(self.css_pace * 0.90)    # 90% CSS
+        if self.sprint_pace is None:
+            self.sprint_pace = int(self.css_pace * 0.80)    # 80% CSS
+
+    def recalculate_css(self) -> Optional[int]:
+        """
+        Recalculate CSS from test times if available.
+
+        Returns:
+            New CSS pace in sec/100m, or None if test times unavailable
+        """
+        if self.css_test_400m_sec and self.css_test_200m_sec:
+            if self.css_test_400m_sec > self.css_test_200m_sec:
+                css_speed = 200 / (self.css_test_400m_sec - self.css_test_200m_sec)
+                self.css_pace = int(round(100 / css_speed))
+                # Recalculate zone paces
+                self.__post_init__()
+                return self.css_pace
+        return None
+
+    def get_swim_zones(self) -> Dict[str, Tuple[int, int]]:
+        """
+        Get swim training zones based on CSS.
+
+        Returns:
+            Dictionary with zone names and (fast, slow) pace ranges in sec/100m
+        """
+        return {
+            "zone1_recovery": (int(self.css_pace * 1.15), int(self.css_pace * 1.40)),
+            "zone2_aerobic": (int(self.css_pace * 1.05), int(self.css_pace * 1.15)),
+            "zone3_threshold": (int(self.css_pace * 0.95), int(self.css_pace * 1.05)),
+            "zone4_vo2max": (int(self.css_pace * 0.85), int(self.css_pace * 0.95)),
+            "zone5_sprint": (int(self.css_pace * 0.70), int(self.css_pace * 0.85)),
+        }
+
+    def format_swim_pace(self, pace_sec: int) -> str:
+        """Format swim pace (sec/100m) to mm:ss format."""
+        minutes = pace_sec // 60
+        seconds = pace_sec % 60
+        return f"{minutes}:{seconds:02d}/100m"
+
+    def get_pace_for_zone(self, zone: int) -> int:
+        """Get target pace for a given zone (1-5)."""
+        zone_paces = {
+            1: self.recovery_pace,
+            2: self.aerobic_pace,
+            3: self.threshold_pace,
+            4: self.vo2max_pace,
+            5: self.sprint_pace,
+        }
+        return zone_paces.get(zone, self.threshold_pace) or self.css_pace
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for serialization."""
+        return {
+            "css_pace": self.css_pace,
+            "css_pace_formatted": self.format_swim_pace(self.css_pace),
+            "css_test_400m_sec": self.css_test_400m_sec,
+            "css_test_200m_sec": self.css_test_200m_sec,
+            "preferred_stroke": self.preferred_stroke.value if isinstance(self.preferred_stroke, SwimStrokeType) else self.preferred_stroke,
+            "preferred_pool_length": self.preferred_pool_length.value if isinstance(self.preferred_pool_length, PoolLength) else self.preferred_pool_length,
+            "swim_ctl": self.swim_ctl,
+            "swim_atl": self.swim_atl,
+            "swolf_by_stroke": {
+                "freestyle": self.freestyle_swolf,
+                "backstroke": self.backstroke_swolf,
+                "breaststroke": self.breaststroke_swolf,
+                "butterfly": self.butterfly_swolf,
+            },
+            "zone_paces": {
+                "recovery": self.format_swim_pace(self.recovery_pace) if self.recovery_pace else None,
+                "aerobic": self.format_swim_pace(self.aerobic_pace) if self.aerobic_pace else None,
+                "threshold": self.format_swim_pace(self.threshold_pace) if self.threshold_pace else None,
+                "vo2max": self.format_swim_pace(self.vo2max_pace) if self.vo2max_pace else None,
+                "sprint": self.format_swim_pace(self.sprint_pace) if self.sprint_pace else None,
+            },
+            "swim_zones": self.get_swim_zones(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "SwimAthleteContext":
+        """Create from dictionary."""
+        return cls(
+            css_pace=data.get("css_pace", 100),
+            css_test_400m_sec=data.get("css_test_400m_sec"),
+            css_test_200m_sec=data.get("css_test_200m_sec"),
+            preferred_stroke=SwimStrokeType(data.get("preferred_stroke", "freestyle")),
+            preferred_pool_length=PoolLength(data.get("preferred_pool_length", 25)),
+            swim_ctl=data.get("swim_ctl", 30.0),
+            swim_atl=data.get("swim_atl", 30.0),
+            freestyle_swolf=data.get("swolf_by_stroke", {}).get("freestyle"),
+            backstroke_swolf=data.get("swolf_by_stroke", {}).get("backstroke"),
+            breaststroke_swolf=data.get("swolf_by_stroke", {}).get("breaststroke"),
+            butterfly_swolf=data.get("swolf_by_stroke", {}).get("butterfly"),
+        )

@@ -59,10 +59,15 @@ from .workouts import (
     IntensityZone,
     IntervalType,
     WorkoutSport,
+    SwimStrokeType,
+    PoolLength,
     # Core dataclasses
     WorkoutInterval,
     StructuredWorkout,
     WorkoutDesignRequest,
+    # Swim-specific models
+    SwimWorkoutInterval,
+    SwimAthleteContext,
 )
 
 __all__ = [
@@ -114,8 +119,13 @@ __all__ = [
     "IntensityZone",
     "IntervalType",
     "WorkoutSport",
+    "SwimStrokeType",
+    "PoolLength",
     # Workout Core dataclasses
     "WorkoutInterval",
     "StructuredWorkout",
     "WorkoutDesignRequest",
+    # Swim-specific models
+    "SwimWorkoutInterval",
+    "SwimAthleteContext",
 ]

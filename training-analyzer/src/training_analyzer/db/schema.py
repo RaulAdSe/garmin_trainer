@@ -43,12 +43,61 @@ CREATE TABLE IF NOT EXISTS activity_metrics (
     zone3_pct REAL,
     zone4_pct REAL,
     zone5_pct REAL,
+    -- Multi-sport extensions (Phase 2)
+    sport_type TEXT,
+    avg_power INTEGER,
+    max_power INTEGER,
+    normalized_power INTEGER,
+    tss REAL,
+    intensity_factor REAL,
+    variability_index REAL,
+    avg_speed_kmh REAL,
+    elevation_gain_m REAL,
+    cadence INTEGER,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Create index on date for efficient queries
 CREATE INDEX IF NOT EXISTS idx_activity_metrics_date ON activity_metrics(date);
 CREATE INDEX IF NOT EXISTS idx_fitness_metrics_date ON fitness_metrics(date);
+CREATE INDEX IF NOT EXISTS idx_activity_metrics_sport_type ON activity_metrics(sport_type);
+
+-- =============================================================================
+-- Phase 2: Multi-sport Extensions - Power Zones Table
+-- =============================================================================
+
+-- Power zones for cycling/running power metrics
+CREATE TABLE IF NOT EXISTS power_zones (
+    athlete_id TEXT PRIMARY KEY,
+    ftp INTEGER,
+    zone1_max INTEGER,
+    zone2_max INTEGER,
+    zone3_max INTEGER,
+    zone4_max INTEGER,
+    zone5_max INTEGER,
+    zone6_max INTEGER,
+    zone7_max INTEGER,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- =============================================================================
+-- Phase 2: Multi-sport Extensions - Swim Metrics Table
+-- =============================================================================
+
+-- Swimming-specific metrics per activity
+CREATE TABLE IF NOT EXISTS swim_metrics (
+    activity_id TEXT PRIMARY KEY,
+    pool_length_m INTEGER,
+    total_strokes INTEGER,
+    avg_swolf REAL,
+    avg_stroke_rate REAL,
+    css_pace_sec INTEGER,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (activity_id) REFERENCES activity_metrics(activity_id)
+);
+
+-- Create index for swim metrics
+CREATE INDEX IF NOT EXISTS idx_swim_metrics_activity ON swim_metrics(activity_id);
 
 -- Race goals table for tracking target races
 CREATE TABLE IF NOT EXISTS race_goals (

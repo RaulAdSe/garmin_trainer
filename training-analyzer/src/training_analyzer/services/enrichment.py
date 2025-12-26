@@ -20,6 +20,14 @@ from ..db.database import (
 )
 from ..metrics.load import calculate_hrss, calculate_trimp
 from ..metrics.fitness import calculate_fitness_metrics, FitnessMetrics
+from ..metrics.power import (
+    calculate_normalized_power,
+    calculate_intensity_factor,
+    calculate_tss_simple,
+    calculate_variability_index,
+    calculate_power_zones,
+    get_power_zone_distribution,
+)
 
 
 def get_n8n_db_path() -> Optional[Path]:
@@ -263,6 +271,228 @@ class EnrichmentService:
             zone4_pct=None,
             zone5_pct=None,
         )
+
+    def enrich_cycling_activity_with_power(
+        self,
+        raw_activity: Dict[str, Any],
+        ftp: int,
+        power_samples: Optional[List[int]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Enrich a cycling activity with power-based metrics.
+
+        This method calculates NP, IF, TSS, VI, and power zone distribution
+        for cycling activities when power data is available.
+
+        Args:
+            raw_activity: Raw activity data (should be cycling activity)
+            ftp: Athlete's Functional Threshold Power in watts
+            power_samples: Optional list of power values (1Hz). If not provided,
+                          will attempt to use avg_power from raw_activity.
+
+        Returns:
+            Dictionary with power metrics:
+            - normalized_power: NP in watts
+            - intensity_factor: IF (NP/FTP)
+            - tss: Training Stress Score
+            - variability_index: VI (NP/Avg Power)
+            - avg_power: Average power in watts
+            - max_power: Maximum power in watts
+            - power_zone_distribution: Dict with % time in each zone (1-7)
+        """
+        if ftp <= 0:
+            return {}
+
+        # Extract basic power data from activity
+        avg_power = raw_activity.get("avg_power")
+        max_power = raw_activity.get("max_power")
+        duration_s = raw_activity.get("duration_s", 0) or 0
+
+        # Calculate NP from power samples if available
+        if power_samples and len(power_samples) > 0:
+            np = calculate_normalized_power(power_samples, sample_rate_hz=1)
+
+            # Calculate average power from samples
+            if avg_power is None:
+                avg_power = sum(power_samples) / len(power_samples)
+
+            # Get max power from samples if not provided
+            if max_power is None:
+                max_power = max(power_samples)
+
+            # Calculate power zone distribution
+            zone_dist = get_power_zone_distribution(power_samples, ftp)
+        else:
+            # No power samples - estimate NP from avg power
+            # For steady riding, NP ~ avg_power; for variable, NP is higher
+            # Use avg_power as NP estimate (conservative)
+            if avg_power is None or avg_power <= 0:
+                return {}
+            np = float(avg_power)
+            zone_dist = {}
+
+        # Calculate power metrics
+        if_ = calculate_intensity_factor(np, ftp)
+        tss = calculate_tss_simple(duration_s, np, ftp)
+        vi = calculate_variability_index(np, float(avg_power)) if avg_power else 0.0
+
+        return {
+            "normalized_power": round(np, 0),
+            "intensity_factor": if_,
+            "tss": tss,
+            "variability_index": vi,
+            "avg_power": avg_power,
+            "max_power": max_power,
+            "power_zone_distribution": zone_dist,
+        }
+
+    def save_cycling_power_metrics(
+        self,
+        activity_id: str,
+        power_metrics: Dict[str, Any],
+    ) -> None:
+        """
+        Save power metrics for a cycling activity to the database.
+
+        Updates the activity_metrics table with power-specific fields.
+
+        Args:
+            activity_id: The activity ID to update
+            power_metrics: Dictionary with power metrics from
+                          enrich_cycling_activity_with_power()
+        """
+        if not power_metrics:
+            return
+
+        with self.training_db._get_connection() as conn:
+            conn.execute(
+                """
+                UPDATE activity_metrics
+                SET normalized_power = ?,
+                    intensity_factor = ?,
+                    tss = ?,
+                    variability_index = ?,
+                    avg_power = ?,
+                    max_power = ?,
+                    sport_type = 'cycling',
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE activity_id = ?
+                """,
+                (
+                    power_metrics.get("normalized_power"),
+                    power_metrics.get("intensity_factor"),
+                    power_metrics.get("tss"),
+                    power_metrics.get("variability_index"),
+                    power_metrics.get("avg_power"),
+                    power_metrics.get("max_power"),
+                    activity_id,
+                ),
+            )
+
+    def get_athlete_ftp(self) -> Optional[int]:
+        """
+        Get the athlete's FTP from the power_zones table.
+
+        Returns:
+            FTP in watts, or None if not set
+        """
+        with self.training_db._get_connection() as conn:
+            row = conn.execute(
+                "SELECT ftp FROM power_zones WHERE athlete_id = 'default' LIMIT 1"
+            ).fetchone()
+            if row:
+                return row["ftp"]
+            return None
+
+    def set_athlete_ftp(self, ftp: int) -> None:
+        """
+        Set the athlete's FTP and calculate power zones.
+
+        Args:
+            ftp: Functional Threshold Power in watts
+        """
+        zones = calculate_power_zones(ftp)
+
+        with self.training_db._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO power_zones
+                (athlete_id, ftp, zone1_max, zone2_max, zone3_max,
+                 zone4_max, zone5_max, zone6_max, zone7_max, updated_at)
+                VALUES ('default', ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                (
+                    ftp,
+                    zones[1][1],  # Zone 1 max
+                    zones[2][1],  # Zone 2 max
+                    zones[3][1],  # Zone 3 max
+                    zones[4][1],  # Zone 4 max
+                    zones[5][1],  # Zone 5 max
+                    zones[6][1],  # Zone 6 max
+                    zones[7][1],  # Zone 7 max
+                ),
+            )
+
+    def enrich_cycling_activities(
+        self,
+        days: int = 30,
+        ftp: Optional[int] = None,
+    ) -> Tuple[int, int]:
+        """
+        Enrich all cycling activities with power metrics.
+
+        This processes cycling activities from the last N days and adds
+        power-based training metrics (NP, IF, TSS, VI).
+
+        Args:
+            days: Number of days to look back
+            ftp: FTP to use for calculations. If not provided, uses stored FTP.
+
+        Returns:
+            Tuple of (processed_count, success_count)
+        """
+        # Get FTP - use provided, or look up stored value
+        if ftp is None:
+            ftp = self.get_athlete_ftp()
+            if ftp is None:
+                print("Warning: No FTP set. Use set_athlete_ftp() first.")
+                return 0, 0
+
+        # Get cycling activities
+        raw_activities = self.get_raw_activities(
+            days=days,
+            activity_types=["cycling", "virtual_cycling", "indoor_cycling"],
+        )
+
+        processed = 0
+        success = 0
+
+        for raw_activity in raw_activities:
+            processed += 1
+            try:
+                # Get power samples if available (from separate stream data)
+                power_samples = raw_activity.get("power_samples")
+
+                # Calculate power metrics
+                power_metrics = self.enrich_cycling_activity_with_power(
+                    raw_activity=raw_activity,
+                    ftp=ftp,
+                    power_samples=power_samples,
+                )
+
+                if power_metrics:
+                    activity_id = str(raw_activity.get("activity_id", ""))
+                    if activity_id:
+                        self.save_cycling_power_metrics(activity_id, power_metrics)
+                        success += 1
+
+            except Exception as e:
+                print(
+                    f"Error enriching cycling activity "
+                    f"{raw_activity.get('activity_id')}: {e}"
+                )
+
+        return processed, success
 
     def enrich_activities(
         self,

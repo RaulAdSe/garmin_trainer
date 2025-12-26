@@ -55,6 +55,17 @@ class ActivityMetrics:
     zone3_pct: Optional[float]
     zone4_pct: Optional[float]
     zone5_pct: Optional[float]
+    # Phase 2: Multi-sport extensions
+    sport_type: Optional[str] = None
+    avg_power: Optional[int] = None
+    max_power: Optional[int] = None
+    normalized_power: Optional[int] = None
+    tss: Optional[float] = None
+    intensity_factor: Optional[float] = None
+    variability_index: Optional[float] = None
+    avg_speed_kmh: Optional[float] = None
+    elevation_gain_m: Optional[float] = None
+    cadence: Optional[int] = None
     updated_at: Optional[str] = None
 
     def to_dict(self) -> dict:
@@ -75,6 +86,17 @@ class ActivityMetrics:
             "zone3_pct": self.zone3_pct,
             "zone4_pct": self.zone4_pct,
             "zone5_pct": self.zone5_pct,
+            # Phase 2: Multi-sport extensions
+            "sport_type": self.sport_type,
+            "avg_power": self.avg_power,
+            "max_power": self.max_power,
+            "normalized_power": self.normalized_power,
+            "tss": self.tss,
+            "intensity_factor": self.intensity_factor,
+            "variability_index": self.variability_index,
+            "avg_speed_kmh": self.avg_speed_kmh,
+            "elevation_gain_m": self.elevation_gain_m,
+            "cadence": self.cadence,
         }
 
 
@@ -229,8 +251,12 @@ class TrainingDatabase:
                 INSERT OR REPLACE INTO activity_metrics
                 (activity_id, date, activity_type, activity_name, hrss, trimp,
                  avg_hr, max_hr, duration_min, distance_km, pace_sec_per_km,
-                 zone1_pct, zone2_pct, zone3_pct, zone4_pct, zone5_pct, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                 zone1_pct, zone2_pct, zone3_pct, zone4_pct, zone5_pct,
+                 sport_type, avg_power, max_power, normalized_power, tss,
+                 intensity_factor, variability_index, avg_speed_kmh,
+                 elevation_gain_m, cadence, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 """,
                 (
                     metrics.activity_id,
@@ -249,6 +275,16 @@ class TrainingDatabase:
                     metrics.zone3_pct,
                     metrics.zone4_pct,
                     metrics.zone5_pct,
+                    metrics.sport_type,
+                    metrics.avg_power,
+                    metrics.max_power,
+                    metrics.normalized_power,
+                    metrics.tss,
+                    metrics.intensity_factor,
+                    metrics.variability_index,
+                    metrics.avg_speed_kmh,
+                    metrics.elevation_gain_m,
+                    metrics.cadence,
                 ),
             )
 
