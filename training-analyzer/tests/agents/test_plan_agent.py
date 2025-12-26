@@ -5,13 +5,13 @@ from datetime import date, datetime, timedelta
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
 import json
 
-from reactive_training.agents.plan_agent import (
+from training_analyzer.agents.plan_agent import (
     PlanAgent,
     PlanState,
     PlanGenerationError,
     generate_plan_sync,
 )
-from reactive_training.models.plans import (
+from training_analyzer.models.plans import (
     TrainingPlan,
     TrainingWeek,
     PlannedSession,

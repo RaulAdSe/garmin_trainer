@@ -6,13 +6,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-from reactive_training.main import app
-from reactive_training.api.routes.analysis import (
+from training_analyzer.main import app
+from training_analyzer.api.routes.analysis import (
     AnalysisCache,
     get_analysis_cache,
     get_analysis_agent,
 )
-from reactive_training.models.analysis import (
+from training_analyzer.models.analysis import (
     AnalysisStatus,
     WorkoutAnalysisResult,
     WorkoutExecutionRating,
@@ -59,6 +59,42 @@ def mock_analysis_result():
         model_used="gpt-5-mini",
         created_at=datetime.utcnow(),
     )
+
+
+@pytest.fixture
+def mock_athlete_context():
+    """Create mock athlete context data."""
+    return {
+        "fitness": {
+            "ctl": 45.0,
+            "atl": 52.0,
+            "tsb": -7.0,
+            "acwr": 1.15,
+            "risk_zone": "optimal",
+        },
+        "readiness": {
+            "score": 75.0,
+            "zone": "green",
+        },
+    }
+
+
+@pytest.fixture
+def mock_workout():
+    """Create mock workout data."""
+    return {
+        "activity_id": "test_123",
+        "date": "2025-12-25",
+        "activity_type": "running",
+        "activity_name": "Morning Tempo Run",
+        "duration_min": 45.0,
+        "distance_km": 8.5,
+        "avg_hr": 155,
+        "max_hr": 172,
+        "pace_sec_per_km": 318,
+        "hrss": 75.0,
+        "trimp": 85.0,
+    }
 
 
 @pytest.fixture
@@ -212,13 +248,13 @@ class TestAnalyzeWorkoutEndpoint:
 
         # Mock dependencies
         with patch(
-            "reactive_training.api.routes.analysis.get_coach_service",
+            "training_analyzer.api.routes.analysis.get_coach_service",
             return_value=mock_coach_service,
         ), patch(
-            "reactive_training.api.routes.analysis.get_training_db",
+            "training_analyzer.api.routes.analysis.get_training_db",
             return_value=mock_training_db,
         ), patch(
-            "reactive_training.api.routes.analysis.get_analysis_agent",
+            "training_analyzer.api.routes.analysis.get_analysis_agent",
         ) as mock_get_agent:
             # Set up mock agent
             mock_agent = AsyncMock()
@@ -243,10 +279,10 @@ class TestAnalyzeWorkoutEndpoint:
         mock_db.get_activity.return_value = None
 
         with patch(
-            "reactive_training.api.routes.analysis.get_training_db",
+            "training_analyzer.api.routes.analysis.get_training_db",
             return_value=mock_db,
         ), patch(
-            "reactive_training.api.routes.analysis.get_coach_service",
+            "training_analyzer.api.routes.analysis.get_coach_service",
         ) as mock_coach:
             mock_coach.return_value = MagicMock()
             mock_coach.return_value.get_daily_briefing.return_value = {}
@@ -301,7 +337,7 @@ class TestRecentWorkoutsEndpoint:
         mock_service.get_recent_activities.return_value = []
 
         with patch(
-            "reactive_training.api.routes.analysis.get_coach_service",
+            "training_analyzer.api.routes.analysis.get_coach_service",
             return_value=mock_service,
         ):
             with TestClient(app) as client:
@@ -314,7 +350,7 @@ class TestRecentWorkoutsEndpoint:
 
     def test_recent_workouts_with_limit(self, mock_workout):
         """Test limit parameter."""
-        from reactive_training.api.deps import get_coach_service
+        from training_analyzer.api.deps import get_coach_service
 
         mock_service = MagicMock()
         mock_service.get_recent_activities.return_value = [mock_workout] * 5
@@ -409,7 +445,7 @@ class TestRequestValidation:
 
     def test_analysis_request_defaults(self):
         """Test AnalysisRequest default values."""
-        from reactive_training.models.analysis import AnalysisRequest
+        from training_analyzer.models.analysis import AnalysisRequest
 
         request = AnalysisRequest(workout_id="test_123")
         assert request.workout_id == "test_123"
@@ -418,7 +454,7 @@ class TestRequestValidation:
 
     def test_batch_request_validation(self):
         """Test BatchAnalysisRequest validation."""
-        from reactive_training.models.analysis import BatchAnalysisRequest
+        from training_analyzer.models.analysis import BatchAnalysisRequest
 
         request = BatchAnalysisRequest(
             workout_ids=["id1", "id2", "id3"],
@@ -433,7 +469,7 @@ class TestResponseModels:
 
     def test_analysis_response_success(self, mock_analysis_result):
         """Test successful AnalysisResponse structure."""
-        from reactive_training.models.analysis import AnalysisResponse
+        from training_analyzer.models.analysis import AnalysisResponse
 
         response = AnalysisResponse(
             success=True,
@@ -447,7 +483,7 @@ class TestResponseModels:
 
     def test_analysis_response_error(self):
         """Test error AnalysisResponse structure."""
-        from reactive_training.models.analysis import AnalysisResponse
+        from training_analyzer.models.analysis import AnalysisResponse
 
         response = AnalysisResponse(
             success=False,

@@ -175,7 +175,7 @@ async def get_athlete_context(
         race_goals_response = []
 
         if goals:
-            from training_analyzer.analysis.goals import calculate_training_paces, RaceGoal, RaceDistance
+            from ...analysis.goals import calculate_training_paces, RaceGoal, RaceDistance
 
             for goal_data in goals:
                 distance = RaceDistance.from_string(str(goal_data.get("distance", "10k"))) or RaceDistance.TEN_K

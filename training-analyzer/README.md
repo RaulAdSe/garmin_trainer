@@ -14,22 +14,23 @@ AI-powered workout analysis and coaching app with Garmin integration. Provides p
 
 ```
 training-analyzer/
-├── src/training_analyzer/          # Python backend
-│   ├── analysis/                   # Goals, trends, weekly analysis
-│   ├── api/                        # FastAPI routes
-│   │   └── routes/                 # Endpoint handlers
-│   ├── agents/                     # LLM agents (analysis, plan, workout)
-│   ├── db/                         # Database access
-│   ├── fit/                        # FIT file encoder
-│   ├── llm/                        # LLM providers and prompts
-│   ├── metrics/                    # Fitness, load, zones calculations
-│   ├── models/                     # Pydantic models
-│   ├── recommendations/            # Readiness, workout recommendations
-│   ├── services/                   # Business logic services
-│   ├── cli.py                      # Command-line interface
-│   ├── config.py                   # App configuration
-│   ├── exceptions.py               # Custom exceptions
-│   └── main.py                     # FastAPI app entry point
+├── src/
+│   └── training_analyzer/          # Python backend package
+│       ├── analysis/               # Goals, trends, weekly analysis
+│       ├── api/                    # FastAPI routes
+│       │   └── routes/             # Endpoint handlers
+│       ├── agents/                 # LLM agents (analysis, plan, workout)
+│       ├── db/                     # Database access
+│       ├── fit/                    # FIT file encoder
+│       ├── llm/                    # LLM providers and prompts
+│       ├── metrics/                # Fitness, load, zones calculations
+│       ├── models/                 # Pydantic models
+│       ├── recommendations/        # Readiness, workout recommendations
+│       ├── services/               # Business logic services
+│       ├── cli.py                  # Command-line interface
+│       ├── config.py               # App configuration
+│       ├── exceptions.py           # Custom exceptions
+│       └── main.py                 # FastAPI app entry point
 ├── frontend/                       # Next.js 16 + React 19 frontend
 │   ├── src/
 │   │   ├── app/                    # App router pages
@@ -39,7 +40,11 @@ training-analyzer/
 │   └── package.json
 ├── tests/                          # Test suite
 ├── docs/                           # Documentation
-│   ├── coaching_app_plan.md        # Implementation plan
+│   ├── architecture.md             # Technical architecture
+│   ├── api-reference.md            # API documentation
+│   ├── getting-started.md          # Setup and usage guide
+│   ├── metrics-explained.md        # How metrics are calculated
+│   ├── coaching_app_plan.md        # Implementation roadmap
 │   └── runna_research.md           # Training methodology research
 ├── training.db                     # SQLite database
 └── pyproject.toml

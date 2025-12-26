@@ -4,13 +4,13 @@ import pytest
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from reactive_training.agents.analysis_agent import (
+from training_analyzer.agents.analysis_agent import (
     AnalysisAgent,
     AnalysisState,
     build_athlete_context_from_briefing,
     get_similar_workouts,
 )
-from reactive_training.models.analysis import (
+from training_analyzer.models.analysis import (
     AnalysisStatus,
     AthleteContext,
     WorkoutData,

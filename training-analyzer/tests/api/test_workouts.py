@@ -15,9 +15,9 @@ import base64
 
 from fastapi.testclient import TestClient
 
-from reactive_training.main import app
-from reactive_training.api.routes.workouts import _workout_store
-from reactive_training.models.workouts import (
+from training_analyzer.main import app
+from training_analyzer.api.routes.workouts import _workout_store
+from training_analyzer.models.workouts import (
     AthleteContext,
     IntervalType,
     StructuredWorkout,
@@ -39,8 +39,8 @@ def client():
 @pytest.fixture
 def mock_services():
     """Mock the coach service and training db dependencies."""
-    with patch('reactive_training.api.routes.workouts.get_coach_service') as mock_coach, \
-         patch('reactive_training.api.routes.workouts.get_training_db') as mock_db:
+    with patch('training_analyzer.api.routes.workouts.get_coach_service') as mock_coach, \
+         patch('training_analyzer.api.routes.workouts.get_training_db') as mock_db:
 
         # Mock coach service
         coach = MagicMock()

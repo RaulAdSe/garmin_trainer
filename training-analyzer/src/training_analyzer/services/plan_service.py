@@ -28,12 +28,12 @@ from ..exceptions import (
 from ..models.plans import (
     TrainingPlan,
     TrainingWeek,
-    TrainingSession,
-    PlanGoal,
+    PlannedSession as TrainingSession,
+    RaceGoal as PlanGoal,
     PlanConstraints,
-    PlanPhase,
+    TrainingPhase as PlanPhase,
+    WorkoutType as SessionType,
     PlanStatus,
-    SessionType,
     CompletionStatus,
 )
 

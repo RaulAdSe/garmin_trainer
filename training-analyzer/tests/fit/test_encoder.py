@@ -14,7 +14,7 @@ import struct
 import tempfile
 from pathlib import Path
 
-from reactive_training.models.workouts import (
+from training_analyzer.models.workouts import (
     AthleteContext,
     IntensityZone,
     IntervalType,
@@ -22,7 +22,7 @@ from reactive_training.models.workouts import (
     WorkoutInterval,
     WorkoutSport,
 )
-from reactive_training.fit.encoder import (
+from training_analyzer.fit.encoder import (
     FITEncoder,
     encode_workout_to_fit,
     FIT_HEADER_SIZE,

@@ -7,9 +7,9 @@ from fastapi.testclient import TestClient
 import json
 
 # Import the app and router
-from reactive_training.main import app
-from reactive_training.api.routes import plans
-from reactive_training.models.plans import (
+from training_analyzer.main import app
+from training_analyzer.api.routes import plans
+from training_analyzer.models.plans import (
     TrainingPlan,
     TrainingWeek,
     PlannedSession,
@@ -187,9 +187,9 @@ def sample_plan():
 class TestGeneratePlan:
     """Tests for the /generate endpoint."""
 
-    @patch('reactive_training.api.routes.plans.PlanAgent')
-    @patch('reactive_training.api.routes.plans.get_coach_service')
-    @patch('reactive_training.api.routes.plans.get_training_db')
+    @patch('training_analyzer.api.routes.plans.PlanAgent')
+    @patch('training_analyzer.api.routes.plans.get_coach_service')
+    @patch('training_analyzer.api.routes.plans.get_training_db')
     def test_generate_plan_success(
         self, mock_get_db, mock_get_coach, mock_agent_class,
         sample_plan_request, sample_plan
@@ -485,9 +485,9 @@ class TestActivatePlan:
 class TestAdaptPlan:
     """Tests for the POST /plans/{id}/adapt endpoint."""
 
-    @patch('reactive_training.api.routes.plans.PlanAgent')
-    @patch('reactive_training.api.routes.plans.get_coach_service')
-    @patch('reactive_training.api.routes.plans.get_training_db')
+    @patch('training_analyzer.api.routes.plans.PlanAgent')
+    @patch('training_analyzer.api.routes.plans.get_coach_service')
+    @patch('training_analyzer.api.routes.plans.get_training_db')
     def test_adapt_plan_success(
         self, mock_get_db, mock_get_coach, mock_agent_class, sample_plan
     ):
@@ -672,21 +672,21 @@ class TestModelParsing:
 
     def test_parse_time_string_hours(self):
         """Test parsing time with hours."""
-        from reactive_training.models.plans import parse_time_string
+        from training_analyzer.models.plans import parse_time_string
 
         result = parse_time_string("3:30:00")
         assert result == 12600  # 3.5 hours in seconds
 
     def test_parse_time_string_minutes(self):
         """Test parsing time without hours."""
-        from reactive_training.models.plans import parse_time_string
+        from training_analyzer.models.plans import parse_time_string
 
         result = parse_time_string("25:30")
         assert result == 1530  # 25.5 minutes in seconds
 
     def test_day_name_to_number(self):
         """Test converting day names to numbers."""
-        from reactive_training.models.plans import day_name_to_number
+        from training_analyzer.models.plans import day_name_to_number
 
         assert day_name_to_number("monday") == 0
         assert day_name_to_number("Sunday") == 6
@@ -750,9 +750,9 @@ class TestModelParsing:
 class TestIntegration:
     """Integration tests for the plans API."""
 
-    @patch('reactive_training.api.routes.plans.PlanAgent')
-    @patch('reactive_training.api.routes.plans.get_coach_service')
-    @patch('reactive_training.api.routes.plans.get_training_db')
+    @patch('training_analyzer.api.routes.plans.PlanAgent')
+    @patch('training_analyzer.api.routes.plans.get_coach_service')
+    @patch('training_analyzer.api.routes.plans.get_training_db')
     def test_full_plan_lifecycle(
         self, mock_get_db, mock_get_coach, mock_agent_class, sample_plan, sample_plan_request
     ):

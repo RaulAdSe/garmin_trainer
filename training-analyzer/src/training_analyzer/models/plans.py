@@ -39,6 +39,29 @@ class WorkoutType(str, Enum):
     RACE = "race"
 
 
+class PlanStatus(str, Enum):
+    """Status of a training plan."""
+    DRAFT = "draft"
+    ACTIVE = "active"
+    PAUSED = "paused"
+    COMPLETED = "completed"
+    ARCHIVED = "archived"
+
+
+class CompletionStatus(str, Enum):
+    """Completion status of a training session."""
+    PENDING = "pending"
+    COMPLETED = "completed"
+    SKIPPED = "skipped"
+    PARTIAL = "partial"
+
+
+# Type aliases for backward compatibility
+PlanGoal = "RaceGoal"
+PlanPhase = TrainingPhase
+SessionType = WorkoutType
+
+
 class RaceDistance(str, Enum):
     """Standard race distances."""
     FIVE_K = "5k"

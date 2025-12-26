@@ -84,7 +84,7 @@ async def generic_exception_handler(
     import logging
     import traceback
 
-    logger = logging.getLogger("reactive_training.api")
+    logger = logging.getLogger("training_analyzer.api")
     logger.error(
         f"Unhandled exception: {exc}\n{traceback.format_exc()}"
     )
