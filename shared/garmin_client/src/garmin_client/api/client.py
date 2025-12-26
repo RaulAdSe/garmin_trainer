@@ -199,26 +199,91 @@ class GarminClient:
         """Fetch daily activity data (steps, calories, etc.)."""
         self._ensure_authenticated()
 
+        steps = 0
+        steps_goal = 10000
+        total_distance_m = 0
+        active_calories = None
+        total_calories = None
+        intensity_minutes = 0
+        floors_climbed = 0
+
+        # Fetch steps data
         try:
-            # Fetch steps data
             steps_data = garth.connectapi(
                 f"/usersummary-service/stats/steps/daily/{date_str}/{date_str}"
             )
+            if steps_data and len(steps_data) > 0:
+                day_data = steps_data[0]
+                steps = day_data.get("totalSteps", 0)
+                steps_goal = day_data.get("stepGoal", 10000)
+                total_distance_m = day_data.get("totalDistance", 0)
+        except Exception as e:
+            print(f"  Warning: Could not fetch steps data: {e}")
 
-            if not steps_data or len(steps_data) == 0:
+        # Fetch daily user summary for calories and intensity minutes
+        try:
+            summary_data = garth.connectapi(
+                f"/usersummary-service/usersummary/daily/{date_str}"
+            )
+            if summary_data:
+                active_calories = summary_data.get("activeKilocalories")
+                total_calories = summary_data.get("totalKilocalories")
+                floors_climbed = summary_data.get("floorsAscended", 0)
+                # Combine moderate and vigorous intensity minutes
+                moderate = summary_data.get("moderateIntensityMinutes", 0) or 0
+                vigorous = summary_data.get("vigorousIntensityMinutes", 0) or 0
+                intensity_minutes = moderate + vigorous
+                # Use summary steps/goal if steps data wasn't available
+                if steps == 0:
+                    steps = summary_data.get("totalSteps", 0)
+                if steps_goal == 10000:
+                    steps_goal = summary_data.get("dailyStepGoal", 10000)
+                if total_distance_m == 0:
+                    total_distance_m = summary_data.get("totalDistanceMeters", 0)
+        except Exception as e:
+            print(f"  Warning: Could not fetch daily summary: {e}")
+
+        # Return None only if we have no data at all
+        if steps == 0 and active_calories is None:
+            return None
+
+        return ActivityData(
+            date=date_str,
+            steps=steps,
+            steps_goal=steps_goal,
+            total_distance_m=total_distance_m,
+            active_calories=active_calories,
+            total_calories=total_calories,
+            intensity_minutes=intensity_minutes,
+            floors_climbed=floors_climbed,
+        )
+
+    def fetch_resting_heart_rate(self, date_str: str) -> Optional[int]:
+        """Fetch resting heart rate for a specific date.
+
+        Args:
+            date_str: Date in YYYY-MM-DD format
+
+        Returns:
+            Resting heart rate value in bpm, or None if not available
+        """
+        self._ensure_authenticated()
+
+        try:
+            # Garmin API endpoint for daily heart rate with date as query param
+            data = garth.connectapi(
+                "/wellness-service/wellness/dailyHeartRate",
+                params={"date": date_str}
+            )
+
+            if not data:
                 return None
 
-            day_data = steps_data[0]
-
-            return ActivityData(
-                date=date_str,
-                steps=day_data.get("totalSteps", 0),
-                steps_goal=day_data.get("stepGoal", 10000),
-                total_distance_m=day_data.get("totalDistance", 0),
-                # Note: active_calories and intensity_minutes may need different endpoints
-            )
+            # Response contains restingHeartRate directly
+            rhr = data.get("restingHeartRate")
+            return rhr if rhr and rhr > 0 else None
         except Exception as e:
-            print(f"  Warning: Could not fetch activity data: {e}")
+            print(f"  Warning: Could not fetch resting heart rate: {e}")
             return None
 
     def fetch_wellness(self, date_str: str) -> DailyWellness:
@@ -239,6 +304,7 @@ class GarminClient:
         hrv = self.fetch_hrv(date_str)
         stress = self.fetch_stress(date_str)
         activity = self.fetch_activity(date_str)
+        resting_heart_rate = self.fetch_resting_heart_rate(date_str)
 
         # Build raw JSON for debugging
         raw_data = {
@@ -246,6 +312,7 @@ class GarminClient:
             "hrv": hrv.to_dict() if hrv else None,
             "stress": stress.to_dict() if stress else None,
             "activity": activity.to_dict() if activity else None,
+            "resting_heart_rate": resting_heart_rate,
         }
 
         wellness = DailyWellness(
@@ -255,6 +322,7 @@ class GarminClient:
             hrv=hrv,
             stress=stress,
             activity=activity,
+            resting_heart_rate=resting_heart_rate,
             raw_json=json.dumps(raw_data),
         )
 
@@ -263,8 +331,10 @@ class GarminClient:
         steps = activity.steps if activity else "?"
         bb = stress.body_battery_charged if stress else "?"
         hrv_val = hrv.hrv_last_night_avg if hrv else "?"
+        rhr = resting_heart_rate or "?"
+        active_cal = activity.active_calories if activity and activity.active_calories else "?"
 
-        print(f"  Sleep: {sleep_hours}h | Steps: {steps} | BB: +{bb} | HRV: {hrv_val}ms")
+        print(f"  Sleep: {sleep_hours}h | Steps: {steps} | BB: +{bb} | HRV: {hrv_val}ms | RHR: {rhr}bpm | Cal: {active_cal}")
 
         return wellness
 
