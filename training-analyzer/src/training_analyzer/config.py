@@ -26,10 +26,14 @@ class Settings(BaseSettings):
     debug: bool = False
 
     # CORS
-    cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000", "http://127.0.0.1:3001"]
 
     # OpenAI
     openai_api_key: str = ""
+
+    # Garmin Connect credentials
+    garmin_email: str = ""
+    garmin_password: str = ""
 
     # Model selection
     llm_model_fast: str = "gpt-5-nano"  # For quick tasks
@@ -49,7 +53,7 @@ class Settings(BaseSettings):
             self.wellness_db_path = self.project_root / "whoop-dashboard" / "wellness.db"
 
     class Config:
-        env_file = ".env"
+        env_file = str(PROJECT_ROOT / ".env")
         env_file_encoding = "utf-8"
 
 

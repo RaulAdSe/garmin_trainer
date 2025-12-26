@@ -64,37 +64,139 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return response.json();
 }
 
+// API response for activities from the backend
+interface ActivityResponse {
+  id: string;
+  userId: string;
+  type: string;
+  name: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  duration: number;
+  distance: number | null;
+  metrics: {
+    avgHeartRate?: number;
+    maxHeartRate?: number;
+    avgPace?: number;
+  };
+  source: string;
+}
+
+// Transform ActivityResponse to Workout type
+function transformActivityToWorkout(activity: ActivityResponse): Workout {
+  // Handle potential null/undefined metrics
+  const metrics = activity.metrics || {};
+
+  return {
+    id: activity.id,
+    userId: activity.userId,
+    type: activity.type as Workout['type'],
+    name: activity.name,
+    date: activity.date,
+    startTime: activity.startTime,
+    endTime: activity.endTime,
+    duration: activity.duration,
+    distance: activity.distance ?? undefined,
+    metrics: {
+      avgHeartRate: metrics.avgHeartRate ?? undefined,
+      maxHeartRate: metrics.maxHeartRate ?? undefined,
+      avgPace: metrics.avgPace ?? undefined,
+    },
+    source: activity.source as Workout['source'],
+    createdAt: activity.date,
+    updatedAt: activity.date,
+  };
+}
+
 // Workout endpoints
 export async function getWorkouts(
   request: WorkoutListRequest = {}
 ): Promise<PaginatedResponse<Workout>> {
   const params = new URLSearchParams();
 
-  if (request.page) params.set('page', String(request.page));
-  if (request.pageSize) params.set('page_size', String(request.pageSize));
-  if (request.sortBy) params.set('sort_by', request.sortBy);
-  if (request.sortOrder) params.set('sort_order', request.sortOrder);
-
-  if (request.filters) {
-    const { startDate, endDate, type, minDistance, maxDistance, search } = request.filters;
-    if (startDate) params.set('start_date', startDate);
-    if (endDate) params.set('end_date', endDate);
-    if (type) params.set('type', type);
-    if (minDistance) params.set('min_distance', String(minDistance));
-    if (maxDistance) params.set('max_distance', String(maxDistance));
-    if (search) params.set('search', search);
-  }
+  // The backend uses limit/offset, not page/pageSize
+  const page = request.page || 1;
+  const pageSize = request.pageSize || 20;
+  params.set('limit', String(pageSize));
+  params.set('offset', String((page - 1) * pageSize));
 
   const queryString = params.toString();
   const url = `${API_BASE}/workouts${queryString ? `?${queryString}` : ''}`;
 
   const response = await fetch(url);
-  return handleResponse<PaginatedResponse<Workout>>(response);
+
+  // Backend returns an array, not a paginated response
+  const activities = await handleResponse<ActivityResponse[]>(response);
+
+  // Transform to Workout type and apply client-side filtering if needed
+  let workouts = activities.map(transformActivityToWorkout);
+
+  // Apply client-side filtering if provided
+  if (request.filters) {
+    const { startDate, endDate, type, minDistance, maxDistance, search } = request.filters;
+
+    if (startDate) {
+      workouts = workouts.filter(w => w.date >= startDate);
+    }
+    if (endDate) {
+      workouts = workouts.filter(w => w.date <= endDate);
+    }
+    if (type) {
+      workouts = workouts.filter(w => w.type === type);
+    }
+    if (minDistance) {
+      workouts = workouts.filter(w => (w.distance ?? 0) >= minDistance);
+    }
+    if (maxDistance) {
+      workouts = workouts.filter(w => (w.distance ?? 0) <= maxDistance);
+    }
+    if (search) {
+      const searchLower = search.toLowerCase();
+      workouts = workouts.filter(w =>
+        w.name.toLowerCase().includes(searchLower) ||
+        w.type.toLowerCase().includes(searchLower)
+      );
+    }
+  }
+
+  // Apply sorting (default to date descending)
+  const sortBy = request.sortBy || 'date';
+  const sortOrder = request.sortOrder || 'desc';
+  workouts.sort((a, b) => {
+    let comparison = 0;
+    if (sortBy === 'date') {
+      comparison = a.date.localeCompare(b.date);
+    } else if (sortBy === 'distance') {
+      comparison = (a.distance ?? 0) - (b.distance ?? 0);
+    } else if (sortBy === 'duration') {
+      comparison = a.duration - b.duration;
+    }
+    return sortOrder === 'desc' ? -comparison : comparison;
+  });
+
+  // Return paginated response format
+  const total = workouts.length;
+  const totalPages = Math.ceil(total / pageSize);
+
+  // Note: Since backend returns all data, pagination is client-side
+  // For large datasets, the backend should implement proper pagination
+  const startIndex = (page - 1) * pageSize;
+  const paginatedItems = workouts.slice(startIndex, startIndex + pageSize);
+
+  return {
+    items: paginatedItems,
+    total,
+    page,
+    pageSize,
+    totalPages,
+  };
 }
 
 export async function getWorkout(workoutId: string): Promise<Workout> {
   const response = await fetch(`${API_BASE}/workouts/${workoutId}`);
-  return handleResponse<Workout>(response);
+  const activity = await handleResponse<ActivityResponse>(response);
+  return transformActivityToWorkout(activity);
 }
 
 export async function getWorkoutAnalysis(workoutId: string): Promise<WorkoutAnalysis | null> {
@@ -655,6 +757,86 @@ export async function getFitnessMetrics(
   const url = `${API_BASE}/athlete/fitness-metrics?days=${days}`;
   const response = await fetch(url);
   return handleResponse<FitnessMetricsHistory>(response);
+}
+
+// ============================================
+// Garmin Sync endpoints
+// ============================================
+
+export interface GarminSyncRequest {
+  email: string;
+  password: string;
+  days?: number;
+}
+
+export interface SyncedActivity {
+  id: string;
+  name: string;
+  type: string;
+  date: string;
+  distance_km: number | null;
+  duration_min: number | null;
+}
+
+export interface GarminSyncResponse {
+  success: boolean;
+  synced_count: number;
+  message: string;
+  new_activities: number;
+  updated_activities: number;
+  activities: SyncedActivity[];
+}
+
+export interface GarminSyncStatus {
+  garmin_connect_available: boolean;
+  supported_activity_types: string[];
+  max_sync_days: number;
+  notes: string[];
+}
+
+// Sync activities from Garmin Connect
+export async function syncGarminActivities(
+  request: GarminSyncRequest
+): Promise<GarminSyncResponse> {
+  const response = await fetch(`${API_BASE}/garmin/sync`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: request.email,
+      password: request.password,
+      days: request.days ?? 30,
+    }),
+  });
+  return handleResponse<GarminSyncResponse>(response);
+}
+
+// Get Garmin sync status
+export async function getGarminSyncStatus(): Promise<GarminSyncStatus> {
+  const response = await fetch(`${API_BASE}/garmin/status`);
+  return handleResponse<GarminSyncStatus>(response);
+}
+
+// ============================================
+// Activity Details endpoints (time series, GPS, splits)
+// ============================================
+
+import type { ActivityDetailsResponse } from '@/types/workout-detail';
+
+// Get detailed activity data with time series, GPS, and splits
+export async function getActivityDetails(
+  activityId: string,
+  forceRefresh: boolean = false
+): Promise<ActivityDetailsResponse> {
+  const params = new URLSearchParams();
+  if (forceRefresh) params.set('force_refresh', 'true');
+
+  const queryString = params.toString();
+  const url = `${API_BASE}/workouts/${activityId}/details${queryString ? `?${queryString}` : ''}`;
+
+  const response = await fetch(url);
+  return handleResponse<ActivityDetailsResponse>(response);
 }
 
 export { ApiClientError };

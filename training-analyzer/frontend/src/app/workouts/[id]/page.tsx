@@ -1,11 +1,16 @@
 'use client';
 
-import { use } from 'react';
+import { use, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useWorkout, useWorkoutAnalysis } from '@/hooks/useWorkouts';
 import { useLLMStream } from '@/hooks/useLLMStream';
 import { WorkoutAnalysis, WorkoutAnalysisSkeleton } from '@/components/workouts/WorkoutAnalysis';
 import { StreamingAnalysis } from '@/components/workouts/StreamingAnalysis';
+import { WorkoutCharts } from '@/components/workout-detail/WorkoutCharts';
+import { RouteMap } from '@/components/workout-detail/RouteMap';
+import { SplitsTable } from '@/components/workout-detail/SplitsTable';
+import { getActivityDetails } from '@/lib/api-client';
+import type { ActivityDetailsResponse } from '@/types/workout-detail';
 import {
   cn,
   formatDuration,
@@ -44,6 +49,36 @@ export default function WorkoutDetailPage({ params }: WorkoutDetailPageProps) {
       // Refetch analysis when stream completes
     },
   });
+
+  // Activity details state (time series, GPS, splits)
+  const [activityDetails, setActivityDetails] = useState<ActivityDetailsResponse | null>(null);
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
+
+  // Fetch activity details when workout is loaded
+  useEffect(() => {
+    if (!workout) return;
+
+    const fetchDetails = async () => {
+      setIsLoadingDetails(true);
+      setDetailsError(null);
+      try {
+        const details = await getActivityDetails(workoutId);
+        setActivityDetails(details);
+      } catch (err) {
+        console.error('Failed to fetch activity details:', err);
+        setDetailsError(err instanceof Error ? err.message : 'Failed to load activity details');
+      } finally {
+        setIsLoadingDetails(false);
+      }
+    };
+
+    fetchDetails();
+  }, [workout, workoutId]);
+
+  // Determine if this is a running activity (for pace vs speed display)
+  const isRunning = activityDetails?.is_running ??
+    ['running', 'trail_running', 'walking', 'hiking'].includes(workout?.type || '');
 
   const handleAnalyze = async (regenerate = false) => {
     if (regenerate || !analysis) {
@@ -124,165 +159,165 @@ export default function WorkoutDetailPage({ params }: WorkoutDetailPageProps) {
         </div>
       </div>
 
-      {/* Main content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left column - Workout details */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Key metrics */}
-          <section className="bg-gray-900 rounded-lg border border-gray-800 p-6">
-            <h2 className="text-lg font-semibold text-gray-100 mb-4">
-              Workout Summary
-            </h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-              {workout.distance && (
-                <MetricCard
-                  label="Distance"
-                  value={`${formatDistance(workout.distance)} km`}
-                  icon={<DistanceIcon />}
-                />
-              )}
+      {/* Main content - Full width for charts and map */}
+      <div className="space-y-6">
+        {/* Key metrics - compact row */}
+        <section className="bg-gray-900 rounded-xl border border-gray-800 p-4 sm:p-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-6">
+            {workout.distance && (
               <MetricCard
-                label="Duration"
-                value={formatDuration(workout.duration)}
-                icon={<DurationIcon />}
+                label="Distance"
+                value={`${formatDistance(workout.distance)} km`}
+                icon={<DistanceIcon />}
               />
-              {workout.metrics.avgPace && (
-                <MetricCard
-                  label="Avg Pace"
-                  value={`${formatPace(workout.metrics.avgPace)} /km`}
-                  icon={<PaceIcon />}
-                />
-              )}
-              {workout.metrics.avgHeartRate && (
-                <MetricCard
-                  label="Avg HR"
-                  value={`${workout.metrics.avgHeartRate} bpm`}
-                  icon={<HeartIcon />}
-                />
-              )}
-              {workout.metrics.maxHeartRate && (
-                <MetricCard
-                  label="Max HR"
-                  value={`${workout.metrics.maxHeartRate} bpm`}
-                  icon={<HeartIcon />}
-                />
-              )}
-              {workout.metrics.calories && (
-                <MetricCard
-                  label="Calories"
-                  value={`${workout.metrics.calories}`}
-                  icon={<CaloriesIcon />}
-                />
-              )}
-              {workout.metrics.elevationGain && (
-                <MetricCard
-                  label="Elevation Gain"
-                  value={`${workout.metrics.elevationGain} m`}
-                  icon={<ElevationIcon />}
-                />
-              )}
-              {workout.metrics.avgCadence && (
-                <MetricCard
-                  label="Avg Cadence"
-                  value={`${workout.metrics.avgCadence} spm`}
-                  icon={<CadenceIcon />}
-                />
-              )}
-            </div>
-          </section>
+            )}
+            <MetricCard
+              label="Duration"
+              value={formatDuration(workout.duration)}
+              icon={<DurationIcon />}
+            />
+            {isRunning && workout.metrics.avgPace && (
+              <MetricCard
+                label="Avg Pace"
+                value={`${formatPace(workout.metrics.avgPace)} /km`}
+                icon={<PaceIcon />}
+              />
+            )}
+            {!isRunning && workout.metrics.avgPace && workout.metrics.avgPace > 0 && (
+              <MetricCard
+                label="Avg Speed"
+                value={`${(60 / workout.metrics.avgPace).toFixed(1)} km/h`}
+                icon={<SpeedIcon />}
+              />
+            )}
+            {workout.metrics.avgHeartRate && (
+              <MetricCard
+                label="Avg HR"
+                value={`${workout.metrics.avgHeartRate} bpm`}
+                icon={<HeartIcon />}
+              />
+            )}
+            {workout.metrics.maxHeartRate && (
+              <MetricCard
+                label="Max HR"
+                value={`${workout.metrics.maxHeartRate} bpm`}
+                icon={<HeartIcon />}
+              />
+            )}
+            {workout.metrics.calories && (
+              <MetricCard
+                label="Calories"
+                value={`${workout.metrics.calories}`}
+                icon={<CaloriesIcon />}
+              />
+            )}
+            {workout.metrics.elevationGain && (
+              <MetricCard
+                label="Elevation"
+                value={`${workout.metrics.elevationGain} m`}
+                icon={<ElevationIcon />}
+              />
+            )}
+            {workout.metrics.avgCadence && (
+              <MetricCard
+                label="Cadence"
+                value={`${workout.metrics.avgCadence} spm`}
+                icon={<CadenceIcon />}
+              />
+            )}
+          </div>
+        </section>
 
-          {/* HR Zones */}
-          {workout.hrZones && workout.hrZones.length > 0 && (
-            <section className="bg-gray-900 rounded-lg border border-gray-800 p-6">
-              <h2 className="text-lg font-semibold text-gray-100 mb-4">
-                Heart Rate Zones
-              </h2>
-              <div className="space-y-3">
-                {workout.hrZones.map((zone) => (
-                  <div key={zone.zone} className="flex items-center gap-4">
-                    <div className="w-20 text-sm font-medium text-gray-300">
-                      {getHRZoneLabel(zone.zone)}
-                    </div>
-                    <div className="flex-1">
-                      <div className="h-6 bg-gray-800 rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all duration-500"
-                          style={{
-                            width: `${zone.percentage}%`,
-                            backgroundColor: getHRZoneColor(zone.zone),
-                          }}
-                        />
+        {/* Interactive Charts and Route Map */}
+        {isLoadingDetails ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 h-80 animate-pulse">
+              <div className="h-6 bg-gray-800 rounded w-32 mb-4"></div>
+              <div className="h-full bg-gray-800 rounded"></div>
+            </div>
+            <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 h-80 animate-pulse">
+              <div className="h-6 bg-gray-800 rounded w-32 mb-4"></div>
+              <div className="h-full bg-gray-800 rounded"></div>
+            </div>
+          </div>
+        ) : activityDetails ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Interactive Charts */}
+            <WorkoutCharts
+              timeSeries={activityDetails.time_series}
+              isRunning={isRunning}
+              className="lg:col-span-1"
+            />
+
+            {/* Route Map */}
+            <RouteMap
+              gpsData={activityDetails.gps_coordinates}
+              className="lg:col-span-1"
+            />
+          </div>
+        ) : detailsError ? (
+          <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 text-center">
+            <p className="text-gray-400">{detailsError}</p>
+          </div>
+        ) : null}
+
+        {/* Splits Table */}
+        {activityDetails?.splits && activityDetails.splits.length > 0 && (
+          <SplitsTable
+            splits={activityDetails.splits}
+            isRunning={isRunning}
+          />
+        )}
+
+        {/* Two column layout for HR zones and AI Analysis */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left column - HR Zones and Notes */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* HR Zones */}
+            {workout.hrZones && workout.hrZones.length > 0 && (
+              <section className="bg-gray-900 rounded-xl border border-gray-800 p-4 sm:p-6">
+                <h2 className="text-lg font-semibold text-gray-100 mb-4">
+                  Heart Rate Zones
+                </h2>
+                <div className="space-y-3">
+                  {workout.hrZones.map((zone) => (
+                    <div key={zone.zone} className="flex items-center gap-3 sm:gap-4">
+                      <div className="w-16 sm:w-20 text-sm font-medium text-gray-300">
+                        {getHRZoneLabel(zone.zone)}
+                      </div>
+                      <div className="flex-1">
+                        <div className="h-5 sm:h-6 bg-gray-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{
+                              width: `${zone.percentage}%`,
+                              backgroundColor: getHRZoneColor(zone.zone),
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <div className="w-12 sm:w-16 text-right text-sm text-gray-400">
+                        {zone.percentage.toFixed(1)}%
+                      </div>
+                      <div className="hidden sm:block w-20 text-right text-sm text-gray-500">
+                        {formatDuration(zone.duration)}
                       </div>
                     </div>
-                    <div className="w-16 text-right text-sm text-gray-400">
-                      {zone.percentage.toFixed(1)}%
-                    </div>
-                    <div className="w-20 text-right text-sm text-gray-500">
-                      {formatDuration(zone.duration)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
+                  ))}
+                </div>
+              </section>
+            )}
 
-          {/* Pace Splits */}
-          {workout.paceSplits && workout.paceSplits.length > 0 && (
-            <section className="bg-gray-900 rounded-lg border border-gray-800 p-6">
-              <h2 className="text-lg font-semibold text-gray-100 mb-4">
-                Pace Splits
-              </h2>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-800">
-                      <th className="text-left py-2 text-gray-500 font-medium">Split</th>
-                      <th className="text-right py-2 text-gray-500 font-medium">Distance</th>
-                      <th className="text-right py-2 text-gray-500 font-medium">Time</th>
-                      <th className="text-right py-2 text-gray-500 font-medium">Pace</th>
-                      {workout.paceSplits[0].avgHR && (
-                        <th className="text-right py-2 text-gray-500 font-medium">Avg HR</th>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {workout.paceSplits.map((split) => (
-                      <tr key={split.splitNumber} className="border-b border-gray-800">
-                        <td className="py-2 text-gray-100">
-                          {split.splitNumber}
-                        </td>
-                        <td className="py-2 text-right text-gray-300">
-                          {formatDistance(split.distance, 2)} km
-                        </td>
-                        <td className="py-2 text-right text-gray-300">
-                          {formatDuration(split.duration)}
-                        </td>
-                        <td className="py-2 text-right text-teal-400 font-medium">
-                          {formatPace(split.pace)} /km
-                        </td>
-                        {split.avgHR && (
-                          <td className="py-2 text-right text-gray-300">
-                            {split.avgHR} bpm
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
-
-          {/* Notes */}
-          {workout.notes && (
-            <section className="bg-gray-900 rounded-lg border border-gray-800 p-6">
-              <h2 className="text-lg font-semibold text-gray-100 mb-4">
-                Notes
-              </h2>
-              <p className="text-gray-300 whitespace-pre-wrap">{workout.notes}</p>
-            </section>
-          )}
-        </div>
+            {/* Notes */}
+            {workout.notes && (
+              <section className="bg-gray-900 rounded-xl border border-gray-800 p-4 sm:p-6">
+                <h2 className="text-lg font-semibold text-gray-100 mb-4">
+                  Notes
+                </h2>
+                <p className="text-gray-300 whitespace-pre-wrap">{workout.notes}</p>
+              </section>
+            )}
+          </div>
 
         {/* Right column - AI Analysis */}
         <div className="space-y-6">
@@ -342,6 +377,7 @@ export default function WorkoutDetailPage({ params }: WorkoutDetailPageProps) {
             )}
           </section>
         </div>
+      </div>
       </div>
     </div>
   );
@@ -423,29 +459,273 @@ function SparklesIcon({ className }: { className?: string }) {
 }
 
 function WorkoutTypeIcon({ type }: { type: string }) {
-  const icons: Record<string, React.ReactElement> = {
-    running: (
-      <div className="p-2 bg-blue-900/50 rounded-lg">
-        <svg className="w-6 h-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-        </svg>
-      </div>
-    ),
-    cycling: (
-      <div className="p-2 bg-green-900/50 rounded-lg">
-        <svg className="w-6 h-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+  const iconConfig: Record<string, { bg: string; color: string; icon: React.ReactElement }> = {
+    // Running variants
+    running: {
+      bg: 'bg-blue-900/50',
+      color: 'text-blue-400',
+      icon: (
+        <>
+          <circle cx="12" cy="4" r="2" strokeWidth={2} />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7l-3 3-2-1-4 4m0 0l2 5m-2-5l-3 1m10-4l3 8m-1-4h3" />
+        </>
+      ),
+    },
+    trail_running: {
+      bg: 'bg-emerald-900/50',
+      color: 'text-emerald-400',
+      icon: (
+        <>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 20l4-4 4 2 4-6 4 4" />
+          <circle cx="14" cy="6" r="2" strokeWidth={2} />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8l-2 2-2-1" />
+        </>
+      ),
+    },
+    // Cycling
+    cycling: {
+      bg: 'bg-green-900/50',
+      color: 'text-green-400',
+      icon: (
+        <>
           <circle cx="5" cy="17" r="3" strokeWidth={2} />
           <circle cx="19" cy="17" r="3" strokeWidth={2} />
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 17V9l4-4m-8 8h8" />
-        </svg>
-      </div>
+        </>
+      ),
+    },
+    // Swimming
+    swimming: {
+      bg: 'bg-cyan-900/50',
+      color: 'text-cyan-400',
+      icon: (
+        <>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15c2.5 2.5 6 2.5 8.5 0s6-2.5 8.5 0" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 19c2.5 2.5 6 2.5 8.5 0s6-2.5 8.5 0" />
+          <circle cx="16" cy="7" r="2" strokeWidth={2} />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 9v2l-4 2" />
+        </>
+      ),
+    },
+    // Walking
+    walking: {
+      bg: 'bg-amber-900/50',
+      color: 'text-amber-400',
+      icon: (
+        <>
+          <circle cx="12" cy="4" r="2" strokeWidth={2} />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10l-2 6-2-2-2 6m4-10v4m2-4l2 2" />
+        </>
+      ),
+    },
+    // Hiking
+    hiking: {
+      bg: 'bg-orange-900/50',
+      color: 'text-orange-400',
+      icon: (
+        <>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 20l4-4 4 2 4-6 4 4" />
+          <circle cx="12" cy="6" r="2" strokeWidth={2} />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m-2 8l2-4 2 4" />
+        </>
+      ),
+    },
+    // Strength
+    strength: {
+      bg: 'bg-purple-900/50',
+      color: 'text-purple-400',
+      icon: (
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12h4m10 0h4M7 12a2 2 0 104 0 2 2 0 00-4 0zm6 0a2 2 0 104 0 2 2 0 00-4 0z" />
+      ),
+    },
+    // HIIT
+    hiit: {
+      bg: 'bg-red-900/50',
+      color: 'text-red-400',
+      icon: (
+        <>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z" />
+        </>
+      ),
+    },
+    // Yoga
+    yoga: {
+      bg: 'bg-teal-900/50',
+      color: 'text-teal-400',
+      icon: (
+        <>
+          <circle cx="12" cy="4" r="2" strokeWidth={2} />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v4m-4 2h8m-8 0l-2 4m10-4l2 4m-6 0v4" />
+        </>
+      ),
+    },
+    // Skiing
+    skiing: {
+      bg: 'bg-sky-900/50',
+      color: 'text-sky-400',
+      icon: (
+        <>
+          <circle cx="14" cy="4" r="2" strokeWidth={2} />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 18l18-6M10 10l4 4-2 4m-2-8l-4 1" />
+        </>
+      ),
+    },
+    // Football
+    football: {
+      bg: 'bg-lime-900/50',
+      color: 'text-lime-400',
+      icon: (
+        <>
+          <circle cx="12" cy="12" r="9" strokeWidth={2} />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v4m0 10v4M3 12h4m10 0h4m-9-5l3 2v4l-3 2-3-2v-4l3-2z" />
+        </>
+      ),
+    },
+    // Tennis
+    tennis: {
+      bg: 'bg-yellow-900/50',
+      color: 'text-yellow-400',
+      icon: (
+        <>
+          <circle cx="15" cy="9" r="6" strokeWidth={2} />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l-6 6m0 0l2-2m-2 2l-2-2" />
+        </>
+      ),
+    },
+    // Basketball
+    basketball: {
+      bg: 'bg-orange-900/50',
+      color: 'text-orange-300',
+      icon: (
+        <>
+          <circle cx="12" cy="12" r="9" strokeWidth={2} />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v18M3 12c0-3 4-5 9-5s9 2 9 5" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12c0 3 4 5 9 5s9-2 9-5" />
+        </>
+      ),
+    },
+    // Golf
+    golf: {
+      bg: 'bg-green-900/50',
+      color: 'text-green-300',
+      icon: (
+        <>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v14m0-14l6 4-6 4m-4 10h8" />
+          <circle cx="12" cy="20" r="1" fill="currentColor" />
+        </>
+      ),
+    },
+    // Rowing
+    rowing: {
+      bg: 'bg-blue-900/50',
+      color: 'text-blue-300',
+      icon: (
+        <>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 17h18M6 14l3-6 6 4 3-4" />
+          <ellipse cx="12" cy="17" rx="6" ry="2" strokeWidth={2} />
+        </>
+      ),
+    },
+    // Surfing
+    surfing: {
+      bg: 'bg-cyan-900/50',
+      color: 'text-cyan-300',
+      icon: (
+        <>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 17c2 2 4 2 6 0s4-2 6 0 4 2 6 0" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12l4-8 4 8H8z" />
+          <circle cx="12" cy="6" r="1" fill="currentColor" />
+        </>
+      ),
+    },
+    // Elliptical
+    elliptical: {
+      bg: 'bg-pink-900/50',
+      color: 'text-pink-400',
+      icon: (
+        <>
+          <ellipse cx="12" cy="12" rx="8" ry="4" strokeWidth={2} />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v8m-4-4h8" />
+        </>
+      ),
+    },
+    // Climbing
+    climbing: {
+      bg: 'bg-stone-800/50',
+      color: 'text-stone-400',
+      icon: (
+        <>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 20l4-16 4 16" />
+          <circle cx="8" cy="8" r="1" fill="currentColor" />
+          <circle cx="16" cy="12" r="1" fill="currentColor" />
+          <circle cx="10" cy="16" r="1" fill="currentColor" />
+        </>
+      ),
+    },
+    // Martial Arts
+    martial_arts: {
+      bg: 'bg-red-900/50',
+      color: 'text-red-300',
+      icon: (
+        <>
+          <circle cx="12" cy="4" r="2" strokeWidth={2} />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 8l4 2 4-2m-8 4l4 1 4-1m-6 4l2 4m4-4l2 4" />
+        </>
+      ),
+    },
+    // Skating
+    skating: {
+      bg: 'bg-indigo-900/50',
+      color: 'text-indigo-400',
+      icon: (
+        <>
+          <circle cx="10" cy="5" r="2" strokeWidth={2} />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 8l-4 4 2 4h4M6 20h12M8 20l2-4" />
+        </>
+      ),
+    },
+    // Dance
+    dance: {
+      bg: 'bg-fuchsia-900/50',
+      color: 'text-fuchsia-400',
+      icon: (
+        <>
+          <circle cx="12" cy="4" r="2" strokeWidth={2} />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 8l3 2 3-2m-6 4l3 1 3-1m-5 4l2 4m4-4l2 4" />
+        </>
+      ),
+    },
+    // Triathlon
+    triathlon: {
+      bg: 'bg-amber-900/50',
+      color: 'text-amber-400',
+      icon: (
+        <>
+          <circle cx="6" cy="12" r="3" strokeWidth={2} />
+          <circle cx="12" cy="12" r="3" strokeWidth={2} />
+          <circle cx="18" cy="12" r="3" strokeWidth={2} />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 9v-1m6-1v-2m6 3v-1" />
+        </>
+      ),
+    },
+  };
+
+  const config = iconConfig[type] || {
+    bg: 'bg-gray-800',
+    color: 'text-gray-400',
+    icon: (
+      <>
+        <circle cx="12" cy="12" r="9" strokeWidth={2} />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l2 2" />
+      </>
     ),
   };
 
-  return icons[type] || (
-    <div className="p-2 bg-gray-800 rounded-lg">
-      <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+  return (
+    <div className={`p-2 ${config.bg} rounded-lg`}>
+      <svg className={`w-6 h-6 ${config.color}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        {config.icon}
       </svg>
     </div>
   );
@@ -471,6 +751,15 @@ function PaceIcon() {
   return (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+    </svg>
+  );
+}
+
+function SpeedIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 12l4-2" />
     </svg>
   );
 }
