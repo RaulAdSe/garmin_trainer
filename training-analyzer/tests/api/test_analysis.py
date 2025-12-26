@@ -232,7 +232,7 @@ class TestAnalyzeWorkoutEndpoint:
         data = response.json()
         assert data["success"] is True
         assert data["cached"] is True
-        assert data["analysis"]["workout_id"] == "test_123"
+        assert data["analysis"]["workoutId"] == "test_123"
 
     @pytest.mark.asyncio
     async def test_analyze_workout_force_refresh(
@@ -311,7 +311,7 @@ class TestGetCachedAnalysisEndpoint:
         data = response.json()
         assert data["success"] is True
         assert data["cached"] is True
-        assert data["analysis"]["workout_id"] == "test_123"
+        assert data["analysis"]["workoutId"] == "test_123"
 
     def test_get_cached_analysis_not_exists(self):
         """Test getting non-existent cached analysis."""
@@ -388,9 +388,9 @@ class TestBatchAnalysisEndpoint:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["total_count"] == 2
-        assert data["cached_count"] == 2
-        assert data["success_count"] == 2
+        assert data["totalCount"] == 2
+        assert data["cachedCount"] == 2
+        assert data["successCount"] == 2
 
     def test_batch_analysis_empty_list(self):
         """Test batch analysis with empty list."""
@@ -402,8 +402,8 @@ class TestBatchAnalysisEndpoint:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["total_count"] == 0
-        assert data["success_count"] == 0
+        assert data["totalCount"] == 0
+        assert data["successCount"] == 0
 
 
 class TestCacheManagementEndpoints:

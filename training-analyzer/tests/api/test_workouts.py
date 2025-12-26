@@ -104,10 +104,16 @@ def sample_workout():
 
 @pytest.fixture(autouse=True)
 def cleanup_workout_store():
-    """Clean up workout store after each test."""
+    """Clean up workout store before and after each test."""
+    # Clean up before test to ensure isolation
+    repo = get_workout_repository()
+    # Delete all existing workouts
+    for workout in repo.get_all(limit=1000):
+        repo.delete(workout.id)
     yield
-    # Note: In production, we would use a test database
-    # For now, we rely on test-specific cleanup in each fixture
+    # Clean up after test as well
+    for workout in repo.get_all(limit=1000):
+        repo.delete(workout.id)
 
 
 # ============================================================================
