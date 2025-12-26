@@ -1,6 +1,8 @@
 """Tests for training plan generation API routes."""
 
 import pytest
+import tempfile
+import os
 from datetime import date, datetime, timedelta
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
 from fastapi.testclient import TestClient
@@ -9,6 +11,8 @@ import json
 # Import the app and router
 from training_analyzer.main import app
 from training_analyzer.api.routes import plans
+from training_analyzer.api import deps
+from training_analyzer.db.repositories.plan_repository import PlanRepository
 from training_analyzer.models.plans import (
     TrainingPlan,
     TrainingWeek,
@@ -32,11 +36,22 @@ client = TestClient(app)
 # ============================================================================
 
 @pytest.fixture(autouse=True)
-def clear_plans_storage():
-    """Clear the plans storage before each test."""
-    plans._plans_storage.clear()
-    yield
-    plans._plans_storage.clear()
+def clear_plans_storage(tmp_path):
+    """Clear the plans storage before each test by using a temporary database."""
+    # Create a temporary database for testing
+    test_db = tmp_path / "test_training.db"
+    test_repo = PlanRepository(str(test_db))
+
+    # Override the dependency
+    def get_test_plan_repo():
+        return test_repo
+
+    app.dependency_overrides[deps.get_plan_repository] = get_test_plan_repo
+
+    yield test_repo
+
+    # Cleanup
+    app.dependency_overrides.pop(deps.get_plan_repository, None)
 
 
 @pytest.fixture
@@ -265,10 +280,10 @@ class TestListPlans:
         assert data["count"] == 0
         assert data["plans"] == []
 
-    def test_list_plans_with_data(self, sample_plan):
+    def test_list_plans_with_data(self, sample_plan, clear_plans_storage):
         """Test listing plans with existing plans."""
-        # Add a plan to storage
-        plans._plans_storage[sample_plan.id] = sample_plan.to_dict()
+        # Add a plan to storage via repository
+        clear_plans_storage.save(sample_plan)
 
         response = client.get("/api/v1/plans")
 
@@ -278,16 +293,17 @@ class TestListPlans:
         assert len(data["plans"]) == 1
         assert data["plans"][0]["id"] == sample_plan.id
 
-    def test_list_plans_active_only(self, sample_plan):
+    def test_list_plans_active_only(self, sample_plan, clear_plans_storage):
         """Test filtering by active status."""
         # Add inactive plan
-        plans._plans_storage[sample_plan.id] = sample_plan.to_dict()
+        clear_plans_storage.save(sample_plan)
 
         # Add active plan
-        active_plan = sample_plan.to_dict()
-        active_plan["id"] = "plan_active"
-        active_plan["is_active"] = True
-        plans._plans_storage["plan_active"] = active_plan
+        import copy
+        active_plan = copy.deepcopy(sample_plan)
+        active_plan.id = "plan_active"
+        active_plan.is_active = True
+        clear_plans_storage.save(active_plan)
 
         response = client.get("/api/v1/plans?active_only=true")
 
@@ -296,16 +312,15 @@ class TestListPlans:
         assert data["count"] == 1
         assert data["plans"][0]["id"] == "plan_active"
 
-    def test_list_plans_pagination(self, sample_plan):
+    def test_list_plans_pagination(self, sample_plan, clear_plans_storage):
         """Test pagination of plans."""
+        import copy
         # Add multiple plans
         for i in range(5):
-            plan_data = sample_plan.to_dict()
-            plan_data["id"] = f"plan_{i}"
-            plan_data["created_at"] = (
-                datetime.now() - timedelta(hours=i)
-            ).isoformat()
-            plans._plans_storage[f"plan_{i}"] = plan_data
+            plan = copy.deepcopy(sample_plan)
+            plan.id = f"plan_{i}"
+            plan.created_at = datetime.now() - timedelta(hours=i)
+            clear_plans_storage.save(plan)
 
         # Test limit
         response = client.get("/api/v1/plans?limit=2")
@@ -324,9 +339,9 @@ class TestListPlans:
 class TestGetPlan:
     """Tests for the GET /plans/{id} endpoint."""
 
-    def test_get_plan_success(self, sample_plan):
+    def test_get_plan_success(self, sample_plan, clear_plans_storage):
         """Test getting a specific plan."""
-        plans._plans_storage[sample_plan.id] = sample_plan.to_dict()
+        clear_plans_storage.save(sample_plan)
 
         response = client.get(f"/api/v1/plans/{sample_plan.id}")
 
@@ -350,9 +365,9 @@ class TestGetPlan:
 class TestGetPlanWeek:
     """Tests for the GET /plans/{id}/week/{week_number} endpoint."""
 
-    def test_get_plan_week_success(self, sample_plan):
+    def test_get_plan_week_success(self, sample_plan, clear_plans_storage):
         """Test getting a specific week from a plan."""
-        plans._plans_storage[sample_plan.id] = sample_plan.to_dict()
+        clear_plans_storage.save(sample_plan)
 
         response = client.get(f"/api/v1/plans/{sample_plan.id}/week/1")
 
@@ -361,9 +376,9 @@ class TestGetPlanWeek:
         assert data["week_number"] == 1
         assert "sessions" in data
 
-    def test_get_plan_week_not_found(self, sample_plan):
+    def test_get_plan_week_not_found(self, sample_plan, clear_plans_storage):
         """Test getting a non-existent week."""
-        plans._plans_storage[sample_plan.id] = sample_plan.to_dict()
+        clear_plans_storage.save(sample_plan)
 
         response = client.get(f"/api/v1/plans/{sample_plan.id}/week/99")
 
@@ -377,9 +392,9 @@ class TestGetPlanWeek:
 class TestUpdatePlan:
     """Tests for the PUT /plans/{id} endpoint."""
 
-    def test_update_plan_name(self, sample_plan):
+    def test_update_plan_name(self, sample_plan, clear_plans_storage):
         """Test updating plan name."""
-        plans._plans_storage[sample_plan.id] = sample_plan.to_dict()
+        clear_plans_storage.save(sample_plan)
 
         response = client.put(
             f"/api/v1/plans/{sample_plan.id}",
@@ -388,11 +403,12 @@ class TestUpdatePlan:
 
         assert response.status_code == 200
         assert response.json()["name"] == "My Updated Plan"
-        assert plans._plans_storage[sample_plan.id]["name"] == "My Updated Plan"
+        updated_plan = clear_plans_storage.get_as_dict(sample_plan.id)
+        assert updated_plan["name"] == "My Updated Plan"
 
-    def test_update_plan_activate(self, sample_plan):
+    def test_update_plan_activate(self, sample_plan, clear_plans_storage):
         """Test activating a plan."""
-        plans._plans_storage[sample_plan.id] = sample_plan.to_dict()
+        clear_plans_storage.save(sample_plan)
 
         response = client.put(
             f"/api/v1/plans/{sample_plan.id}",
@@ -402,25 +418,28 @@ class TestUpdatePlan:
         assert response.status_code == 200
         assert response.json()["is_active"] is True
 
-    def test_update_plan_deactivates_others(self, sample_plan):
+    def test_update_plan_deactivates_others(self, sample_plan, clear_plans_storage):
         """Test that activating one plan deactivates others."""
+        import copy
         # Add two plans
-        plan1 = sample_plan.to_dict()
-        plan1["id"] = "plan_1"
-        plan1["is_active"] = True
-        plans._plans_storage["plan_1"] = plan1
+        plan1 = copy.deepcopy(sample_plan)
+        plan1.id = "plan_1"
+        plan1.is_active = True
+        clear_plans_storage.save(plan1)
 
-        plan2 = sample_plan.to_dict()
-        plan2["id"] = "plan_2"
-        plan2["is_active"] = False
-        plans._plans_storage["plan_2"] = plan2
+        plan2 = copy.deepcopy(sample_plan)
+        plan2.id = "plan_2"
+        plan2.is_active = False
+        clear_plans_storage.save(plan2)
 
         # Activate plan 2
         response = client.put("/api/v1/plans/plan_2", json={"is_active": True})
 
         assert response.status_code == 200
-        assert plans._plans_storage["plan_1"]["is_active"] is False
-        assert plans._plans_storage["plan_2"]["is_active"] is True
+        plan1_data = clear_plans_storage.get_as_dict("plan_1")
+        plan2_data = clear_plans_storage.get_as_dict("plan_2")
+        assert plan1_data["is_active"] is False
+        assert plan2_data["is_active"] is True
 
     def test_update_plan_not_found(self):
         """Test updating non-existent plan."""
@@ -439,14 +458,14 @@ class TestUpdatePlan:
 class TestDeletePlan:
     """Tests for the DELETE /plans/{id} endpoint."""
 
-    def test_delete_plan_success(self, sample_plan):
+    def test_delete_plan_success(self, sample_plan, clear_plans_storage):
         """Test deleting a plan."""
-        plans._plans_storage[sample_plan.id] = sample_plan.to_dict()
+        clear_plans_storage.save(sample_plan)
 
         response = client.delete(f"/api/v1/plans/{sample_plan.id}")
 
         assert response.status_code == 200
-        assert sample_plan.id not in plans._plans_storage
+        assert not clear_plans_storage.exists(sample_plan.id)
 
     def test_delete_plan_not_found(self):
         """Test deleting non-existent plan."""
@@ -462,14 +481,15 @@ class TestDeletePlan:
 class TestActivatePlan:
     """Tests for the POST /plans/{id}/activate endpoint."""
 
-    def test_activate_plan_success(self, sample_plan):
+    def test_activate_plan_success(self, sample_plan, clear_plans_storage):
         """Test activating a plan."""
-        plans._plans_storage[sample_plan.id] = sample_plan.to_dict()
+        clear_plans_storage.save(sample_plan)
 
         response = client.post(f"/api/v1/plans/{sample_plan.id}/activate")
 
         assert response.status_code == 200
-        assert plans._plans_storage[sample_plan.id]["is_active"] is True
+        plan_data = clear_plans_storage.get_as_dict(sample_plan.id)
+        assert plan_data["is_active"] is True
 
     def test_activate_plan_not_found(self):
         """Test activating non-existent plan."""
@@ -489,7 +509,7 @@ class TestAdaptPlan:
     @patch('training_analyzer.api.routes.plans.get_coach_service')
     @patch('training_analyzer.api.routes.plans.get_training_db')
     def test_adapt_plan_success(
-        self, mock_get_db, mock_get_coach, mock_agent_class, sample_plan
+        self, mock_get_db, mock_get_coach, mock_agent_class, sample_plan, clear_plans_storage
     ):
         """Test adapting a plan."""
         # Setup mocks
@@ -504,10 +524,11 @@ class TestAdaptPlan:
         mock_get_db.return_value = Mock()
 
         # Store the plan
-        plans._plans_storage[sample_plan.id] = sample_plan.to_dict()
+        clear_plans_storage.save(sample_plan)
 
         # Mock the agent
-        adapted_plan = sample_plan
+        import copy
+        adapted_plan = copy.deepcopy(sample_plan)
         adapted_plan.adaptation_history.append({
             "timestamp": datetime.now().isoformat(),
             "reason": "Performance adjustment",
@@ -544,21 +565,21 @@ class TestAdaptPlan:
 class TestDuplicatePlan:
     """Tests for the POST /plans/{id}/duplicate endpoint."""
 
-    def test_duplicate_plan_success(self, sample_plan):
+    def test_duplicate_plan_success(self, sample_plan, clear_plans_storage):
         """Test duplicating a plan."""
-        plans._plans_storage[sample_plan.id] = sample_plan.to_dict()
+        clear_plans_storage.save(sample_plan)
 
         response = client.post(f"/api/v1/plans/{sample_plan.id}/duplicate")
 
         assert response.status_code == 200
         data = response.json()
         assert data["id"] != sample_plan.id
-        assert "(Copy)" in data["name"]
+        assert "(Copy)" in (data.get("name") or "")
         assert data["is_active"] is False
 
-    def test_duplicate_plan_with_new_date(self, sample_plan):
+    def test_duplicate_plan_with_new_date(self, sample_plan, clear_plans_storage):
         """Test duplicating with a new race date."""
-        plans._plans_storage[sample_plan.id] = sample_plan.to_dict()
+        clear_plans_storage.save(sample_plan)
         new_date = (date.today() + timedelta(weeks=20)).isoformat()
 
         response = client.post(
@@ -583,9 +604,9 @@ class TestDuplicatePlan:
 class TestExportPlan:
     """Tests for the GET /plans/{id}/export endpoint."""
 
-    def test_export_plan_json(self, sample_plan):
+    def test_export_plan_json(self, sample_plan, clear_plans_storage):
         """Test exporting plan as JSON."""
-        plans._plans_storage[sample_plan.id] = sample_plan.to_dict()
+        clear_plans_storage.save(sample_plan)
 
         response = client.get(f"/api/v1/plans/{sample_plan.id}/export?format=json")
 
@@ -593,9 +614,9 @@ class TestExportPlan:
         data = response.json()
         assert data["id"] == sample_plan.id
 
-    def test_export_plan_ical(self, sample_plan):
+    def test_export_plan_ical(self, sample_plan, clear_plans_storage):
         """Test exporting plan as iCal."""
-        plans._plans_storage[sample_plan.id] = sample_plan.to_dict()
+        clear_plans_storage.save(sample_plan)
 
         response = client.get(f"/api/v1/plans/{sample_plan.id}/export?format=ical")
 
@@ -605,9 +626,9 @@ class TestExportPlan:
         assert "BEGIN:VCALENDAR" in data["content"]
         assert ".ics" in data["filename"]
 
-    def test_export_plan_csv(self, sample_plan):
+    def test_export_plan_csv(self, sample_plan, clear_plans_storage):
         """Test exporting plan as CSV."""
-        plans._plans_storage[sample_plan.id] = sample_plan.to_dict()
+        clear_plans_storage.save(sample_plan)
 
         response = client.get(f"/api/v1/plans/{sample_plan.id}/export?format=csv")
 
@@ -617,9 +638,9 @@ class TestExportPlan:
         assert "Week,Day,Date" in data["content"]
         assert ".csv" in data["filename"]
 
-    def test_export_plan_invalid_format(self, sample_plan):
+    def test_export_plan_invalid_format(self, sample_plan, clear_plans_storage):
         """Test exporting with invalid format."""
-        plans._plans_storage[sample_plan.id] = sample_plan.to_dict()
+        clear_plans_storage.save(sample_plan)
 
         response = client.get(f"/api/v1/plans/{sample_plan.id}/export?format=pdf")
 
@@ -648,11 +669,10 @@ class TestActivePlan:
         data = response.json()
         assert data["active_plan"] is None
 
-    def test_get_active_plan_exists(self, sample_plan):
+    def test_get_active_plan_exists(self, sample_plan, clear_plans_storage):
         """Test getting active plan when one exists."""
-        plan_data = sample_plan.to_dict()
-        plan_data["is_active"] = True
-        plans._plans_storage[sample_plan.id] = plan_data
+        sample_plan.is_active = True
+        clear_plans_storage.save(sample_plan)
 
         response = client.get("/api/v1/plans/active")
 

@@ -7,7 +7,7 @@ import json
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 
-from ..deps import get_coach_service, get_training_db
+from ..deps import get_coach_service, get_training_db, get_plan_repository
 from ...models.plans import (
     TrainingPlan,
     TrainingWeek,
@@ -29,13 +29,10 @@ from ...models.plans import (
     day_name_to_number,
 )
 from ...agents.plan_agent import PlanAgent, PlanGenerationError
+from ...db.repositories.plan_repository import PlanRepository
 
 
 router = APIRouter()
-
-
-# In-memory storage for plans (would be replaced with database in production)
-_plans_storage: Dict[str, Dict[str, Any]] = {}
 
 
 # ============================================================================
@@ -193,96 +190,6 @@ def _get_athlete_context(coach_service, training_db) -> AthleteContext:
         )
 
 
-def _plan_to_storage(plan: TrainingPlan) -> Dict[str, Any]:
-    """Convert TrainingPlan to storage format."""
-    return plan.to_dict()
-
-
-def _storage_to_plan(data: Dict[str, Any]) -> TrainingPlan:
-    """Convert storage format back to TrainingPlan."""
-    # Parse goal
-    goal_data = data["goal"]
-    goal = RaceGoal(
-        race_date=datetime.strptime(goal_data["race_date"], "%Y-%m-%d").date(),
-        distance=RaceDistance(goal_data["distance"]),
-        target_time_seconds=goal_data["target_time_seconds"],
-        race_name=goal_data.get("race_name"),
-        priority=goal_data.get("priority", 1),
-    )
-
-    # Parse weeks
-    weeks = []
-    for week_data in data["weeks"]:
-        sessions = []
-        for session_data in week_data["sessions"]:
-            sessions.append(PlannedSession(
-                day_of_week=session_data["day_of_week"],
-                workout_type=WorkoutType(session_data["workout_type"]),
-                description=session_data["description"],
-                target_duration_min=session_data["target_duration_min"],
-                target_load=session_data["target_load"],
-                target_pace=session_data.get("target_pace"),
-                target_hr_zone=session_data.get("target_hr_zone"),
-                intervals=session_data.get("intervals"),
-                notes=session_data.get("notes"),
-            ))
-
-        weeks.append(TrainingWeek(
-            week_number=week_data["week_number"],
-            phase=TrainingPhase(week_data["phase"]),
-            target_load=week_data["target_load"],
-            sessions=sessions,
-            focus=week_data.get("focus"),
-            notes=week_data.get("notes"),
-            is_cutback=week_data.get("is_cutback", False),
-        ))
-
-    # Parse athlete context if available
-    athlete_context = None
-    if data.get("athlete_context"):
-        ac_data = data["athlete_context"]
-        athlete_context = AthleteContext(
-            current_ctl=ac_data["current_ctl"],
-            current_atl=ac_data["current_atl"],
-            recent_weekly_load=ac_data["recent_weekly_load"],
-            recent_weekly_hours=ac_data["recent_weekly_hours"],
-            max_hr=ac_data.get("max_hr", 185),
-            rest_hr=ac_data.get("rest_hr", 55),
-            threshold_hr=ac_data.get("threshold_hr", 165),
-            vdot=ac_data.get("vdot"),
-        )
-
-    # Parse constraints if available
-    constraints = None
-    if data.get("constraints"):
-        c_data = data["constraints"]
-        constraints = PlanConstraints(
-            days_per_week=c_data["days_per_week"],
-            long_run_day=c_data["long_run_day"],
-            rest_days=c_data.get("rest_days", []),
-            max_weekly_hours=c_data["max_weekly_hours"],
-            max_session_duration_min=c_data.get("max_session_duration_min", 150),
-            include_cross_training=c_data.get("include_cross_training", False),
-            back_to_back_hard_ok=c_data.get("back_to_back_hard_ok", False),
-        )
-
-    return TrainingPlan(
-        id=data["id"],
-        goal=goal,
-        weeks=weeks,
-        periodization=PeriodizationType(data["periodization"]),
-        peak_week=data["peak_week"],
-        created_at=datetime.fromisoformat(data["created_at"]),
-        athlete_context=athlete_context,
-        constraints=constraints,
-        name=data.get("name"),
-        description=data.get("description"),
-        is_active=data.get("is_active", False),
-        updated_at=datetime.fromisoformat(data["updated_at"]) if data.get("updated_at") else None,
-        adaptation_history=data.get("adaptation_history", []),
-    )
-
-
 # ============================================================================
 # API Endpoints
 # ============================================================================
@@ -292,6 +199,7 @@ async def generate_plan(
     request: GeneratePlanRequest,
     coach_service=Depends(get_coach_service),
     training_db=Depends(get_training_db),
+    plan_repo: PlanRepository = Depends(get_plan_repository),
 ):
     """
     Generate a periodized training plan using AI.
@@ -302,7 +210,7 @@ async def generate_plan(
     - Athlete constraints (days/week, max hours, etc.)
 
     Uses LangGraph-based PlanAgent with GPT for intelligent plan structure
-    and session generation.
+    and session generation. Plans are persisted in SQLite for durability.
     """
     try:
         # Parse goal
@@ -366,8 +274,8 @@ async def generate_plan(
             constraints=constraints,
         )
 
-        # Store the plan
-        _plans_storage[plan.id] = _plan_to_storage(plan)
+        # Store the plan in the database
+        plan_repo.save(plan)
 
         return plan.to_dict()
 
@@ -389,27 +297,21 @@ async def list_plans(
     active_only: bool = False,
     limit: int = 50,
     offset: int = 0,
+    plan_repo: PlanRepository = Depends(get_plan_repository),
 ):
     """
     List all training plans.
+
+    Plans are persisted in SQLite for durability across server restarts.
 
     Args:
         active_only: Only return active plans
         limit: Maximum number of plans to return
         offset: Number of plans to skip
     """
-    plans = list(_plans_storage.values())
-
-    # Filter by active status if requested
-    if active_only:
-        plans = [p for p in plans if p.get("is_active", False)]
-
-    # Sort by created_at descending (newest first)
-    plans.sort(key=lambda x: x.get("created_at", ""), reverse=True)
-
-    # Apply pagination
-    total = len(plans)
-    plans = plans[offset:offset + limit]
+    # Get plans from the repository
+    plans = plan_repo.get_all_as_dicts(limit=limit, offset=offset, active_only=active_only)
+    total = plan_repo.count(active_only=active_only)
 
     # Return summary format
     summaries = []
@@ -439,23 +341,21 @@ async def list_plans(
 
 
 @router.get("/active", response_model=Dict[str, Any])
-async def get_active_plan():
+async def get_active_plan(
+    plan_repo: PlanRepository = Depends(get_plan_repository),
+):
     """
     Get the currently active training plan.
 
     Returns the active plan with current week information.
     """
-    active_plans = [p for p in _plans_storage.values() if p.get("is_active", False)]
+    plan = plan_repo.get_active()
 
-    if not active_plans:
+    if not plan:
         return {
             "active_plan": None,
             "message": "No active plan. Generate a new plan or activate an existing one.",
         }
-
-    # Get the most recently created active plan
-    active_plan = max(active_plans, key=lambda x: x.get("created_at", ""))
-    plan = _storage_to_plan(active_plan)
 
     # Get current week
     current_week = plan.get_current_week()
@@ -476,27 +376,35 @@ async def get_active_plan():
 
 
 @router.get("/{plan_id}", response_model=PlanOutput)
-async def get_plan(plan_id: str):
+async def get_plan(
+    plan_id: str,
+    plan_repo: PlanRepository = Depends(get_plan_repository),
+):
     """
     Get a specific training plan by ID.
 
     Returns the complete plan with all weeks and sessions.
     """
-    if plan_id not in _plans_storage:
+    plan_data = plan_repo.get_as_dict(plan_id)
+    if not plan_data:
         raise HTTPException(status_code=404, detail=f"Plan {plan_id} not found")
 
-    return _plans_storage[plan_id]
+    return plan_data
 
 
 @router.get("/{plan_id}/week/{week_number}", response_model=PlanWeekOutput)
-async def get_plan_week(plan_id: str, week_number: int):
+async def get_plan_week(
+    plan_id: str,
+    week_number: int,
+    plan_repo: PlanRepository = Depends(get_plan_repository),
+):
     """
     Get a specific week from a training plan.
     """
-    if plan_id not in _plans_storage:
+    plan_data = plan_repo.get_as_dict(plan_id)
+    if not plan_data:
         raise HTTPException(status_code=404, detail=f"Plan {plan_id} not found")
 
-    plan_data = _plans_storage[plan_id]
     weeks = plan_data.get("weeks", [])
 
     for week in weeks:
@@ -510,7 +418,11 @@ async def get_plan_week(plan_id: str, week_number: int):
 
 
 @router.put("/{plan_id}", response_model=PlanOutput)
-async def update_plan(plan_id: str, request: UpdatePlanRequest):
+async def update_plan(
+    plan_id: str,
+    request: UpdatePlanRequest,
+    plan_repo: PlanRepository = Depends(get_plan_repository),
+):
     """
     Update a training plan.
 
@@ -519,10 +431,9 @@ async def update_plan(plan_id: str, request: UpdatePlanRequest):
     - is_active: Whether this is the active plan
     - weeks: Replace week data
     """
-    if plan_id not in _plans_storage:
+    plan_data = plan_repo.get_as_dict(plan_id)
+    if not plan_data:
         raise HTTPException(status_code=404, detail=f"Plan {plan_id} not found")
-
-    plan_data = _plans_storage[plan_id]
 
     # Update fields if provided
     if request.name is not None:
@@ -531,9 +442,7 @@ async def update_plan(plan_id: str, request: UpdatePlanRequest):
     if request.is_active is not None:
         # If activating this plan, deactivate others
         if request.is_active:
-            for pid, pdata in _plans_storage.items():
-                if pid != plan_id:
-                    pdata["is_active"] = False
+            plan_repo.deactivate_all()
         plan_data["is_active"] = request.is_active
 
     if request.weeks is not None:
@@ -542,37 +451,40 @@ async def update_plan(plan_id: str, request: UpdatePlanRequest):
     # Update timestamp
     plan_data["updated_at"] = datetime.now().isoformat()
 
-    _plans_storage[plan_id] = plan_data
+    # Save the updated plan
+    plan_repo.save_dict(plan_data)
 
     return plan_data
 
 
 @router.delete("/{plan_id}")
-async def delete_plan(plan_id: str):
+async def delete_plan(
+    plan_id: str,
+    plan_repo: PlanRepository = Depends(get_plan_repository),
+):
     """
     Delete a training plan.
     """
-    if plan_id not in _plans_storage:
+    if not plan_repo.exists(plan_id):
         raise HTTPException(status_code=404, detail=f"Plan {plan_id} not found")
 
-    del _plans_storage[plan_id]
+    plan_repo.delete(plan_id)
 
     return {"message": f"Plan {plan_id} deleted successfully"}
 
 
 @router.post("/{plan_id}/activate")
-async def activate_plan(plan_id: str):
+async def activate_plan(
+    plan_id: str,
+    plan_repo: PlanRepository = Depends(get_plan_repository),
+):
     """
     Set a plan as the active training plan.
 
     Only one plan can be active at a time.
     """
-    if plan_id not in _plans_storage:
+    if not plan_repo.set_active(plan_id):
         raise HTTPException(status_code=404, detail=f"Plan {plan_id} not found")
-
-    # Deactivate all other plans
-    for pid, pdata in _plans_storage.items():
-        pdata["is_active"] = pid == plan_id
 
     return {
         "message": f"Plan {plan_id} is now active",
@@ -586,6 +498,7 @@ async def adapt_plan(
     request: AdaptPlanRequest,
     coach_service=Depends(get_coach_service),
     training_db=Depends(get_training_db),
+    plan_repo: PlanRepository = Depends(get_plan_repository),
 ):
     """
     AI-assisted plan adaptation based on recent performance.
@@ -599,12 +512,11 @@ async def adapt_plan(
         plan_id: The plan to adapt
         request: Adaptation parameters
     """
-    if plan_id not in _plans_storage:
+    plan = plan_repo.get(plan_id)
+    if not plan:
         raise HTTPException(status_code=404, detail=f"Plan {plan_id} not found")
 
     try:
-        plan = _storage_to_plan(_plans_storage[plan_id])
-
         # Get performance data
         performance_data = _gather_performance_data(coach_service, training_db)
 
@@ -617,7 +529,7 @@ async def adapt_plan(
         )
 
         # Store the adapted plan
-        _plans_storage[plan_id] = _plan_to_storage(adapted_plan)
+        plan_repo.save(adapted_plan)
 
         return adapted_plan.to_dict()
 
@@ -631,7 +543,11 @@ async def adapt_plan(
 
 
 @router.post("/{plan_id}/duplicate", response_model=PlanOutput)
-async def duplicate_plan(plan_id: str, new_race_date: Optional[str] = None):
+async def duplicate_plan(
+    plan_id: str,
+    new_race_date: Optional[str] = None,
+    plan_repo: PlanRepository = Depends(get_plan_repository),
+):
     """
     Duplicate an existing plan, optionally adjusting for a new race date.
 
@@ -639,38 +555,46 @@ async def duplicate_plan(plan_id: str, new_race_date: Optional[str] = None):
         plan_id: The plan to duplicate
         new_race_date: New race date (YYYY-MM-DD). If provided, plan dates are adjusted.
     """
-    if plan_id not in _plans_storage:
+    original_data = plan_repo.get_as_dict(plan_id)
+    if not original_data:
         raise HTTPException(status_code=404, detail=f"Plan {plan_id} not found")
 
-    original_data = _plans_storage[plan_id].copy()
+    # Create a copy
+    import copy
+    new_data = copy.deepcopy(original_data)
 
     # Generate new ID
     new_id = TrainingPlan.generate_id()
-    original_data["id"] = new_id
-    original_data["name"] = f"{original_data.get('name', 'Plan')} (Copy)"
-    original_data["is_active"] = False
-    original_data["created_at"] = datetime.now().isoformat()
-    original_data["updated_at"] = None
-    original_data["adaptation_history"] = []
+    new_data["id"] = new_id
+    new_data["name"] = f"{new_data.get('name', 'Plan')} (Copy)"
+    new_data["is_active"] = False
+    new_data["created_at"] = datetime.now().isoformat()
+    new_data["updated_at"] = None
+    new_data["adaptation_history"] = []
 
     # Adjust race date if provided
     if new_race_date:
         try:
             new_date = datetime.strptime(new_race_date, "%Y-%m-%d").date()
-            original_data["goal"]["race_date"] = new_race_date
+            new_data["goal"]["race_date"] = new_race_date
         except ValueError:
             raise HTTPException(
                 status_code=400,
                 detail="Invalid date format. Use YYYY-MM-DD."
             )
 
-    _plans_storage[new_id] = original_data
+    # Save the new plan
+    plan_repo.save_dict(new_data)
 
-    return original_data
+    return new_data
 
 
 @router.get("/{plan_id}/export")
-async def export_plan(plan_id: str, format: str = "json"):
+async def export_plan(
+    plan_id: str,
+    format: str = "json",
+    plan_repo: PlanRepository = Depends(get_plan_repository),
+):
     """
     Export a plan in various formats.
 
@@ -678,10 +602,9 @@ async def export_plan(plan_id: str, format: str = "json"):
         plan_id: The plan to export
         format: Export format (json, ical, csv)
     """
-    if plan_id not in _plans_storage:
+    plan_data = plan_repo.get_as_dict(plan_id)
+    if not plan_data:
         raise HTTPException(status_code=404, detail=f"Plan {plan_id} not found")
-
-    plan_data = _plans_storage[plan_id]
 
     if format == "json":
         return plan_data

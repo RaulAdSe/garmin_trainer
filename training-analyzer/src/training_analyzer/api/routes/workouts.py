@@ -3,7 +3,7 @@ Workout design and export API routes.
 
 Provides endpoints for:
 - AI-powered workout design
-- Workout storage and retrieval
+- Workout storage and retrieval (using SQLite persistence)
 - FIT file export for Garmin devices
 - Garmin Connect integration (future)
 """
@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
-from ..deps import get_coach_service, get_training_db
+from ..deps import get_coach_service, get_training_db, get_workout_repository
 from ...models.workouts import (
     AthleteContext,
     IntervalType,
@@ -29,13 +29,10 @@ from ...models.workouts import (
 )
 from ...agents.workout_agent import WorkoutDesignAgent, get_workout_agent
 from ...fit.encoder import FITEncoder, encode_workout_to_fit
+from ...db.repositories.workout_repository import WorkoutRepository
 
 
 router = APIRouter()
-
-
-# In-memory workout storage (would be database in production)
-_workout_store: Dict[str, StructuredWorkout] = {}
 
 
 # ============================================================================
@@ -236,6 +233,7 @@ async def design_workout(
     request: DesignWorkoutRequest,
     coach_service = Depends(get_coach_service),
     training_db = Depends(get_training_db),
+    workout_repo: WorkoutRepository = Depends(get_workout_repository),
 ):
     """
     AI-powered workout design.
@@ -279,8 +277,8 @@ async def design_workout(
             # Use rule-based design
             workout = agent.design_workout(design_request, context)
 
-        # Store the workout
-        _workout_store[workout.id] = workout
+        # Store the workout in the database
+        workout_repo.save(workout)
 
         # Return response
         return StructuredWorkoutResponse.from_structured_workout(workout)
@@ -292,14 +290,17 @@ async def design_workout(
 
 
 @router.get("/{workout_id}", response_model=StructuredWorkoutResponse)
-async def get_workout(workout_id: str):
+async def get_workout(
+    workout_id: str,
+    workout_repo: WorkoutRepository = Depends(get_workout_repository),
+):
     """
     Get a specific designed workout by ID.
 
     Returns the full workout structure including all intervals
     with their target paces and HR zones.
     """
-    workout = _workout_store.get(workout_id)
+    workout = workout_repo.get(workout_id)
     if not workout:
         raise HTTPException(status_code=404, detail=f"Workout {workout_id} not found")
 
@@ -310,26 +311,28 @@ async def get_workout(workout_id: str):
 async def list_workouts(
     limit: int = 20,
     offset: int = 0,
+    workout_repo: WorkoutRepository = Depends(get_workout_repository),
 ):
     """
     List all designed workouts.
 
     Returns workouts ordered by creation time (newest first).
+    Workouts are now persisted in SQLite for durability across server restarts.
     """
-    workouts = list(_workout_store.values())
-    workouts.sort(key=lambda w: w.created_at or datetime.min, reverse=True)
-
-    paginated = workouts[offset:offset + limit]
-    return [StructuredWorkoutResponse.from_structured_workout(w) for w in paginated]
+    workouts = workout_repo.get_all(limit=limit, offset=offset)
+    return [StructuredWorkoutResponse.from_structured_workout(w) for w in workouts]
 
 
 @router.delete("/{workout_id}")
-async def delete_workout(workout_id: str):
+async def delete_workout(
+    workout_id: str,
+    workout_repo: WorkoutRepository = Depends(get_workout_repository),
+):
     """Delete a workout from storage."""
-    if workout_id not in _workout_store:
+    if not workout_repo.exists(workout_id):
         raise HTTPException(status_code=404, detail=f"Workout {workout_id} not found")
 
-    del _workout_store[workout_id]
+    workout_repo.delete(workout_id)
     return {"message": f"Workout {workout_id} deleted"}
 
 
@@ -337,6 +340,7 @@ async def delete_workout(workout_id: str):
 async def download_fit(
     workout_id: str,
     background_tasks: BackgroundTasks,
+    workout_repo: WorkoutRepository = Depends(get_workout_repository),
 ):
     """
     Download workout as Garmin FIT file.
@@ -348,7 +352,7 @@ async def download_fit(
 
     Returns a downloadable .fit file.
     """
-    workout = _workout_store.get(workout_id)
+    workout = workout_repo.get(workout_id)
     if not workout:
         raise HTTPException(status_code=404, detail=f"Workout {workout_id} not found")
 
@@ -378,7 +382,10 @@ async def download_fit(
 
 
 @router.get("/{workout_id}/fit/bytes")
-async def get_fit_bytes(workout_id: str):
+async def get_fit_bytes(
+    workout_id: str,
+    workout_repo: WorkoutRepository = Depends(get_workout_repository),
+):
     """
     Get workout as FIT file bytes (base64 encoded).
 
@@ -386,7 +393,7 @@ async def get_fit_bytes(workout_id: str):
     """
     import base64
 
-    workout = _workout_store.get(workout_id)
+    workout = workout_repo.get(workout_id)
     if not workout:
         raise HTTPException(status_code=404, detail=f"Workout {workout_id} not found")
 
@@ -410,6 +417,7 @@ async def get_fit_bytes(workout_id: str):
 async def export_to_garmin(
     workout_id: str,
     request: ExportGarminRequest,
+    workout_repo: WorkoutRepository = Depends(get_workout_repository),
 ):
     """
     Push workout directly to Garmin Connect.
@@ -424,7 +432,7 @@ async def export_to_garmin(
     **Note:** This feature requires valid Garmin Connect authentication.
     Direct API access may require Garmin Connect IQ developer access.
     """
-    workout = _workout_store.get(workout_id)
+    workout = workout_repo.get(workout_id)
     if not workout:
         raise HTTPException(status_code=404, detail=f"Workout {workout_id} not found")
 
@@ -464,10 +472,11 @@ async def quick_easy_run(
     duration_min: int = 45,
     coach_service = Depends(get_coach_service),
     training_db = Depends(get_training_db),
+    workout_repo: WorkoutRepository = Depends(get_workout_repository),
 ):
     """Quick endpoint to generate an easy run workout."""
     request = DesignWorkoutRequest(workout_type="easy", duration_min=duration_min)
-    return await design_workout(request, coach_service, training_db)
+    return await design_workout(request, coach_service, training_db, workout_repo)
 
 
 @router.post("/quick/tempo", response_model=StructuredWorkoutResponse)
@@ -475,10 +484,11 @@ async def quick_tempo_run(
     duration_min: int = 50,
     coach_service = Depends(get_coach_service),
     training_db = Depends(get_training_db),
+    workout_repo: WorkoutRepository = Depends(get_workout_repository),
 ):
     """Quick endpoint to generate a tempo run workout."""
     request = DesignWorkoutRequest(workout_type="tempo", duration_min=duration_min)
-    return await design_workout(request, coach_service, training_db)
+    return await design_workout(request, coach_service, training_db, workout_repo)
 
 
 @router.post("/quick/intervals", response_model=StructuredWorkoutResponse)
@@ -486,10 +496,11 @@ async def quick_intervals(
     duration_min: int = 55,
     coach_service = Depends(get_coach_service),
     training_db = Depends(get_training_db),
+    workout_repo: WorkoutRepository = Depends(get_workout_repository),
 ):
     """Quick endpoint to generate an interval workout."""
     request = DesignWorkoutRequest(workout_type="intervals", duration_min=duration_min)
-    return await design_workout(request, coach_service, training_db)
+    return await design_workout(request, coach_service, training_db, workout_repo)
 
 
 @router.post("/quick/long", response_model=StructuredWorkoutResponse)
@@ -497,7 +508,8 @@ async def quick_long_run(
     duration_min: int = 90,
     coach_service = Depends(get_coach_service),
     training_db = Depends(get_training_db),
+    workout_repo: WorkoutRepository = Depends(get_workout_repository),
 ):
     """Quick endpoint to generate a long run workout."""
     request = DesignWorkoutRequest(workout_type="long", duration_min=duration_min)
-    return await design_workout(request, coach_service, training_db)
+    return await design_workout(request, coach_service, training_db, workout_repo)
