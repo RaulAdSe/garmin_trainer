@@ -46,6 +46,14 @@ from .triathlon_agent import (
     get_triathlon_agent,
 )
 
+from .coach_agent import (
+    ConversationalCoach,
+    CoachingContext,
+    CoachingResponse,
+    CoachingIntent,
+    get_conversational_coach,
+)
+
 from .orchestrator import (
     AgentOrchestrator,
     OrchestratorRequest,
@@ -87,6 +95,12 @@ __all__ = [
     "RaceDistance",
     "FatigueCarryoverModel",
     "get_triathlon_agent",
+    # Conversational Coach (Phase 4)
+    "ConversationalCoach",
+    "CoachingContext",
+    "CoachingResponse",
+    "CoachingIntent",
+    "get_conversational_coach",
     # Orchestrator
     "AgentOrchestrator",
     "OrchestratorRequest",
