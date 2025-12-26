@@ -24,6 +24,28 @@ from .workout_agent import (
     get_workout_agent,
 )
 
+from .cycling_agent import (
+    CyclingWorkoutAgent,
+    CyclingAthleteContext,
+    CyclingWorkoutInterval,
+    get_cycling_agent,
+)
+
+from .swim_agent import (
+    SwimWorkoutAgent,
+    get_swim_agent,
+)
+
+from .triathlon_agent import (
+    TriathlonAgent,
+    TriathlonAthleteContext,
+    BrickWorkout,
+    MultiSportDay,
+    RaceDistance,
+    FatigueCarryoverModel,
+    get_triathlon_agent,
+)
+
 from .orchestrator import (
     AgentOrchestrator,
     OrchestratorRequest,
@@ -49,6 +71,22 @@ __all__ = [
     # Workout Agent
     "WorkoutDesignAgent",
     "get_workout_agent",
+    # Cycling Agent (Phase 3)
+    "CyclingWorkoutAgent",
+    "CyclingAthleteContext",
+    "CyclingWorkoutInterval",
+    "get_cycling_agent",
+    # Swim Agent (Phase 3)
+    "SwimWorkoutAgent",
+    "get_swim_agent",
+    # Triathlon Agent (Phase 3)
+    "TriathlonAgent",
+    "TriathlonAthleteContext",
+    "BrickWorkout",
+    "MultiSportDay",
+    "RaceDistance",
+    "FatigueCarryoverModel",
+    "get_triathlon_agent",
     # Orchestrator
     "AgentOrchestrator",
     "OrchestratorRequest",
