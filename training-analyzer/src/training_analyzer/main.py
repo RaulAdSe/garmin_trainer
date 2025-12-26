@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
 from .api.routes import athlete, analysis, plans, workouts, export
+from .api.exception_handlers import register_exception_handlers
 
 
 @asynccontextmanager
@@ -38,6 +39,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register exception handlers
+register_exception_handlers(app)
 
 # Include routers
 app.include_router(athlete.router, prefix="/api/v1/athlete", tags=["athlete"])

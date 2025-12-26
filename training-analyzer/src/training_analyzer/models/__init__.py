@@ -1,5 +1,14 @@
 """Data models for the Reactive Training App."""
 
+# Import the unified AthleteContext from the dedicated module
+from .athlete_context import (
+    AthleteContext,
+    # Backward compatibility aliases
+    AnalysisAthleteContext,
+    PlanAthleteContext,
+    WorkoutAthleteContext,
+)
+
 from .analysis import (
     # Enums
     AnalysisStatus,
@@ -16,7 +25,6 @@ from .analysis import (
     WorkoutInsight,
     AnalysisContext,
     # Dataclasses
-    AthleteContext as AnalysisAthleteContext,
     WorkoutData,
 )
 
@@ -31,7 +39,6 @@ from .plans import (
     PlannedSession,
     TrainingWeek,
     PlanConstraints,
-    AthleteContext,
     TrainingPlan,
     PlanAdaptation,
     # Pydantic schemas for API
@@ -56,10 +63,14 @@ from .workouts import (
     WorkoutInterval,
     StructuredWorkout,
     WorkoutDesignRequest,
-    AthleteContext as WorkoutAthleteContext,
 )
 
 __all__ = [
+    # Unified AthleteContext (and backward compatibility aliases)
+    "AthleteContext",
+    "AnalysisAthleteContext",
+    "PlanAthleteContext",
+    "WorkoutAthleteContext",
     # Analysis Enums
     "AnalysisStatus",
     "WorkoutExecutionRating",
@@ -75,7 +86,6 @@ __all__ = [
     "WorkoutInsight",
     "AnalysisContext",
     # Analysis Dataclasses
-    "AnalysisAthleteContext",
     "WorkoutData",
     # Plan Enums
     "PeriodizationType",
@@ -87,7 +97,6 @@ __all__ = [
     "PlannedSession",
     "TrainingWeek",
     "PlanConstraints",
-    "AthleteContext",
     "TrainingPlan",
     "PlanAdaptation",
     # Plan Pydantic schemas for API
@@ -109,5 +118,4 @@ __all__ = [
     "WorkoutInterval",
     "StructuredWorkout",
     "WorkoutDesignRequest",
-    "WorkoutAthleteContext",
 ]

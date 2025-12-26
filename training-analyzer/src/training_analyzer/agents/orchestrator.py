@@ -18,8 +18,9 @@ from .plan_agent import PlanAgent, PlanState
 from .workout_agent import WorkoutDesignAgent
 
 from ..llm.providers import ModelType
-from ..models.plans import AthleteContext as PlanAthleteContext, TrainingPlan
-from ..models.workouts import AthleteContext as WorkoutAthleteContext, StructuredWorkout
+from ..models.athlete_context import AthleteContext
+from ..models.plans import TrainingPlan
+from ..models.workouts import StructuredWorkout
 
 
 class TaskType(str, Enum):
@@ -266,14 +267,14 @@ class AgentOrchestrator(BaseAgent[OrchestratorState]):
             constraints = state.get("task_data", {}).get("constraints", {})
             athlete_context = state.get("athlete_context", {})
 
-            # Convert to plan context format
-            plan_context = PlanAthleteContext(
+            # Convert to unified AthleteContext format
+            plan_context = AthleteContext(
                 ctl=athlete_context.get("ctl", 40.0),
                 atl=athlete_context.get("atl", 40.0),
                 tsb=athlete_context.get("tsb", 0.0),
                 max_hr=athlete_context.get("max_hr", 185),
                 rest_hr=athlete_context.get("rest_hr", 55),
-                lthr=athlete_context.get("lthr", 165),
+                threshold_hr=athlete_context.get("lthr", athlete_context.get("threshold_hr", 165)),
             )
 
             # Run plan generation
@@ -297,11 +298,11 @@ class AgentOrchestrator(BaseAgent[OrchestratorState]):
             workout_request = state.get("task_data", {}).get("workout_request", {})
             athlete_context = state.get("athlete_context", {})
 
-            # Convert to workout context format
-            workout_context = WorkoutAthleteContext(
+            # Convert to unified AthleteContext format
+            workout_context = AthleteContext(
                 max_hr=athlete_context.get("max_hr", 185),
                 rest_hr=athlete_context.get("rest_hr", 55),
-                lthr=athlete_context.get("lthr", 165),
+                threshold_hr=athlete_context.get("lthr", athlete_context.get("threshold_hr", 165)),
                 ctl=athlete_context.get("ctl", 40.0),
                 atl=athlete_context.get("atl", 40.0),
                 tsb=athlete_context.get("tsb", 0.0),

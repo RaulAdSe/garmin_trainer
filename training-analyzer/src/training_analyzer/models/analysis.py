@@ -5,7 +5,13 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, List, Dict, Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+
+def to_camel(string: str) -> str:
+    """Convert snake_case to camelCase."""
+    components = string.split("_")
+    return components[0] + "".join(x.title() for x in components[1:])
 
 
 class AnalysisStatus(str, Enum):
@@ -30,36 +36,50 @@ class WorkoutExecutionRating(str, Enum):
 
 class AnalysisRequest(BaseModel):
     """Request for workout analysis."""
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        json_schema_extra={
+            "example": {
+                "workoutId": "activity_12345",
+                "includeSimilar": True,
+                "forceRefresh": False,
+            }
+        },
+    )
+
     workout_id: str = Field(..., description="ID of the workout to analyze")
     include_similar: bool = Field(default=True, description="Include similar workout comparison")
     force_refresh: bool = Field(default=False, description="Force re-analysis even if cached")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "workout_id": "activity_12345",
-                "include_similar": True,
-                "force_refresh": False,
-            }
-        }
-
 
 class BatchAnalysisRequest(BaseModel):
     """Request for batch workout analysis."""
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        json_schema_extra={
+            "example": {
+                "workoutIds": ["activity_123", "activity_456", "activity_789"],
+                "forceRefresh": False,
+            }
+        },
+    )
+
     workout_ids: List[str] = Field(..., description="List of workout IDs to analyze")
     force_refresh: bool = Field(default=False, description="Force re-analysis even if cached")
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "workout_ids": ["activity_123", "activity_456", "activity_789"],
-                "force_refresh": False,
-            }
-        }
 
 
 class WorkoutInsight(BaseModel):
     """A single insight about the workout."""
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+    )
+
     category: str = Field(..., description="Category of insight (pace, heart_rate, effort, recovery)")
     observation: str = Field(..., description="The observation")
     is_positive: bool = Field(..., description="Whether this is a positive observation")
@@ -68,6 +88,12 @@ class WorkoutInsight(BaseModel):
 
 class AnalysisContext(BaseModel):
     """Context used for the analysis."""
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+    )
+
     ctl: Optional[float] = Field(None, description="Chronic Training Load")
     atl: Optional[float] = Field(None, description="Acute Training Load")
     tsb: Optional[float] = Field(None, description="Training Stress Balance")
@@ -80,14 +106,53 @@ class AnalysisContext(BaseModel):
 
 class WorkoutAnalysisResult(BaseModel):
     """Complete analysis result for a workout."""
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        json_schema_extra={
+            "example": {
+                "workoutId": "activity_12345",
+                "analysisId": "analysis_abc123",
+                "status": "completed",
+                "summary": "Strong tempo run with consistent pacing. Heart rate well-controlled in Zone 3.",
+                "whatWentWell": [
+                    "Consistent pace throughout - negative split of 10 sec/km",
+                    "Heart rate stayed in target Zone 3 for 85% of the run",
+                ],
+                "improvements": [
+                    "Slight cardiac drift in last 10 minutes",
+                    "Cadence dropped in final kilometer",
+                ],
+                "recommendations": [
+                    "Consider a longer warmup to reduce initial HR spike",
+                    "Add 30-second pickups in the final km to practice finishing strong",
+                ],
+                "executionRating": "good",
+                "trainingFit": "Excellent timing - you're fresh after two easy days",
+                "modelUsed": "gpt-5-mini",
+            }
+        },
+    )
+
     workout_id: str = Field(..., description="ID of the analyzed workout")
     analysis_id: str = Field(..., description="Unique ID for this analysis")
     status: AnalysisStatus = Field(..., description="Status of the analysis")
 
     # Analysis content
     summary: str = Field(default="", description="2-3 sentence summary of the workout")
-    what_worked_well: List[str] = Field(default_factory=list, description="List of positive observations")
-    observations: List[str] = Field(default_factory=list, description="Notable patterns or concerns")
+    # Note: what_worked_well serializes to whatWentWell for frontend compatibility
+    what_worked_well: List[str] = Field(
+        default_factory=list,
+        description="List of positive observations",
+        serialization_alias="whatWentWell",
+    )
+    # Note: observations serializes to improvements for frontend compatibility
+    observations: List[str] = Field(
+        default_factory=list,
+        description="Notable patterns or concerns",
+        serialization_alias="improvements",
+    )
     recommendations: List[str] = Field(default_factory=list, description="Actionable suggestions")
 
     # Structured insights
@@ -109,54 +174,39 @@ class WorkoutAnalysisResult(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     cached_at: Optional[datetime] = Field(None, description="When this was cached")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "workout_id": "activity_12345",
-                "analysis_id": "analysis_abc123",
-                "status": "completed",
-                "summary": "Strong tempo run with consistent pacing. Heart rate well-controlled in Zone 3.",
-                "what_worked_well": [
-                    "Consistent pace throughout - negative split of 10 sec/km",
-                    "Heart rate stayed in target Zone 3 for 85% of the run",
-                ],
-                "observations": [
-                    "Slight cardiac drift in last 10 minutes",
-                    "Cadence dropped in final kilometer",
-                ],
-                "recommendations": [
-                    "Consider a longer warmup to reduce initial HR spike",
-                    "Add 30-second pickups in the final km to practice finishing strong",
-                ],
-                "execution_rating": "good",
-                "training_fit": "Excellent timing - you're fresh after two easy days",
-                "model_used": "gpt-5-mini",
-            }
-        }
-
 
 class AnalysisResponse(BaseModel):
     """API response wrapper for analysis."""
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        json_schema_extra={
+            "example": {
+                "success": True,
+                "analysis": {
+                    "workoutId": "activity_12345",
+                    "summary": "Strong tempo run...",
+                },
+                "cached": False,
+            }
+        },
+    )
+
     success: bool = Field(..., description="Whether the analysis succeeded")
     analysis: Optional[WorkoutAnalysisResult] = Field(None, description="The analysis result")
     error: Optional[str] = Field(None, description="Error message if failed")
     cached: bool = Field(default=False, description="Whether this was served from cache")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "success": True,
-                "analysis": {
-                    "workout_id": "activity_12345",
-                    "summary": "Strong tempo run...",
-                },
-                "cached": False,
-            }
-        }
-
 
 class BatchAnalysisResponse(BaseModel):
     """Response for batch analysis."""
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+    )
+
     analyses: List[AnalysisResponse] = Field(..., description="List of analysis results")
     total_count: int = Field(..., description="Total workouts requested")
     success_count: int = Field(..., description="Number of successful analyses")
@@ -166,6 +216,12 @@ class BatchAnalysisResponse(BaseModel):
 
 class RecentWorkoutWithAnalysis(BaseModel):
     """A workout with its analysis summary."""
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+    )
+
     workout_id: str
     date: str
     activity_type: str
@@ -180,6 +236,12 @@ class RecentWorkoutWithAnalysis(BaseModel):
 
 class RecentWorkoutsResponse(BaseModel):
     """Response for recent workouts with analysis."""
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+    )
+
     workouts: List[RecentWorkoutWithAnalysis]
     count: int
 

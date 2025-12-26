@@ -16,14 +16,14 @@ import base64
 from fastapi.testclient import TestClient
 
 from training_analyzer.main import app
-from training_analyzer.api.routes.workouts import _workout_store
+from training_analyzer.db.repositories.workout_repository import get_workout_repository
 from training_analyzer.models.workouts import (
-    AthleteContext,
     IntervalType,
     StructuredWorkout,
     WorkoutInterval,
     WorkoutSport,
 )
+from training_analyzer.models.athlete_context import AthleteContext
 
 
 # ============================================================================
@@ -92,21 +92,22 @@ def sample_workout():
         estimated_load=75.0,
     )
 
-    # Store the workout
-    _workout_store[workout.id] = workout
+    # Store the workout using the repository
+    repo = get_workout_repository()
+    repo.save(workout)
 
     yield workout
 
     # Cleanup
-    if workout.id in _workout_store:
-        del _workout_store[workout.id]
+    repo.delete(workout.id)
 
 
 @pytest.fixture(autouse=True)
 def cleanup_workout_store():
     """Clean up workout store after each test."""
     yield
-    _workout_store.clear()
+    # Note: In production, we would use a test database
+    # For now, we rely on test-specific cleanup in each fixture
 
 
 # ============================================================================

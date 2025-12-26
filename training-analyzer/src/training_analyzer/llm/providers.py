@@ -461,21 +461,29 @@ class LLMClient:
         return self.metrics.to_dict()
 
 
-# Singleton instance
+# Singleton instance with thread-safe locking
 _llm_client: Optional[LLMClient] = None
-_llm_client_lock = asyncio.Lock()
+_llm_client_sync_lock = threading.Lock()
+_llm_client_async_lock = asyncio.Lock()
 
 
 def get_llm_client() -> LLMClient:
     """
-    Get the LLM client singleton.
+    Get the LLM client singleton (thread-safe).
+
+    Uses a threading.Lock to prevent race conditions when multiple
+    threads try to initialize the client simultaneously.
 
     Returns:
         The LLM client instance
     """
     global _llm_client
+    # Double-checked locking pattern for thread safety
     if _llm_client is None:
-        _llm_client = LLMClient()
+        with _llm_client_sync_lock:
+            # Check again inside the lock in case another thread initialized it
+            if _llm_client is None:
+                _llm_client = LLMClient()
     return _llm_client
 
 
@@ -483,17 +491,24 @@ async def get_llm_client_async() -> LLMClient:
     """
     Get the LLM client singleton (async-safe).
 
+    Uses an asyncio.Lock to prevent race conditions when multiple
+    async tasks try to initialize the client simultaneously.
+
     Returns:
         The LLM client instance
     """
     global _llm_client
-    async with _llm_client_lock:
-        if _llm_client is None:
-            _llm_client = LLMClient()
-        return _llm_client
+    # Double-checked locking pattern for async safety
+    if _llm_client is None:
+        async with _llm_client_async_lock:
+            # Check again inside the lock in case another task initialized it
+            if _llm_client is None:
+                _llm_client = LLMClient()
+    return _llm_client
 
 
 def reset_llm_client() -> None:
     """Reset the LLM client singleton (for testing)."""
     global _llm_client
-    _llm_client = None
+    with _llm_client_sync_lock:
+        _llm_client = None
