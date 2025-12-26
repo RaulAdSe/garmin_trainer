@@ -250,13 +250,33 @@ async def _stream_analysis(
 
     llm = get_llm_client()
 
+    import json as json_lib
+
     async def generate():
+        full_content = ""
         async for chunk in llm.stream_completion(
             system=system_prompt,
             user=user_prompt,
             model=ModelType.SMART,
         ):
-            yield chunk
+            full_content += chunk
+            # Send SSE format that frontend expects
+            yield f"data: {json_lib.dumps({'type': 'content', 'content': chunk})}\n\n"
+
+        # Send done event with a simple analysis structure
+        analysis = {
+            "id": workout_dict.get("activity_id", ""),
+            "workoutId": workout_dict.get("activity_id", ""),
+            "summary": full_content,
+            "whatWentWell": [],
+            "improvements": [],
+            "trainingContext": "",
+            "sections": [],
+            "generatedAt": datetime.now().isoformat(),
+            "modelUsed": "gpt-4o",
+        }
+        yield f"data: {json_lib.dumps({'type': 'done', 'analysis': analysis})}\n\n"
+        yield "data: [DONE]\n\n"
 
     return StreamingResponse(
         generate(),

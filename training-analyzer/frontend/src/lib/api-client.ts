@@ -37,8 +37,8 @@ class ApiClientError extends Error {
   public details?: Record<string, unknown>;
   public status: number;
 
-  constructor(message: string, status: number, code?: string, details?: Record<string, unknown>) {
-    super(message);
+  constructor(message: string | undefined, status: number, code?: string, details?: Record<string, unknown>) {
+    super(message || `API Error (${status})`);
     this.name = 'ApiClientError';
     this.status = status;
     this.code = code;
@@ -201,7 +201,7 @@ export async function getWorkout(workoutId: string): Promise<Workout> {
 
 export async function getWorkoutAnalysis(workoutId: string): Promise<WorkoutAnalysis | null> {
   try {
-    const response = await fetch(`${API_BASE}/workouts/${workoutId}/analysis`);
+    const response = await fetch(`${API_BASE}/analysis/workout/${workoutId}`);
     if (response.status === 404) {
       return null;
     }
@@ -217,14 +217,14 @@ export async function getWorkoutAnalysis(workoutId: string): Promise<WorkoutAnal
 export async function analyzeWorkout(
   request: AnalyzeWorkoutRequest
 ): Promise<WorkoutAnalysis> {
-  const response = await fetch(`${API_BASE}/workouts/${request.workoutId}/analyze`, {
+  const response = await fetch(`${API_BASE}/analysis/workout/${request.workoutId}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       include_context: request.includeContext ?? true,
-      regenerate: request.regenerate ?? false,
+      force_refresh: request.regenerate ?? false,
     }),
   });
   return handleResponse<WorkoutAnalysis>(response);
@@ -242,7 +242,7 @@ export function analyzeWorkoutStream(
   const fetchStream = async () => {
     try {
       const response = await fetch(
-        `${API_BASE}/workouts/${request.workoutId}/analyze/stream`,
+        `${API_BASE}/analysis/workout/${request.workoutId}?stream=true`,
         {
           method: 'POST',
           headers: {
@@ -251,7 +251,7 @@ export function analyzeWorkoutStream(
           },
           body: JSON.stringify({
             include_context: request.includeContext ?? true,
-            regenerate: request.regenerate ?? false,
+            force_refresh: request.regenerate ?? false,
           }),
           signal: controller.signal,
         }
