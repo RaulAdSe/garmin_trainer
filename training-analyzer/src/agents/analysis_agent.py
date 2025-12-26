@@ -44,6 +44,10 @@ class AnalysisState(TypedDict):
     status: str
     error: Optional[str]
 
+    # Formatted prompts (set by prepare_context)
+    formatted_context: Optional[str]
+    formatted_workout: Optional[str]
+
     # LLM outputs
     raw_analysis: Optional[str]
     parsed_analysis: Optional[Dict[str, Any]]
@@ -374,6 +378,8 @@ class AnalysisAgent:
             "analysis_id": str(uuid.uuid4()),
             "status": "initialized",
             "error": None,
+            "formatted_context": None,
+            "formatted_workout": None,
             "raw_analysis": None,
             "parsed_analysis": None,
             "result": None,

@@ -54,9 +54,9 @@ def find_wellness_db() -> Optional[Path]:
             return path
 
     # Try to find relative to this file
-    # training-analyzer/src/training_analyzer/services/coach.py
+    # training-analyzer/src/services/coach.py
     # -> whoop-dashboard/wellness.db
-    project_root = Path(__file__).parent.parent.parent.parent.parent
+    project_root = Path(__file__).parent.parent.parent.parent
     possible_paths = [
         project_root / "whoop-dashboard" / "wellness.db",
         project_root / "wellness.db",

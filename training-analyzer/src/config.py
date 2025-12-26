@@ -8,12 +8,11 @@ from pydantic_settings import BaseSettings
 
 
 # Path calculations:
-# __file__ = training-analyzer/src/training_analyzer/config.py
-# .parent = training-analyzer/src/training_analyzer/
-# .parent.parent = training-analyzer/src/
-# .parent.parent.parent = training-analyzer/
-# .parent.parent.parent.parent = garmin_insights/ (project root)
-PACKAGE_ROOT = Path(__file__).parent.parent.parent  # training-analyzer/
+# __file__ = training-analyzer/src/config.py
+# .parent = training-analyzer/src/
+# .parent.parent = training-analyzer/
+# .parent.parent.parent = garmin_insights/ (project root)
+PACKAGE_ROOT = Path(__file__).parent.parent  # training-analyzer/
 PROJECT_ROOT = PACKAGE_ROOT.parent  # garmin_insights/
 
 
@@ -36,8 +35,8 @@ class Settings(BaseSettings):
     garmin_password: str = ""
 
     # Model selection
-    llm_model_fast: str = "gpt-5-nano"  # For quick tasks
-    llm_model_smart: str = "gpt-5-mini"  # For complex analysis
+    llm_model_fast: str = "gpt-4o-mini"  # For quick tasks
+    llm_model_smart: str = "gpt-4o"  # For complex analysis
 
     # Database paths
     project_root: Path = PROJECT_ROOT

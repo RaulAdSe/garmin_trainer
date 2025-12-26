@@ -8,7 +8,8 @@ from functools import lru_cache
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
-from ..deps import get_coach_service, get_training_db
+from ..deps import get_coach_service, get_training_db, get_workout_repository
+from ...db.repositories.workout_repository import WorkoutRepository
 from ...llm.providers import get_llm_client, ModelType
 from ...llm.context_builder import build_athlete_context_prompt, format_workout_for_prompt
 from ...llm.prompts import (
@@ -145,8 +146,8 @@ async def analyze_workout(
                     cached=True,
                 )
 
-        # Get workout data
-        workout = training_db.get_activity(workout_id)
+        # Get workout data from activity metrics
+        workout = training_db.get_activity_metrics(workout_id)
         if not workout:
             raise HTTPException(status_code=404, detail=f"Workout {workout_id} not found")
 

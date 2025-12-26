@@ -42,14 +42,14 @@ class AnalysisRequest(BaseModel):
         populate_by_name=True,
         json_schema_extra={
             "example": {
-                "workoutId": "activity_12345",
                 "includeSimilar": True,
                 "forceRefresh": False,
             }
         },
     )
 
-    workout_id: str = Field(..., description="ID of the workout to analyze")
+    # workout_id is optional here since it's typically in the URL path
+    workout_id: Optional[str] = Field(default=None, description="ID of the workout to analyze")
     include_similar: bool = Field(default=True, description="Include similar workout comparison")
     force_refresh: bool = Field(default=False, description="Force re-analysis even if cached")
 
@@ -416,8 +416,8 @@ class WorkoutData:
         """Format pace as min:sec/km."""
         if not self.pace_sec_per_km:
             return "N/A"
-        pace_min = self.pace_sec_per_km // 60
-        pace_sec = self.pace_sec_per_km % 60
+        pace_min = int(self.pace_sec_per_km // 60)
+        pace_sec = int(self.pace_sec_per_km % 60)
         return f"{pace_min}:{pace_sec:02d}/km"
 
     def format_zone_distribution(self) -> str:
@@ -441,8 +441,8 @@ class WorkoutData:
         """Format CSS pace as min:sec/100m."""
         if not self.css_pace_sec:
             return "N/A"
-        pace_min = self.css_pace_sec // 60
-        pace_sec = self.css_pace_sec % 60
+        pace_min = int(self.css_pace_sec // 60)
+        pace_sec = int(self.css_pace_sec % 60)
         return f"{pace_min}:{pace_sec:02d}/100m"
 
     def to_prompt_data(self) -> str:
