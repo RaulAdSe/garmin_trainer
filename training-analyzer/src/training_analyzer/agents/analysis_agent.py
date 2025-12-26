@@ -6,9 +6,7 @@ that is contextualized with the athlete's current training state.
 """
 
 import json
-import re
 import uuid
-from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional, TypedDict
 
@@ -16,10 +14,8 @@ from langgraph.graph import StateGraph, END
 
 from ..llm.providers import get_llm_client, ModelType
 from ..llm.prompts import (
-    WORKOUT_ANALYSIS_SYSTEM,
-    WORKOUT_ANALYSIS_USER,
-    WORKOUT_ANALYSIS_PARSER_SYSTEM,
-    WORKOUT_ANALYSIS_PARSER_USER,
+    WORKOUT_ANALYSIS_SYSTEM_JSON,
+    WORKOUT_ANALYSIS_USER_JSON,
 )
 from ..models.analysis import (
     AnalysisContext,
@@ -174,10 +170,10 @@ class AnalysisAgent:
             }
 
     async def _generate_analysis(self, state: AnalysisState) -> Dict[str, Any]:
-        """Generate analysis using LLM."""
+        """Generate analysis using LLM with JSON mode."""
         try:
             # Build prompts
-            system_prompt = WORKOUT_ANALYSIS_SYSTEM.format(
+            system_prompt = WORKOUT_ANALYSIS_SYSTEM_JSON.format(
                 athlete_context=state.get("formatted_context", "No context available"),
             )
 
@@ -193,13 +189,13 @@ class AnalysisAgent:
             else:
                 similar_text = "No similar recent workouts available for comparison"
 
-            user_prompt = WORKOUT_ANALYSIS_USER.format(
+            user_prompt = WORKOUT_ANALYSIS_USER_JSON.format(
                 workout_data=state.get("formatted_workout", "No workout data"),
                 similar_workouts=similar_text,
             )
 
-            # Get completion
-            response = await self.llm_client.completion(
+            # Get JSON completion using JSON mode
+            parsed_response = await self.llm_client.completion_json(
                 system=system_prompt,
                 user=user_prompt,
                 model=ModelType.SMART,
@@ -209,7 +205,8 @@ class AnalysisAgent:
 
             return {
                 **state,
-                "raw_analysis": response,
+                "raw_analysis": json.dumps(parsed_response),
+                "parsed_analysis": parsed_response,
                 "status": "generated",
             }
 
@@ -221,164 +218,43 @@ class AnalysisAgent:
             }
 
     async def _parse_response(self, state: AnalysisState) -> Dict[str, Any]:
-        """Parse LLM response into structured format."""
+        """
+        Parse LLM response into structured format.
+
+        Since we use JSON mode in _generate_analysis, the parsed_analysis
+        is already available. This method just validates the structure.
+        """
         try:
-            raw_response = state.get("raw_analysis", "")
+            # parsed_analysis is already set by _generate_analysis when using JSON mode
+            parsed = state.get("parsed_analysis", {})
 
-            # Try to parse the structured response
-            parsed = self._extract_sections(raw_response)
-
-            # If parsing failed, use LLM to help parse
-            if not parsed.get("summary"):
-                parsed = await self._llm_assisted_parse(raw_response)
+            # Ensure all required fields have defaults
+            validated = {
+                "summary": parsed.get("summary", ""),
+                "what_worked_well": parsed.get("what_worked_well", []),
+                "observations": parsed.get("observations", []),
+                "recommendations": parsed.get("recommendations", []),
+                "execution_rating": parsed.get("execution_rating"),
+                "training_fit": parsed.get("training_fit", ""),
+            }
 
             return {
                 **state,
-                "parsed_analysis": parsed,
+                "parsed_analysis": validated,
                 "status": "parsed",
             }
 
         except Exception as e:
-            # If parsing fails, try to extract what we can
+            # If validation fails, return empty structure
             return {
                 **state,
                 "parsed_analysis": {
-                    "summary": state.get("raw_analysis", "")[:500],
+                    "summary": "",
                     "what_worked_well": [],
                     "observations": [],
                     "recommendations": [],
                 },
                 "status": "parsed_with_fallback",
-            }
-
-    def _extract_sections(self, text: str) -> Dict[str, Any]:
-        """Extract structured sections from LLM response."""
-        result = {
-            "summary": "",
-            "what_worked_well": [],
-            "observations": [],
-            "recommendations": [],
-            "execution_rating": None,
-            "training_fit": "",
-        }
-
-        # Extract summary
-        summary_match = re.search(
-            r"\*\*Summary\*\*:?\s*(.+?)(?=\n\n|\*\*|$)",
-            text,
-            re.DOTALL | re.IGNORECASE
-        )
-        if summary_match:
-            result["summary"] = summary_match.group(1).strip()
-
-        # Extract what worked well
-        worked_match = re.search(
-            r"\*\*What Worked Well\*\*:?\s*(.+?)(?=\*\*|$)",
-            text,
-            re.DOTALL | re.IGNORECASE
-        )
-        if worked_match:
-            items = self._extract_list_items(worked_match.group(1))
-            result["what_worked_well"] = items
-
-        # Extract observations
-        obs_match = re.search(
-            r"\*\*Observations?\*\*:?\s*(.+?)(?=\*\*|$)",
-            text,
-            re.DOTALL | re.IGNORECASE
-        )
-        if obs_match:
-            items = self._extract_list_items(obs_match.group(1))
-            result["observations"] = items
-
-        # Extract recommendations
-        rec_match = re.search(
-            r"\*\*Recommendations?\*\*:?\s*(.+?)(?=\*\*|$)",
-            text,
-            re.DOTALL | re.IGNORECASE
-        )
-        if rec_match:
-            items = self._extract_list_items(rec_match.group(1))
-            result["recommendations"] = items
-
-        # Try to infer execution rating from text
-        text_lower = text.lower()
-        if any(word in text_lower for word in ["excellent", "outstanding", "perfect"]):
-            result["execution_rating"] = "excellent"
-        elif any(word in text_lower for word in ["good", "solid", "well done", "well executed"]):
-            result["execution_rating"] = "good"
-        elif any(word in text_lower for word in ["fair", "adequate", "ok"]):
-            result["execution_rating"] = "fair"
-        elif any(word in text_lower for word in ["needs improvement", "concern", "struggling"]):
-            result["execution_rating"] = "needs_improvement"
-
-        return result
-
-    def _extract_list_items(self, text: str) -> List[str]:
-        """Extract bullet points or list items from text."""
-        items = []
-
-        # Match various list formats
-        patterns = [
-            r"^[-*]\s*(.+)$",  # Markdown bullets
-            r"^\d+\.\s*(.+)$",  # Numbered list
-            r"^[>•]\s*(.+)$",  # Other bullets
-        ]
-
-        for line in text.strip().split("\n"):
-            line = line.strip()
-            if not line:
-                continue
-
-            matched = False
-            for pattern in patterns:
-                match = re.match(pattern, line, re.MULTILINE)
-                if match:
-                    items.append(match.group(1).strip())
-                    matched = True
-                    break
-
-            # If no pattern matched but line has content, try to use it
-            if not matched and line and not line.startswith("**"):
-                items.append(line)
-
-        return items[:5]  # Limit to 5 items
-
-    async def _llm_assisted_parse(self, raw_response: str) -> Dict[str, Any]:
-        """Use LLM to help parse a poorly formatted response."""
-        try:
-            system_prompt = WORKOUT_ANALYSIS_PARSER_SYSTEM
-            user_prompt = WORKOUT_ANALYSIS_PARSER_USER.format(
-                raw_response=raw_response
-            )
-
-            response = await self.llm_client.completion(
-                system=system_prompt,
-                user=user_prompt,
-                model=ModelType.FAST,
-                max_tokens=800,
-                temperature=0.2,
-            )
-
-            # Try to parse JSON from response
-            json_match = re.search(r"\{.*\}", response, re.DOTALL)
-            if json_match:
-                return json.loads(json_match.group())
-
-            # Fallback
-            return {
-                "summary": raw_response[:500],
-                "what_worked_well": [],
-                "observations": [],
-                "recommendations": [],
-            }
-
-        except Exception:
-            return {
-                "summary": raw_response[:500],
-                "what_worked_well": [],
-                "observations": [],
-                "recommendations": [],
             }
 
     async def _build_result(self, state: AnalysisState) -> Dict[str, Any]:
@@ -436,7 +312,7 @@ class AnalysisAgent:
                 execution_rating=execution_rating,
                 training_fit=parsed.get("training_fit"),
                 context=analysis_context,
-                model_used="gpt-5-mini",
+                model_used=self.llm_client.get_model_name(ModelType.SMART),
                 raw_response=state.get("raw_analysis"),
                 created_at=datetime.utcnow(),
             )
@@ -463,7 +339,7 @@ class AnalysisAgent:
             analysis_id=state.get("analysis_id", str(uuid.uuid4())),
             status=AnalysisStatus.FAILED,
             summary=f"Analysis failed: {state.get('error', 'Unknown error')}",
-            model_used="gpt-5-mini",
+            model_used=self.llm_client.get_model_name(ModelType.SMART),
             created_at=datetime.utcnow(),
         )
 

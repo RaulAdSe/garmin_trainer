@@ -32,8 +32,8 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
 
     # Model selection
-    llm_model_fast: str = "gpt-4o-mini"  # For quick tasks
-    llm_model_smart: str = "gpt-4o"  # For complex analysis
+    llm_model_fast: str = "gpt-5-nano"  # For quick tasks
+    llm_model_smart: str = "gpt-5-mini"  # For complex analysis
 
     # Database paths
     project_root: Path = PROJECT_ROOT

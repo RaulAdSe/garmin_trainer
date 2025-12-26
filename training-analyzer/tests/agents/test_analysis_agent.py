@@ -26,22 +26,28 @@ from training_analyzer.models.analysis import (
 @pytest.fixture
 def mock_llm_client():
     """Create a mock LLM client."""
-    client = AsyncMock()
-    client.completion.return_value = """**Summary**: Great tempo run with consistent pacing throughout. Heart rate stayed well controlled in Zone 3.
-
-**What Worked Well**:
-- Consistent pace throughout the workout
-- Heart rate stayed in target Zone 3 for 85% of the run
-- Good negative split in the final kilometer
-
-**Observations**:
-- Slight cardiac drift observed in the last 10 minutes
-- Cadence dropped slightly near the end
-
-**Recommendations**:
-- Consider a longer warmup to reduce initial HR spike
-- Practice maintaining cadence in the final km
-"""
+    client = MagicMock()
+    # Mock completion_json as an async method
+    client.completion_json = AsyncMock(return_value={
+        "summary": "Great tempo run with consistent pacing throughout. Heart rate stayed well controlled in Zone 3.",
+        "what_worked_well": [
+            "Consistent pace throughout the workout",
+            "Heart rate stayed in target Zone 3 for 85% of the run",
+            "Good negative split in the final kilometer"
+        ],
+        "observations": [
+            "Slight cardiac drift observed in the last 10 minutes",
+            "Cadence dropped slightly near the end"
+        ],
+        "recommendations": [
+            "Consider a longer warmup to reduce initial HR spike",
+            "Practice maintaining cadence in the final km"
+        ],
+        "execution_rating": "good",
+        "training_fit": "This workout aligns well with your current training phase"
+    })
+    # Mock get_model_name as a regular method (not async)
+    client.get_model_name = MagicMock(return_value="gpt-5-mini")
     return client
 
 
@@ -343,8 +349,9 @@ class TestAnalysisAgent:
         sample_athlete_context,
     ):
         """Test error handling when LLM fails."""
-        mock_client = AsyncMock()
-        mock_client.completion.side_effect = Exception("LLM API error")
+        mock_client = MagicMock()
+        mock_client.completion_json = AsyncMock(side_effect=Exception("LLM API error"))
+        mock_client.get_model_name = MagicMock(return_value="gpt-5-mini")
 
         agent = AnalysisAgent(llm_client=mock_client)
 
@@ -374,74 +381,6 @@ class TestAnalysisAgent:
 
         assert result.status == AnalysisStatus.COMPLETED
         assert result.context.similar_workouts_count == 0
-
-
-class TestAnalysisAgentParsing:
-    """Tests for response parsing in AnalysisAgent."""
-
-    def test_extract_sections_summary(self):
-        """Test summary extraction."""
-        agent = AnalysisAgent(llm_client=MagicMock())
-
-        text = """**Summary**: This is a great workout summary.
-
-**What Worked Well**:
-- Point 1
-- Point 2
-"""
-        result = agent._extract_sections(text)
-        assert "great workout summary" in result["summary"].lower()
-
-    def test_extract_sections_list_items(self):
-        """Test list item extraction."""
-        agent = AnalysisAgent(llm_client=MagicMock())
-
-        text = """**What Worked Well**:
-- First good thing
-- Second good thing
-- Third good thing
-
-**Observations**:
-- First observation
-"""
-        result = agent._extract_sections(text)
-        assert len(result["what_worked_well"]) == 3
-        assert "First good thing" in result["what_worked_well"]
-
-    def test_extract_sections_numbered_list(self):
-        """Test numbered list extraction."""
-        agent = AnalysisAgent(llm_client=MagicMock())
-
-        text = """**Recommendations**:
-1. First recommendation
-2. Second recommendation
-"""
-        result = agent._extract_sections(text)
-        assert len(result["recommendations"]) == 2
-
-    def test_extract_sections_execution_rating(self):
-        """Test execution rating inference."""
-        agent = AnalysisAgent(llm_client=MagicMock())
-
-        text = "This was an excellent workout with perfect pacing."
-        result = agent._extract_sections(text)
-        assert result["execution_rating"] == "excellent"
-
-        text2 = "Good solid effort today."
-        result2 = agent._extract_sections(text2)
-        assert result2["execution_rating"] == "good"
-
-    def test_extract_list_items_various_formats(self):
-        """Test extraction of various list formats."""
-        agent = AnalysisAgent(llm_client=MagicMock())
-
-        text = """- Bullet point
-* Star bullet
-1. Numbered item
-> Quote format
-"""
-        items = agent._extract_list_items(text)
-        assert len(items) >= 3
 
 
 # ============================================================================

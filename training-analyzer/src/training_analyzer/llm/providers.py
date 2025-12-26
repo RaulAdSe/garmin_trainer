@@ -14,6 +14,7 @@ from typing import AsyncIterator, Callable, Dict, Optional, TypeVar, Any
 import asyncio
 import logging
 import os
+import threading
 import time
 
 from openai import AsyncOpenAI, APIError, RateLimitError, APIConnectionError
@@ -325,6 +326,77 @@ class LLMClient:
             return content
 
         return await self._execute_with_retry(_make_request, "completion")
+
+    async def completion_json(
+        self,
+        system: str,
+        user: str,
+        model: ModelType = ModelType.SMART,
+        max_tokens: int = 1000,
+        temperature: float = 0.7,
+        timeout: Optional[float] = 60.0,
+    ) -> Dict[str, Any]:
+        """
+        Get a JSON completion from the LLM using JSON mode.
+
+        This method forces the LLM to return valid JSON output by setting
+        response_format={"type": "json_object"}.
+
+        Args:
+            system: System prompt (must mention JSON in the prompt)
+            user: User message
+            model: Model type to use
+            max_tokens: Maximum tokens in response
+            temperature: Sampling temperature
+            timeout: Request timeout in seconds
+
+        Returns:
+            The parsed JSON response as a dictionary
+
+        Raises:
+            LLMError: On failure
+            LLMResponseInvalidError: If response is not valid JSON
+        """
+        import json
+
+        async def _make_request() -> Dict[str, Any]:
+            response = await asyncio.wait_for(
+                self.client.chat.completions.create(
+                    model=self._get_model(model),
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user},
+                    ],
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    response_format={"type": "json_object"},
+                ),
+                timeout=timeout,
+            )
+            content = response.choices[0].message.content
+            if content is None:
+                raise LLMResponseInvalidError(message="Empty response from LLM")
+            try:
+                return json.loads(content)
+            except json.JSONDecodeError as e:
+                raise LLMResponseInvalidError(
+                    message=f"Invalid JSON response from LLM: {e}",
+                    details={"raw_content": content[:500]},
+                )
+
+        return await self._execute_with_retry(_make_request, "completion_json")
+
+    def get_model_name(self, model_type: ModelType = ModelType.SMART) -> str:
+        """
+        Get the model name for a given model type.
+
+        Args:
+            model_type: The model type to get the name for
+
+        Returns:
+            The model name string (e.g., "gpt-5-mini")
+        """
+        return self._get_model(model_type)
 
     async def stream_completion(
         self,
