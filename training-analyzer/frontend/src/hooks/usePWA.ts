@@ -214,9 +214,10 @@ export function usePWA(): UsePWAReturn {
       const response = await fetch('/api/push/vapid-public-key');
       const { publicKey } = await response.json();
 
+      const keyArray = urlBase64ToUint8Array(publicKey);
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey),
+        applicationServerKey: keyArray.buffer as ArrayBuffer,
       });
 
       // Send subscription to server
@@ -261,7 +262,7 @@ export function useOfflineData<T>(key: string, fetchFn: () => Promise<T>) {
 
       // Try to load from IndexedDB cache first
       try {
-        const cached = await getFromCache(key);
+        const cached = await getFromCache<T>(key);
         if (cached && !cancelled) {
           setData(cached);
           setIsFromCache(true);
