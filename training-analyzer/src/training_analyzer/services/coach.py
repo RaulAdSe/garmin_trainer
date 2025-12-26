@@ -620,3 +620,182 @@ class CoachService:
             "narrative": briefing["narrative"],
             "data_sources": briefing["data_sources"],
         }
+
+    def get_llm_context(
+        self, target_date: Optional[date] = None
+    ) -> Dict[str, Any]:
+        """
+        Get comprehensive athlete context for LLM prompt injection.
+
+        This method aggregates all relevant data for contextualizing
+        LLM responses with personalized athlete information.
+
+        Args:
+            target_date: Date for context (defaults to today)
+
+        Returns:
+            Dictionary with structured context for LLM prompts:
+            - fitness_metrics: CTL, ATL, TSB, ACWR, risk zone
+            - physiology: max_hr, rest_hr, lthr, age, gender
+            - hr_zones: Calculated HR zones (Karvonen method)
+            - training_paces: Paces based on race goals
+            - race_goals: Active race goals with progress
+            - readiness: Current readiness score and zone
+            - recent_activities: Summary of recent training
+        """
+        if target_date is None:
+            target_date = date.today()
+
+        date_str = target_date.isoformat()
+
+        # Get user profile for physiological data
+        profile = self.training_db.get_user_profile()
+
+        # Get fitness metrics
+        fitness_metrics = self.get_fitness_metrics(date_str)
+
+        # Get wellness and readiness
+        wellness_data = self.get_wellness_data(date_str)
+        recent_activities = self.get_recent_activities(days=7, end_date=target_date)
+
+        from ..recommendations.readiness import calculate_readiness
+
+        readiness = calculate_readiness(
+            wellness_data=wellness_data,
+            fitness_metrics=fitness_metrics,
+            recent_activities=recent_activities,
+            target_date=target_date,
+        )
+
+        # Build HR zones (Karvonen method)
+        hr_zones = []
+        if profile:
+            max_hr = profile.max_hr or 185
+            rest_hr = profile.rest_hr or 55
+            hr_reserve = max_hr - rest_hr
+
+            zone_defs = [
+                (1, "Recovery", 0.50, 0.60, "Active recovery, easy breathing"),
+                (2, "Aerobic", 0.60, 0.70, "Base building, conversational pace"),
+                (3, "Tempo", 0.70, 0.80, "Comfortably hard, lactate threshold"),
+                (4, "Threshold", 0.80, 0.90, "Hard, sustainable for 20-30 min"),
+                (5, "VO2max", 0.90, 1.00, "Very hard, 3-8 min efforts"),
+            ]
+
+            for zone_num, name, low_pct, high_pct, desc in zone_defs:
+                min_hr = int(rest_hr + hr_reserve * low_pct)
+                max_hr_zone = int(rest_hr + hr_reserve * high_pct)
+                hr_zones.append({
+                    "zone": zone_num,
+                    "name": name,
+                    "min_hr": min_hr,
+                    "max_hr": max_hr_zone,
+                    "description": desc,
+                })
+
+        # Get race goals and training paces
+        goals = self.training_db.get_race_goals()
+        training_paces = []
+        vdot = None
+
+        if goals:
+            from ..analysis.goals import (
+                calculate_training_paces,
+                calculate_vdot,
+                RaceGoal,
+                RaceDistance,
+            )
+
+            # Use first goal to calculate paces
+            first_goal_data = goals[0]
+            distance_str = str(first_goal_data.get("distance", "10k"))
+            distance = RaceDistance.from_string(distance_str) or RaceDistance.TEN_K
+            target_time = first_goal_data.get("target_time_sec", 3000)
+
+            # Parse race date
+            race_date_str = first_goal_data.get("race_date")
+            if race_date_str:
+                if isinstance(race_date_str, str):
+                    race_date_parsed = datetime.strptime(
+                        race_date_str, "%Y-%m-%d"
+                    ).date()
+                else:
+                    race_date_parsed = race_date_str
+            else:
+                race_date_parsed = date.today() + timedelta(days=90)
+
+            goal = RaceGoal(
+                race_date=race_date_parsed,
+                distance=distance,
+                target_time_sec=target_time,
+            )
+
+            # Calculate VDOT
+            vdot = calculate_vdot(target_time, distance)
+
+            # Calculate training paces
+            paces = calculate_training_paces(goal)
+            for pace_type, pace_data in paces.items():
+                training_paces.append({
+                    "name": pace_data["name"],
+                    "pace_sec_per_km": pace_data["pace_sec"],
+                    "pace_formatted": pace_data["pace_formatted"],
+                    "hr_zone": pace_data["hr_zone"],
+                    "description": pace_data["description"],
+                    "purpose": pace_data["purpose"],
+                })
+
+        # Build recent activity summary
+        recent_summary = {
+            "count": len(recent_activities),
+            "total_distance_km": sum(
+                a.get("distance_km", 0) or 0 for a in recent_activities
+            ),
+            "total_duration_min": sum(
+                a.get("duration_min", 0) or 0 for a in recent_activities
+            ),
+            "total_load": sum(
+                a.get("hrss", 0) or 0 for a in recent_activities
+            ),
+        }
+
+        # Build race goals response
+        race_goals_data = []
+        for goal_data in goals[:3]:  # Max 3 goals
+            race_goals_data.append({
+                "distance": goal_data.get("distance_name", goal_data.get("distance")),
+                "target_time_sec": goal_data.get("target_time_sec"),
+                "target_time_formatted": goal_data.get("target_time_formatted"),
+                "target_pace_formatted": goal_data.get("target_pace_formatted"),
+                "race_date": goal_data.get("race_date"),
+                "weeks_remaining": goal_data.get("weeks_until_race"),
+            })
+
+        return {
+            "fitness_metrics": fitness_metrics or {
+                "ctl": 0,
+                "atl": 0,
+                "tsb": 0,
+                "acwr": 1.0,
+                "risk_zone": "unknown",
+            },
+            "physiology": {
+                "max_hr": profile.max_hr if profile else 185,
+                "rest_hr": profile.rest_hr if profile else 55,
+                "lthr": profile.threshold_hr if profile else 165,
+                "age": profile.age if profile else None,
+                "gender": profile.gender if profile else None,
+                "weight_kg": profile.weight_kg if profile else None,
+                "vdot": round(vdot, 1) if vdot else None,
+            },
+            "hr_zones": hr_zones,
+            "training_paces": training_paces,
+            "race_goals": race_goals_data,
+            "readiness": {
+                "score": round(readiness.overall_score, 1),
+                "zone": readiness.zone,
+                "recommendation": readiness.recommendation,
+            },
+            "recent_activities": recent_summary,
+            "date": date_str,
+        }
