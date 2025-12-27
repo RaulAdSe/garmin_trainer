@@ -51,8 +51,8 @@ class AnalysisCache:
     """Database-backed cache for workout analyses with in-memory layer for speed."""
 
     ANALYSIS_TYPE = "workout_analysis"
-    # TTL: 30 days (analyses don't change unless regenerated)
-    TTL_SECONDS = 30 * 24 * 60 * 60
+    # No expiration - analyses are kept forever
+    TTL_SECONDS = None
 
     def __init__(self, max_memory_size: int = 100):
         self._memory_cache: Dict[str, WorkoutAnalysisResult] = {}

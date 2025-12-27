@@ -374,14 +374,20 @@ class AnalysisCacheRepository(CachingRepository[AnalysisCacheEntry]):
         Args:
             cache_key: The cache key to store under
             entity: The cache entry to store
-            ttl_seconds: Time-to-live in seconds (None for default)
+            ttl_seconds: Time-to-live in seconds. None means no expiration.
+                        Use -1 for default TTL.
         """
-        if ttl_seconds is None:
-            ttl_seconds = self.DEFAULT_TTL_SECONDS
-
         entity.cache_key = cache_key
         entity.created_at = datetime.now()
-        entity.expires_at = datetime.now() + timedelta(seconds=ttl_seconds)
+
+        if ttl_seconds is None:
+            # No expiration
+            entity.expires_at = None
+        elif ttl_seconds == -1:
+            # Use default TTL
+            entity.expires_at = datetime.now() + timedelta(seconds=self.DEFAULT_TTL_SECONDS)
+        else:
+            entity.expires_at = datetime.now() + timedelta(seconds=ttl_seconds)
 
         self.save(entity)
 
