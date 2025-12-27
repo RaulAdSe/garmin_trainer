@@ -15,9 +15,10 @@ interface WorkoutScoreBadgeProps {
   breakdown?: ScoreBreakdown;
   className?: string;
   size?: 'sm' | 'default';
+  tooltipPosition?: 'top' | 'bottom' | 'left' | 'right';
 }
 
-export function WorkoutScoreBadge({ score, breakdown, className, size = 'default' }: WorkoutScoreBadgeProps) {
+export function WorkoutScoreBadge({ score, breakdown, className, size = 'default', tooltipPosition = 'bottom' }: WorkoutScoreBadgeProps) {
   // Determine color based on score
   const { bgColor, textColor, ringColor, label } = useMemo(() => {
     if (score >= 85) {
@@ -123,7 +124,7 @@ export function WorkoutScoreBadge({ score, breakdown, className, size = 'default
   }
 
   return (
-    <Tooltip content={tooltipContent} position="bottom" delay={100}>
+    <Tooltip content={tooltipContent} position={tooltipPosition} delay={100}>
       {badge}
     </Tooltip>
   );

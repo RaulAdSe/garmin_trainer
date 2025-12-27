@@ -165,6 +165,7 @@ export function WorkoutCard({
                   score={overallScore}
                   breakdown={scoreBreakdown}
                   size="sm"
+                  tooltipPosition={isExpanded ? 'bottom' : 'right'}
                 />
               )}
             </div>
