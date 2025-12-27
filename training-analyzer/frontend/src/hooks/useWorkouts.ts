@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getWorkouts,
@@ -69,6 +69,7 @@ export function useWorkouts(options: UseWorkoutsOptions = {}): UseWorkoutsReturn
   const [filters, setFilters] = useState<WorkoutListFilters>(initialFilters);
   const [analyses, setAnalyses] = useState<Map<string, WorkoutAnalysis>>(new Map());
   const [loadingAnalysisId, setLoadingAnalysisId] = useState<string | null>(null);
+  const [fetchedAnalysisIds, setFetchedAnalysisIds] = useState<Set<string>>(new Set());
 
   // Fetch workouts
   const {
@@ -90,6 +91,49 @@ export function useWorkouts(options: UseWorkoutsOptions = {}): UseWorkoutsReturn
     enabled,
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
+
+  // Fetch cached analyses for loaded workouts
+  useEffect(() => {
+    if (!data?.items?.length) return;
+
+    // Find workouts that we haven't tried to fetch analyses for yet
+    const workoutsToFetch = data.items.filter(
+      (w) => !analyses.has(w.id) && !fetchedAnalysisIds.has(w.id)
+    );
+
+    if (workoutsToFetch.length === 0) return;
+
+    // Mark these as being fetched to avoid duplicate requests
+    setFetchedAnalysisIds((prev) => {
+      const next = new Set(prev);
+      workoutsToFetch.forEach((w) => next.add(w.id));
+      return next;
+    });
+
+    // Fetch analyses in parallel
+    const fetchAnalyses = async () => {
+      const results = await Promise.allSettled(
+        workoutsToFetch.map((w) => getWorkoutAnalysis(w.id))
+      );
+
+      const newAnalyses = new Map<string, WorkoutAnalysis>();
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled' && result.value) {
+          newAnalyses.set(workoutsToFetch[index].id, result.value);
+        }
+      });
+
+      if (newAnalyses.size > 0) {
+        setAnalyses((prev) => {
+          const next = new Map(prev);
+          newAnalyses.forEach((analysis, id) => next.set(id, analysis));
+          return next;
+        });
+      }
+    };
+
+    fetchAnalyses();
+  }, [data?.items, analyses, fetchedAnalysisIds]);
 
   // Analyze workout mutation
   const analyzeMutation = useMutation({
