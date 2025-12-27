@@ -961,16 +961,18 @@ async def list_workouts(
     Returns activities ordered by date (newest first).
     """
     from datetime import timedelta
-    # Get activities from the last 90 days
+    # Get all activities (use 5 years as practical max)
     end_date = date.today()
-    start_date = end_date - timedelta(days=90)
+    start_date = end_date - timedelta(days=365 * 5)
     activities = training_db.get_activities_range(
         start_date.isoformat(),
         end_date.isoformat()
     )
 
+    # Apply offset and limit for pagination
+    paginated = activities[offset:offset + limit]
     result = []
-    for act in activities[:limit]:
+    for act in paginated:
         duration_sec = int((act.duration_min or 0) * 60)
         distance_m = (act.distance_km or 0) * 1000
 

@@ -122,11 +122,12 @@ export async function getWorkouts(
 ): Promise<PaginatedResponse<Workout>> {
   const params = new URLSearchParams();
 
-  // The backend uses limit/offset, not page/pageSize
+  // Fetch all workouts from backend, paginate client-side
   const page = request.page || 1;
   const pageSize = request.pageSize || 20;
-  params.set('limit', String(pageSize));
-  params.set('offset', String((page - 1) * pageSize));
+  // Request a large limit to get all workouts for client-side pagination
+  params.set('limit', '1000');
+  params.set('offset', '0');
 
   const queryString = params.toString();
   const url = `${API_BASE}/workouts${queryString ? `?${queryString}` : ''}`;

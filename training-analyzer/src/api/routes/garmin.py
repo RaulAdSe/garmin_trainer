@@ -186,6 +186,25 @@ async def sync_garmin(
     - password: Your Garmin Connect password
     - days: Number of days to sync (default: 30, max: 365)
     """
+    import logging
+    import traceback
+    logger = logging.getLogger(__name__)
+
+    try:
+        return await _do_garmin_sync(request, training_db, logger)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unhandled error in sync_garmin: {e}")
+        logger.error(traceback.format_exc())
+        print(f"SYNC ERROR: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
+
+
+async def _do_garmin_sync(request, training_db, logger):
+    """Internal sync implementation."""
+    import traceback
+
     try:
         from garminconnect import Garmin, GarminConnectAuthenticationError
     except ImportError:
@@ -198,28 +217,64 @@ async def sync_garmin(
     try:
         client = Garmin(request.email, request.password)
         client.login()
-    except GarminConnectAuthenticationError:
+    except GarminConnectAuthenticationError as e:
         raise HTTPException(
             status_code=401,
             detail="Invalid Garmin Connect credentials. Please check your email and password."
         )
     except Exception as e:
+        error_msg = str(e).lower()
+        # Check if it's an auth error that wasn't caught as GarminConnectAuthenticationError
+        if "401" in error_msg or "unauthorized" in error_msg or "login failed" in error_msg:
+            raise HTTPException(
+                status_code=401,
+                detail="Garmin Connect authentication failed. Please check your credentials or try again later."
+            )
         raise HTTPException(
             status_code=500,
             detail=f"Failed to connect to Garmin Connect: {str(e)}"
         )
 
-    # Fetch activities
+    # Fetch activities with pagination (Garmin API limit is 1000 per request)
+    BATCH_SIZE = 200  # Safe batch size well under the 1000 limit
+    cutoff_date = datetime.now() - timedelta(days=request.days)
+    activities = []
+    start_index = 0
+
     try:
-        activities = client.get_activities(0, request.days * 3)  # Fetch extra to ensure coverage
+        while True:
+            batch = client.get_activities(start_index, BATCH_SIZE)
+
+            if not batch:
+                # No more activities
+                break
+
+            # Check if we've gone past our date range
+            last_activity = batch[-1]
+            last_date_str = last_activity.get("startTimeLocal", "")
+            if last_date_str:
+                try:
+                    last_date = datetime.fromisoformat(last_date_str.replace("Z", "+00:00"))
+                    if last_date.replace(tzinfo=None) < cutoff_date:
+                        # Add remaining activities that might be in range
+                        activities.extend(batch)
+                        break
+                except ValueError:
+                    pass
+
+            activities.extend(batch)
+
+            if len(batch) < BATCH_SIZE:
+                # Got fewer than requested, no more activities
+                break
+
+            start_index += BATCH_SIZE
+
     except Exception as e:
         raise HTTPException(
             status_code=500,
             detail=f"Failed to fetch activities from Garmin: {str(e)}"
         )
-
-    # Filter activities to the requested date range
-    cutoff_date = datetime.now() - timedelta(days=request.days)
 
     new_count = 0
     updated_count = 0
@@ -321,14 +376,19 @@ async def sync_garmin(
 
     total_synced = new_count + updated_count
 
-    return GarminSyncDetailedResponse(
-        success=True,
-        synced_count=total_synced,
-        new_activities=new_count,
-        updated_activities=updated_count,
-        message=f"Successfully synced {total_synced} activities ({new_count} new, {updated_count} updated)",
-        activities=synced_activities[:50],  # Limit to 50 most recent
-    )
+    try:
+        return GarminSyncDetailedResponse(
+            success=True,
+            synced_count=total_synced,
+            new_activities=new_count,
+            updated_activities=updated_count,
+            message=f"Successfully synced {total_synced} activities ({new_count} new, {updated_count} updated)",
+            activities=synced_activities[:50],  # Limit to 50 most recent
+        )
+    except Exception as e:
+        logger.error(f"Error building sync response: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Error building response: {str(e)}")
 
 
 class SyncedWellnessDay(BaseModel):
