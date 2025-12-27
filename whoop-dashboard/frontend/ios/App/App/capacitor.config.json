@@ -1,0 +1,20 @@
+{
+	"appId": "com.garmin.whoopdashboard",
+	"appName": "WHOOP Dashboard",
+	"webDir": "out",
+	"ios": {
+		"allowsLinkPreview": false
+	},
+	"plugins": {
+		"CapacitorHttp": {
+			"enabled": true
+		},
+		"CapacitorSQLite": {
+			"iosDatabaseLocation": "Library/CapacitorDatabase"
+		}
+	},
+	"packageClassList": [
+		"CAPBrowserPlugin",
+		"PreferencesPlugin"
+	]
+}

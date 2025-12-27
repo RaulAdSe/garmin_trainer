@@ -1,6 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
+import Link from 'next/link';
+import { useWellnessHistory, useGarminSync, DayData } from '../services/hooks';
+import { calculatePeriodTrend, formatTrendDisplay, TrendResult } from '../lib/trends';
 
 // Info Modal component for displaying metric details
 function InfoModal({
@@ -32,12 +35,17 @@ function InfoModal({
         <div>
           <h3 className="text-gray-500 text-xs mb-2">TIPS</h3>
           <ul className="space-y-2">
-            {info.tips.map((tip, i) => (
-              <li key={i} className="text-gray-400 text-sm flex gap-2">
-                <span className="text-teal-400">•</span>
-                <span>{tip}</span>
-              </li>
-            ))}
+            {info.tips.map((tip, i) => {
+              const bulletColor = tip.startsWith('Green') ? 'text-green-400' :
+                                  tip.startsWith('Yellow') ? 'text-yellow-400' :
+                                  tip.startsWith('Red') ? 'text-red-400' : 'text-teal-400';
+              return (
+                <li key={i} className="text-gray-400 text-sm flex gap-2">
+                  <span className={bulletColor}>•</span>
+                  <span>{tip}</span>
+                </li>
+              );
+            })}
           </ul>
         </div>
       </div>
@@ -193,49 +201,9 @@ interface WeeklySummaryData {
   trend_alerts: TrendAlertData[];
 }
 
-interface Baselines {
-  hrv_7d_avg: number | null;
-  hrv_30d_avg: number | null;
-  sleep_7d_avg: number | null;
-  sleep_30d_avg: number | null;
-  rhr_7d_avg: number | null;
-  rhr_30d_avg: number | null;
-  recovery_7d_avg: number | null;
-}
+// Note: Baselines type is defined in hooks.ts and used via DayData.baselines
 
-interface DayData {
-  date: string;
-  sleep: {
-    total_hours: number;
-    deep_pct: number;
-    rem_pct: number;
-    score: number | null;
-    efficiency: number | null;
-    direction?: DirectionIndicator | null;
-  } | null;
-  hrv: {
-    value: number | null;
-    baseline: number | null;
-    status: string | null;
-    direction?: DirectionIndicator | null;
-  };
-  strain: {
-    body_battery_charged: number | null;
-    body_battery_drained: number | null;
-    stress_avg: number | null;
-    active_calories: number | null;
-    intensity_minutes: number | null;
-    direction?: DirectionIndicator | null;
-  };
-  activity: {
-    steps: number;
-    steps_goal: number;
-  };
-  resting_hr: number | null;
-  rhr_direction?: DirectionIndicator | null;
-  baselines?: Baselines;
-  weekly_summary?: WeeklySummaryData;
-}
+// DayData is imported from hooks.ts
 
 function calculateRecovery(day: DayData): number {
   // Use personal baselines instead of fixed thresholds
@@ -406,6 +374,36 @@ function ZoneBadge({ color, count, label }: { color: 'green' | 'yellow' | 'red';
   );
 }
 
+// Week-over-week trend indicator component
+function WeekTrendIndicator({
+  trend,
+  inverse = false,
+  className = '',
+}: {
+  trend: TrendResult;
+  inverse?: boolean;
+  className?: string;
+}) {
+  const display = formatTrendDisplay(trend, inverse);
+
+  if (!display) {
+    if (!trend.hasEnoughData && trend.currentAvg > 0) {
+      return (
+        <div className={`text-xs text-gray-500 ${className}`}>
+          -- vs last week
+        </div>
+      );
+    }
+    return null;
+  }
+
+  return (
+    <div className={`text-xs ${display.colorClass} ${className}`}>
+      {display.text}
+    </div>
+  );
+}
+
 // Weekly Insights component - Phase 4 Causality Engine
 function WeeklyInsights({ history, weeklySummary }: { history: DayData[]; weeklySummary?: WeeklySummaryData }) {
   const weekData = history.slice(0, 7);
@@ -454,7 +452,7 @@ function WeeklyInsights({ history, weeklySummary }: { history: DayData[]; weekly
       {/* Trend indicator */}
       {recoveryDiff !== 0 && (
         <div className={`text-sm ${recoveryDiff > 0 ? 'text-green-400' : 'text-red-400'}`}>
-          {recoveryDiff > 0 ? '+' : ''}{recoveryDiff}% recovery vs last week
+          {recoveryDiff > 0 ? '+' : ''}{recoveryDiff.toFixed(1)}% recovery vs last week
         </div>
       )}
 
@@ -520,23 +518,95 @@ function WeeklyInsights({ history, weeklySummary }: { history: DayData[]; weekly
   );
 }
 
+// Trend period toggle component
+type TrendPeriod = 14 | 30 | 90;
+
+function TrendPeriodToggle({
+  value,
+  onChange,
+}: {
+  value: TrendPeriod;
+  onChange: (period: TrendPeriod) => void;
+}) {
+  const periods: TrendPeriod[] = [14, 30, 90];
+
+  return (
+    <div className="inline-flex rounded-full bg-gray-800 p-0.5 text-xs">
+      {periods.map((period) => (
+        <button
+          key={period}
+          onClick={() => onChange(period)}
+          className={`px-2.5 py-1 rounded-full transition-all ${
+            value === period
+              ? 'bg-gray-700 text-white'
+              : 'text-gray-400 hover:text-gray-300'
+          }`}
+        >
+          {period}D
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Overview period toggle component - minimal design for non-invasive UX
+type OverviewPeriod = 7 | 14 | 30;
+
+function OverviewPeriodToggle({
+  value,
+  onChange,
+}: {
+  value: OverviewPeriod;
+  onChange: (period: OverviewPeriod) => void;
+}) {
+  const periods: OverviewPeriod[] = [7, 14, 30];
+
+  return (
+    <div className="inline-flex rounded-md bg-gray-800/50 p-0.5 text-[10px]">
+      {periods.map((period) => (
+        <button
+          key={period}
+          onClick={() => onChange(period)}
+          className={`px-1.5 py-0.5 rounded transition-all ${
+            value === period
+              ? 'bg-gray-700 text-white'
+              : 'text-gray-500 hover:text-gray-400'
+          }`}
+        >
+          {period}D
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function Dashboard() {
-  const [history, setHistory] = useState<DayData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedDay, setSelectedDay] = useState<DayData | null>(null);
+  // Trend period state - shared across all trend charts
+  const [trendPeriod, setTrendPeriod] = useState<TrendPeriod>(14);
+  // Overview period state - for weekly summary averages (7, 14, or 30 days)
+  const [overviewPeriod, setOverviewPeriod] = useState<OverviewPeriod>(7);
+
+  // Use client-side hook - fetch max available data (90 days) for full history access
+  const { history, loading, error: historyError } = useWellnessHistory(90);
+  const garminSync = useGarminSync();
   const [view, setView] = useState<'overview' | 'sleep' | 'strain' | 'recovery'>('overview');
   const [activeInfoModal, setActiveInfoModal] = useState<string | null>(null);
+  const [syncDays, setSyncDays] = useState(14);
 
-  useEffect(() => {
-    fetch('/api/wellness/history?days=14')
-      .then(res => res.json())
-      .then(data => {
-        setHistory(data);
-        if (data.length > 0) setSelectedDay(data[0]);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
+  // Derive selected day from history - defaults to first day (today)
+  // Use state only for user-driven day selection
+  const [userSelectedDay, setUserSelectedDay] = useState<string | null>(null);
+  const selectedDay = useMemo(() => {
+    if (userSelectedDay) {
+      return history.find(d => d.date === userSelectedDay) || (history.length > 0 ? history[0] : null);
+    }
+    return history.length > 0 ? history[0] : null;
+  }, [history, userSelectedDay]);
+
+  // Handler for selecting a day
+  const handleSelectDay = (day: DayData) => {
+    setUserSelectedDay(day.date);
+  };
 
   if (loading) {
     return (
@@ -548,9 +618,25 @@ export default function Dashboard() {
 
   if (!selectedDay) {
     return (
-      <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-4 text-gray-400">
-        <div>No data available</div>
-        <code className="text-sm bg-gray-900 px-3 py-1 rounded">whoop fetch --days 14</code>
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-6 text-gray-400 p-6">
+        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-teal-400 to-blue-500 flex items-center justify-center text-3xl font-bold text-white">
+          W
+        </div>
+        <div className="text-center">
+          <h1 className="text-white text-xl font-semibold mb-2">Welcome to WHOOP Dashboard</h1>
+          <p className="text-gray-500 text-sm max-w-xs">
+            Connect your Garmin account to sync your wellness data and start tracking your recovery.
+          </p>
+        </div>
+        <Link
+          href="/sync"
+          className="flex items-center gap-2 bg-teal-500 hover:bg-teal-400 text-black font-semibold px-6 py-3 rounded-full transition-colors"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Sync with Garmin
+        </Link>
       </div>
     );
   }
@@ -559,11 +645,17 @@ export default function Dashboard() {
   const strain = calculateStrain(selectedDay);
   const recoveryColor = getRecoveryColor(recovery);
 
-  // Calculate weekly averages
-  const weekData = history.slice(0, 7);
-  const avgRecovery = Math.round(weekData.reduce((sum, d) => sum + calculateRecovery(d), 0) / weekData.length);
-  const avgStrain = Math.round(weekData.reduce((sum, d) => sum + calculateStrain(d), 0) / weekData.length * 10) / 10;
-  const avgSleep = Math.round(weekData.reduce((sum, d) => sum + (d.sleep?.total_hours || 0), 0) / weekData.length * 10) / 10;
+  // Calculate averages based on selected overview period (7, 14, or 30 days)
+  const periodData = history.slice(0, overviewPeriod);
+  const avgRecovery = periodData.length > 0
+    ? Math.round(periodData.reduce((sum, d) => sum + calculateRecovery(d), 0) / periodData.length)
+    : 0;
+  const avgStrain = periodData.length > 0
+    ? Math.round(periodData.reduce((sum, d) => sum + calculateStrain(d), 0) / periodData.length * 10) / 10
+    : 0;
+  const avgSleep = periodData.length > 0
+    ? Math.round(periodData.reduce((sum, d) => sum + (d.sleep?.total_hours || 0), 0) / periodData.length * 10) / 10
+    : 0;
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -575,8 +667,19 @@ export default function Dashboard() {
           </div>
           <span className="font-semibold tracking-tight">DASHBOARD</span>
         </div>
-        <div className="text-gray-500 text-sm">
-          {new Date(selectedDay.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+        <div className="flex items-center gap-4">
+          <Link
+            href="/sync"
+            className="flex items-center gap-1.5 text-gray-400 hover:text-teal-400 transition-colors text-sm"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span className="hidden sm:inline">Sync</span>
+          </Link>
+          <div className="text-gray-500 text-sm">
+            {new Date(selectedDay.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          </div>
         </div>
       </nav>
 
@@ -608,8 +711,13 @@ export default function Dashboard() {
             avgRecovery={avgRecovery}
             avgStrain={avgStrain}
             avgSleep={avgSleep}
-            onSelectDay={setSelectedDay}
+            overviewPeriod={overviewPeriod}
+            onOverviewPeriodChange={setOverviewPeriod}
+            onSelectDay={handleSelectDay}
             onShowInfo={setActiveInfoModal}
+            garminSync={garminSync}
+            syncDays={syncDays}
+            onSyncDaysChange={setSyncDays}
           />
         )}
         {view === 'recovery' && (
@@ -618,8 +726,10 @@ export default function Dashboard() {
             history={history}
             recovery={recovery}
             recoveryColor={recoveryColor}
-            onSelectDay={setSelectedDay}
+            onSelectDay={handleSelectDay}
             onShowInfo={setActiveInfoModal}
+            trendPeriod={trendPeriod}
+            onTrendPeriodChange={setTrendPeriod}
           />
         )}
         {view === 'strain' && (
@@ -627,16 +737,20 @@ export default function Dashboard() {
             selectedDay={selectedDay}
             history={history}
             strain={strain}
-            onSelectDay={setSelectedDay}
+            onSelectDay={handleSelectDay}
             onShowInfo={setActiveInfoModal}
+            trendPeriod={trendPeriod}
+            onTrendPeriodChange={setTrendPeriod}
           />
         )}
         {view === 'sleep' && (
           <SleepView
             selectedDay={selectedDay}
             history={history}
-            onSelectDay={setSelectedDay}
+            onSelectDay={handleSelectDay}
             onShowInfo={setActiveInfoModal}
+            trendPeriod={trendPeriod}
+            onTrendPeriodChange={setTrendPeriod}
           />
         )}
       </main>
@@ -652,6 +766,17 @@ export default function Dashboard() {
   );
 }
 
+// Sync panel props type
+interface GarminSyncState {
+  isAuthenticated: boolean | null;
+  syncing: boolean;
+  progress: { current: number; total: number } | null;
+  error: string | null;
+  login: (email: string, password: string) => Promise<boolean>;
+  logout: () => Promise<void>;
+  sync: (days: number) => Promise<boolean>;
+}
+
 function OverviewView({
   selectedDay,
   history,
@@ -661,8 +786,13 @@ function OverviewView({
   avgRecovery,
   avgStrain,
   avgSleep,
+  overviewPeriod,
+  onOverviewPeriodChange,
   onSelectDay,
   onShowInfo,
+  garminSync,
+  syncDays,
+  onSyncDaysChange,
 }: {
   selectedDay: DayData;
   history: DayData[];
@@ -672,10 +802,41 @@ function OverviewView({
   avgRecovery: number;
   avgStrain: number;
   avgSleep: number;
+  overviewPeriod: OverviewPeriod;
+  onOverviewPeriodChange: (period: OverviewPeriod) => void;
   onSelectDay: (day: DayData) => void;
   onShowInfo: (key: string) => void;
+  garminSync: GarminSyncState;
+  syncDays: number;
+  onSyncDaysChange: (days: number) => void;
 }) {
   const strainTarget = getStrainTarget(recovery);
+  const [showLogin, setShowLogin] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loginError, setLoginError] = useState<string | null>(null);
+
+  const handleLogin = async () => {
+    setLoginError(null);
+    const success = await garminSync.login(email, password);
+    if (success) {
+      setShowLogin(false);
+      // Auto-sync after login
+      garminSync.sync(syncDays);
+    } else {
+      setLoginError(garminSync.error || 'Login failed');
+    }
+  };
+
+  const handleSync = async () => {
+    if (!garminSync.isAuthenticated) {
+      setShowLogin(true);
+      return;
+    }
+    await garminSync.sync(syncDays);
+    // Reload page to show new data
+    window.location.reload();
+  };
 
   return (
     <div className="p-4 space-y-6">
@@ -702,26 +863,32 @@ function OverviewView({
       </div>
 
       {/* Weekly Summary Bar */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-gray-900 rounded-xl p-3 text-center">
-          <div className="text-gray-500 text-xs mb-1">AVG RECOVERY</div>
-          <div className="text-xl font-bold" style={{ color: getRecoveryColor(avgRecovery) }}>
-            {avgRecovery}%
+      <div className="space-y-2">
+        <div className="flex items-center justify-between px-1">
+          <div className="text-gray-500 text-xs">{overviewPeriod}-DAY AVERAGES</div>
+          <OverviewPeriodToggle value={overviewPeriod} onChange={onOverviewPeriodChange} />
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-gray-900 rounded-xl p-3 text-center">
+            <div className="text-gray-500 text-xs mb-1">RECOVERY</div>
+            <div className="text-xl font-bold" style={{ color: getRecoveryColor(avgRecovery) }}>
+              {avgRecovery}%
+            </div>
           </div>
-        </div>
-        <div className="bg-gray-900 rounded-xl p-3 text-center">
-          <div className="text-gray-500 text-xs mb-1">AVG STRAIN</div>
-          <div className="text-xl font-bold text-blue-400">{avgStrain}</div>
-        </div>
-        <div className="bg-gray-900 rounded-xl p-3 text-center">
-          <div className="text-gray-500 text-xs mb-1">AVG SLEEP</div>
-          <div className="text-xl font-bold text-purple-400">{avgSleep}h</div>
+          <div className="bg-gray-900 rounded-xl p-3 text-center">
+            <div className="text-gray-500 text-xs mb-1">STRAIN</div>
+            <div className="text-xl font-bold text-blue-400">{avgStrain}</div>
+          </div>
+          <div className="bg-gray-900 rounded-xl p-3 text-center">
+            <div className="text-gray-500 text-xs mb-1">SLEEP</div>
+            <div className="text-xl font-bold text-purple-400">{avgSleep}h</div>
+          </div>
         </div>
       </div>
 
-      {/* Day Selector */}
-      <div className="flex gap-1 overflow-x-auto pb-2 -mx-4 px-4">
-        {history.slice(0, 14).map((day) => {
+      {/* Day Selector - shows all loaded days, swipe right for older */}
+      <div className="flex gap-1 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide">
+        {history.map((day) => {
           const dayRecovery = calculateRecovery(day);
           const isSelected = day.date === selectedDay.date;
           return (
@@ -844,6 +1011,100 @@ function OverviewView({
 
       {/* Weekly Insights - Phase 4 Causality Engine */}
       <WeeklyInsights history={history} weeklySummary={selectedDay.weekly_summary} />
+
+      {/* Garmin Sync Panel */}
+      <div className="bg-gradient-to-br from-teal-900/30 to-gray-900 rounded-2xl p-4 border border-teal-800/30">
+        <div className="flex justify-between items-center mb-3">
+          <div className="text-gray-400 text-xs font-medium">GARMIN SYNC</div>
+          {garminSync.isAuthenticated && (
+            <button
+              onClick={() => garminSync.logout()}
+              className="text-xs text-gray-500 hover:text-gray-300"
+            >
+              Logout
+            </button>
+          )}
+        </div>
+
+        {showLogin ? (
+          <div className="space-y-3">
+            <input
+              type="email"
+              placeholder="Garmin Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-teal-500"
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-teal-500"
+            />
+            {loginError && (
+              <div className="text-red-400 text-xs">{loginError}</div>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={handleLogin}
+                className="flex-1 bg-teal-500 hover:bg-teal-400 text-black font-semibold py-2 rounded-lg text-sm transition-colors"
+              >
+                Login & Sync
+              </button>
+              <button
+                onClick={() => setShowLogin(false)}
+                className="px-4 bg-gray-700 hover:bg-gray-600 text-white py-2 rounded-lg text-sm transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <select
+                value={syncDays}
+                onChange={(e) => onSyncDaysChange(Number(e.target.value))}
+                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-teal-500"
+              >
+                <option value={7}>7 days</option>
+                <option value={14}>14 days</option>
+                <option value={30}>30 days</option>
+                <option value={60}>60 days</option>
+                <option value={90}>90 days</option>
+              </select>
+              <button
+                onClick={handleSync}
+                disabled={garminSync.syncing}
+                className="flex-1 bg-teal-500 hover:bg-teal-400 disabled:bg-teal-700 disabled:cursor-not-allowed text-black font-semibold py-2 rounded-lg text-sm transition-colors flex items-center justify-center gap-2"
+              >
+                {garminSync.syncing ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                    {garminSync.progress ? `${garminSync.progress.current}/${garminSync.progress.total}` : 'Syncing...'}
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    {garminSync.isAuthenticated ? 'Sync Now' : 'Connect Garmin'}
+                  </>
+                )}
+              </button>
+            </div>
+            {garminSync.error && (
+              <div className="text-red-400 text-xs">{garminSync.error}</div>
+            )}
+            {garminSync.isAuthenticated && (
+              <div className="text-gray-500 text-xs text-center">
+                Connected to Garmin Connect
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -855,6 +1116,8 @@ function RecoveryView({
   recoveryColor,
   onSelectDay,
   onShowInfo,
+  trendPeriod,
+  onTrendPeriodChange,
 }: {
   selectedDay: DayData;
   history: DayData[];
@@ -862,9 +1125,17 @@ function RecoveryView({
   recoveryColor: string;
   onSelectDay: (day: DayData) => void;
   onShowInfo: (key: string) => void;
+  trendPeriod: TrendPeriod;
+  onTrendPeriodChange: (period: TrendPeriod) => void;
 }) {
-  const recoveryHistory = history.map(d => calculateRecovery(d)).reverse();
+  // Slice history based on selected trend period for chart display
+  const periodHistory = history.slice(0, trendPeriod);
+  const recoveryHistory = periodHistory.map(d => calculateRecovery(d)).reverse();
   const maxRecovery = Math.max(...recoveryHistory, 100);
+
+  // Calculate period-based trend for recovery (needs full history for comparison)
+  const allRecoveryValues = useMemo(() => history.map(d => calculateRecovery(d)), [history]);
+  const recoveryTrend = useMemo(() => calculatePeriodTrend(allRecoveryValues, trendPeriod), [allRecoveryValues, trendPeriod]);
 
   return (
     <div className="p-4 space-y-6">
@@ -898,20 +1169,27 @@ function RecoveryView({
         <div className="text-gray-500 text-sm mt-2">
           {new Date(selectedDay.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
         </div>
+        {/* Week-over-week trend indicator */}
+        <WeekTrendIndicator trend={recoveryTrend} className="mt-1" />
       </div>
 
       {/* Recovery Trend Chart */}
       <div className="bg-gray-900 rounded-2xl p-4">
-        <div className="text-gray-500 text-xs mb-4">14-DAY TREND</div>
-        <div className="h-32 flex items-end gap-1">
+        <div className="flex justify-between items-center mb-4">
+          <div className="text-gray-500 text-xs">{trendPeriod}-DAY TREND</div>
+          <TrendPeriodToggle value={trendPeriod} onChange={onTrendPeriodChange} />
+        </div>
+        <div className="h-32 flex items-end gap-0.5 overflow-x-auto">
           {recoveryHistory.map((val, i) => {
-            const day = history[history.length - 1 - i];
+            const day = periodHistory[periodHistory.length - 1 - i];
             const isSelected = day?.date === selectedDay.date;
+            // Adjust bar width based on period
+            const barWidth = trendPeriod <= 14 ? 'flex-1' : trendPeriod <= 30 ? 'min-w-[8px] flex-shrink-0' : 'min-w-[4px] flex-shrink-0';
             return (
               <button
                 key={i}
                 onClick={() => day && onSelectDay(day)}
-                className={`flex-1 rounded-t transition-all ${isSelected ? 'ring-1 ring-white' : ''}`}
+                className={`${barWidth} rounded-t transition-all ${isSelected ? 'ring-1 ring-white' : ''}`}
                 style={{
                   height: `${(val / maxRecovery) * 100}%`,
                   backgroundColor: getRecoveryColor(val),
@@ -922,7 +1200,7 @@ function RecoveryView({
           })}
         </div>
         <div className="flex justify-between mt-2 text-[10px] text-gray-600">
-          <span>{history[history.length - 1]?.date.slice(5)}</span>
+          <span>{periodHistory[periodHistory.length - 1]?.date.slice(5)}</span>
           <span>Today</span>
         </div>
       </div>
@@ -970,20 +1248,30 @@ function StrainView({
   strain,
   onSelectDay,
   onShowInfo,
+  trendPeriod,
+  onTrendPeriodChange,
 }: {
   selectedDay: DayData;
   history: DayData[];
   strain: number;
   onSelectDay: (day: DayData) => void;
   onShowInfo: (key: string) => void;
+  trendPeriod: TrendPeriod;
+  onTrendPeriodChange: (period: TrendPeriod) => void;
 }) {
-  const strainHistory = history.map(d => calculateStrain(d)).reverse();
+  // Slice history based on selected trend period for chart display
+  const periodHistory = history.slice(0, trendPeriod);
+  const strainHistory = periodHistory.map(d => calculateStrain(d)).reverse();
   const maxStrain = Math.max(...strainHistory, 21);
   const recovery = calculateRecovery(selectedDay);
   const strainTarget = getStrainTarget(recovery);
   const isInTarget = strain >= strainTarget[0] && strain <= strainTarget[1];
   const isBelowTarget = strain < strainTarget[0];
   const isAboveTarget = strain > strainTarget[1];
+
+  // Calculate period-based trend for strain (needs full history for comparison)
+  const allStrainValues = useMemo(() => history.map(d => calculateStrain(d)), [history]);
+  const strainTrend = useMemo(() => calculatePeriodTrend(allStrainValues, trendPeriod), [allStrainValues, trendPeriod]);
 
   return (
     <div className="p-4 space-y-6">
@@ -994,6 +1282,8 @@ function StrainView({
         </div>
         <div className="text-7xl font-bold text-blue-400">{strain}</div>
         <div className="text-gray-500 text-sm">of 21.0 max strain</div>
+        {/* Week-over-week trend indicator */}
+        <WeekTrendIndicator trend={strainTrend} className="mt-1" />
 
         {/* Strain Bar with Target Zone */}
         <div className="w-full max-w-xs mt-6 relative">
@@ -1043,16 +1333,21 @@ function StrainView({
 
       {/* Strain Trend */}
       <div className="bg-gray-900 rounded-2xl p-4">
-        <div className="text-gray-500 text-xs mb-4">14-DAY STRAIN</div>
-        <div className="h-28 flex items-end gap-1">
+        <div className="flex justify-between items-center mb-4">
+          <div className="text-gray-500 text-xs">{trendPeriod}-DAY STRAIN</div>
+          <TrendPeriodToggle value={trendPeriod} onChange={onTrendPeriodChange} />
+        </div>
+        <div className="h-28 flex items-end gap-0.5 overflow-x-auto">
           {strainHistory.map((val, i) => {
-            const day = history[history.length - 1 - i];
+            const day = periodHistory[periodHistory.length - 1 - i];
             const isSelected = day?.date === selectedDay.date;
+            // Adjust bar width based on period
+            const barWidth = trendPeriod <= 14 ? 'flex-1' : trendPeriod <= 30 ? 'min-w-[8px] flex-shrink-0' : 'min-w-[4px] flex-shrink-0';
             return (
               <button
                 key={i}
                 onClick={() => day && onSelectDay(day)}
-                className={`flex-1 rounded-t transition-all ${isSelected ? 'ring-1 ring-white' : ''}`}
+                className={`${barWidth} rounded-t transition-all ${isSelected ? 'ring-1 ring-white' : ''}`}
                 style={{
                   height: `${(val / maxStrain) * 100}%`,
                   backgroundColor: '#3B82F6',
@@ -1095,21 +1390,29 @@ function SleepView({
   history,
   onSelectDay,
   onShowInfo,
+  trendPeriod,
+  onTrendPeriodChange,
 }: {
   selectedDay: DayData;
   history: DayData[];
   onSelectDay: (day: DayData) => void;
   onShowInfo: (key: string) => void;
+  trendPeriod: TrendPeriod;
+  onTrendPeriodChange: (period: TrendPeriod) => void;
 }) {
   const sleep = selectedDay.sleep;
-  const sleepHistory = history.map(d => d.sleep?.total_hours || 0).reverse();
+  // Slice history based on selected trend period for chart display
+  const periodHistory = history.slice(0, trendPeriod);
+  const sleepHistory = periodHistory.map(d => d.sleep?.total_hours || 0).reverse();
   const maxSleep = Math.max(...sleepHistory, 10);
+
+  // Calculate period-based trend for sleep (needs full history for comparison)
+  const allSleepValues = useMemo(() => history.map(d => d.sleep?.total_hours || 0), [history]);
+  const sleepTrend = useMemo(() => calculatePeriodTrend(allSleepValues, trendPeriod), [allSleepValues, trendPeriod]);
 
   // Calculate sleep debt and tonight's target
   const sleepBaseline = selectedDay.baselines?.sleep_7d_avg || 7.5;
   const strainYesterday = history[1] ? calculateStrain(history[1]) : 10;
-  const sleepDebt = sleepBaseline - (sleep?.total_hours || sleepBaseline);
-  const sleepDebtPositive = Math.max(0, sleepDebt);
 
   // Calculate accumulated debt over last 7 days
   const accumulatedDebt = history.slice(0, 7).reduce((debt, day) => {
@@ -1145,6 +1448,8 @@ function SleepView({
             Your avg: {selectedDay.baselines.sleep_7d_avg.toFixed(1)}h
           </div>
         )}
+        {/* Week-over-week trend indicator */}
+        <WeekTrendIndicator trend={sleepTrend} className="mt-1" />
       </div>
 
       {/* Tonight's Sleep Target - PERSONALIZED */}
@@ -1228,16 +1533,21 @@ function SleepView({
 
       {/* Sleep Trend */}
       <div className="bg-gray-900 rounded-2xl p-4">
-        <div className="text-gray-500 text-xs mb-4">14-DAY SLEEP</div>
-        <div className="h-28 flex items-end gap-1">
+        <div className="flex justify-between items-center mb-4">
+          <div className="text-gray-500 text-xs">{trendPeriod}-DAY SLEEP</div>
+          <TrendPeriodToggle value={trendPeriod} onChange={onTrendPeriodChange} />
+        </div>
+        <div className="h-28 flex items-end gap-0.5 overflow-x-auto">
           {sleepHistory.map((val, i) => {
-            const day = history[history.length - 1 - i];
+            const day = periodHistory[periodHistory.length - 1 - i];
             const isSelected = day?.date === selectedDay.date;
+            // Adjust bar width based on period
+            const barWidth = trendPeriod <= 14 ? 'flex-1' : trendPeriod <= 30 ? 'min-w-[8px] flex-shrink-0' : 'min-w-[4px] flex-shrink-0';
             return (
               <button
                 key={i}
                 onClick={() => day && onSelectDay(day)}
-                className={`flex-1 rounded-t transition-all ${isSelected ? 'ring-1 ring-white' : ''}`}
+                className={`${barWidth} rounded-t transition-all ${isSelected ? 'ring-1 ring-white' : ''}`}
                 style={{
                   height: `${(val / maxSleep) * 100}%`,
                   backgroundColor: '#A855F7',
@@ -1273,9 +1583,9 @@ function DirectionArrow({ direction }: { direction?: DirectionIndicator | null }
   if (!direction) return null;
 
   if (direction.direction === 'up') {
-    return <span className="text-green-400 ml-1">+{Math.abs(direction.change_pct)}%</span>;
+    return <span className="text-green-400 ml-1">+{Math.abs(direction.change_pct).toFixed(1)}%</span>;
   } else if (direction.direction === 'down') {
-    return <span className="text-red-400 ml-1">-{Math.abs(direction.change_pct)}%</span>;
+    return <span className="text-red-400 ml-1">-{Math.abs(direction.change_pct).toFixed(1)}%</span>;
   }
   return <span className="text-gray-500 ml-1">--</span>;
 }
