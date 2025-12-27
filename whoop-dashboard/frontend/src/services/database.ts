@@ -7,6 +7,7 @@ import { Preferences } from '@capacitor/preferences';
 
 // Storage keys
 const WELLNESS_DATA_KEY = 'wellness_data';
+const LAST_SYNC_KEY = 'last_sync_timestamp';
 
 // Data retention - keep only last N days to limit storage growth
 const DATA_RETENTION_DAYS = 90;
@@ -195,6 +196,28 @@ class DatabaseService {
   // Get current retention setting
   getRetentionDays(): number {
     return DATA_RETENTION_DAYS;
+  }
+
+  // Set last sync timestamp
+  async setLastSync(timestamp: Date): Promise<void> {
+    await Preferences.set({
+      key: LAST_SYNC_KEY,
+      value: timestamp.toISOString(),
+    });
+  }
+
+  // Get last sync timestamp
+  async getLastSync(): Promise<Date | null> {
+    try {
+      const { value } = await Preferences.get({ key: LAST_SYNC_KEY });
+      if (value) {
+        return new Date(value);
+      }
+      return null;
+    } catch (error) {
+      console.error('Failed to get last sync timestamp:', error);
+      return null;
+    }
   }
 }
 
