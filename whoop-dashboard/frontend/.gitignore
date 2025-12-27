@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# iOS / Xcode
+ios/DerivedData/
+ios/Pods/
+*.xcworkspace
+!ios/App/App.xcodeproj
