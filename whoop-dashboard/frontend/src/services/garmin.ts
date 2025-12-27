@@ -10,6 +10,7 @@ import { Preferences } from '@capacitor/preferences';
 import { CapacitorHttp, HttpResponse } from '@capacitor/core';
 import { Capacitor } from '@capacitor/core';
 import { db, SleepData, HRVData, StressData, ActivityData, WellnessRecord } from './database';
+import { secureStorage } from './secure-storage';
 
 // Use native HTTP on iOS/Android, fetch on web
 const isNative = Capacitor.isNativePlatform();
@@ -80,6 +81,13 @@ const CONNECT_API = 'https://connect.garmin.com';
 // Token storage keys
 const TOKEN_KEY = 'garmin_tokens';
 
+// Token expiry buffer - refresh if token expires within 5 minutes
+const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000;
+
+// Retry configuration
+const DEFAULT_RETRY_COUNT = 3;
+const DEFAULT_RETRY_DELAY_MS = 1000;
+
 // Types
 interface OAuth1Token {
   oauth_token: string;
@@ -113,8 +121,8 @@ interface SyncResult {
 class GarminService {
   private oauth1Token: OAuth1Token | null = null;
   private oauth2Token: OAuth2Token | null = null;
-  private isRefreshing = false;
-  private refreshQueue: Array<() => void> = [];
+  // Token refresh queue - prevents multiple simultaneous refresh calls
+  private refreshPromise: Promise<void> | null = null;
 
   constructor() {
     this.loadTokens();
@@ -155,6 +163,8 @@ class GarminService {
     this.oauth1Token = null;
     this.oauth2Token = null;
     await Preferences.remove({ key: TOKEN_KEY });
+    await Preferences.remove({ key: 'garmin_email' });
+    await secureStorage.clearAll();
   }
 
   // Check if authenticated
@@ -169,8 +179,8 @@ class GarminService {
     try {
       // Store credentials for sync (not sent anywhere yet)
       await Preferences.set({ key: 'garmin_email', value: email });
-      // Note: In production, use secure storage for password
-      await Preferences.set({ key: 'garmin_password', value: password });
+      // Store password securely in iOS Keychain
+      await secureStorage.setPassword(password);
 
       // Mark as "authenticated" - actual auth happens during sync
       this.oauth2Token = {
@@ -192,7 +202,7 @@ class GarminService {
   async syncViaBackend(days: number = 7, onProgress?: (current: number, total: number) => void): Promise<SyncResult> {
     try {
       const { value: email } = await Preferences.get({ key: 'garmin_email' });
-      const { value: password } = await Preferences.get({ key: 'garmin_password' });
+      const password = await secureStorage.getPassword();
 
       if (!email || !password) {
         return { success: false, daysProcessed: 0, error: 'Not authenticated' };
@@ -495,28 +505,125 @@ class GarminService {
     }
   }
 
-  // Make authenticated API request
-  private async apiRequest<T>(endpoint: string): Promise<T | null> {
+  /**
+   * Check if the current token is expired or close to expiry.
+   * Returns true if token is expired or will expire within TOKEN_EXPIRY_BUFFER_MS (5 minutes).
+   */
+  private isTokenExpired(): boolean {
+    if (!this.oauth2Token) {
+      return true;
+    }
+    if (!this.oauth2Token.expires_at) {
+      // No expiry time set, assume valid
+      return false;
+    }
+    // Token is "expired" if it expires within the buffer period
+    return Date.now() >= (this.oauth2Token.expires_at - TOKEN_EXPIRY_BUFFER_MS);
+  }
+
+  /**
+   * Ensure we have a valid token before making API requests.
+   * Uses a refresh queue to prevent multiple simultaneous refresh calls.
+   * @returns The valid access token
+   * @throws Error if token refresh fails
+   */
+  private async ensureValidToken(): Promise<string> {
     if (!this.oauth2Token) {
       throw new Error('Not authenticated');
     }
 
-    // Check if token needs refresh
-    if (this.oauth2Token.expires_at && Date.now() >= this.oauth2Token.expires_at) {
-      await this.refreshToken();
+    if (this.isTokenExpired()) {
+      // If there's already a refresh in progress, wait for it
+      if (!this.refreshPromise) {
+        this.refreshPromise = this.refreshToken()
+          .finally(() => {
+            this.refreshPromise = null;
+          });
+      }
+      await this.refreshPromise;
     }
 
-    try {
+    if (!this.oauth2Token) {
+      throw new Error('Token refresh failed - not authenticated');
+    }
+
+    return this.oauth2Token.access_token;
+  }
+
+  /**
+   * Helper to retry network requests with exponential backoff.
+   * @param fn The async function to retry
+   * @param retries Number of retry attempts (default: 3)
+   * @param delay Initial delay in ms between retries (default: 1000ms)
+   * @returns The result of the function
+   * @throws The last error if all retries fail
+   */
+  private async fetchWithRetry<T>(
+    fn: () => Promise<T>,
+    retries: number = DEFAULT_RETRY_COUNT,
+    delay: number = DEFAULT_RETRY_DELAY_MS
+  ): Promise<T> {
+    let lastError: Error | undefined;
+
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        return await fn();
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        console.warn(`Retry attempt ${attempt + 1}/${retries} failed:`, lastError.message);
+
+        // Don't wait after the last attempt
+        if (attempt < retries - 1) {
+          // Exponential backoff: delay * (attempt + 1)
+          const waitTime = delay * (attempt + 1);
+          console.log(`Waiting ${waitTime}ms before next retry...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+      }
+    }
+
+    throw lastError || new Error('Max retries exceeded');
+  }
+
+  /**
+   * Make authenticated API request with automatic token refresh and retry logic.
+   * @param endpoint The API endpoint to call
+   * @param useRetry Whether to use retry logic for network failures (default: true)
+   * @returns The response data or null if request fails
+   */
+  private async apiRequest<T>(endpoint: string, useRetry: boolean = true): Promise<T | null> {
+    const makeRequest = async (): Promise<T | null> => {
+      // Ensure we have a valid token before making the request
+      const accessToken = await this.ensureValidToken();
+
       const response = await nativeGet(`${CONNECT_API}${endpoint}`, {
-        'Authorization': `Bearer ${this.oauth2Token.access_token}`,
+        'Authorization': `Bearer ${accessToken}`,
         'User-Agent': 'com.garmin.android.apps.connectmobile',
         'Accept': 'application/json',
       });
 
       if (response.status === 401) {
-        // Token expired, try refresh
-        await this.refreshToken();
-        return this.apiRequest(endpoint);
+        // Token expired unexpectedly, force refresh and retry once
+        console.log('Received 401, forcing token refresh...');
+        this.refreshPromise = this.refreshToken().finally(() => {
+          this.refreshPromise = null;
+        });
+        await this.refreshPromise;
+
+        // Retry with new token
+        const newToken = await this.ensureValidToken();
+        const retryResponse = await nativeGet(`${CONNECT_API}${endpoint}`, {
+          'Authorization': `Bearer ${newToken}`,
+          'User-Agent': 'com.garmin.android.apps.connectmobile',
+          'Accept': 'application/json',
+        });
+
+        if (retryResponse.status !== 200) {
+          console.error(`API request failed after token refresh: ${retryResponse.status}`);
+          return null;
+        }
+
+        return retryResponse.data as T;
       }
 
       if (response.status !== 200) {
@@ -525,33 +632,38 @@ class GarminService {
       }
 
       return response.data as T;
+    };
+
+    try {
+      if (useRetry) {
+        return await this.fetchWithRetry(makeRequest);
+      }
+      return await makeRequest();
     } catch (error) {
       console.error('API request error:', error);
       return null;
     }
   }
 
-  // Refresh OAuth2 token
+  /**
+   * Refresh the OAuth2 token.
+   * This method is called when the token is expired or about to expire.
+   */
   private async refreshToken(): Promise<void> {
-    if (this.isRefreshing) {
-      // Wait for current refresh to complete
-      return new Promise((resolve) => {
-        this.refreshQueue.push(resolve);
-      });
-    }
-
-    this.isRefreshing = true;
+    console.log('Refreshing OAuth2 token...');
 
     try {
       const result = await this.exchangeOAuth1ForOAuth2();
       if (result.success) {
         await this.saveTokens();
+        console.log('Token refresh successful');
+      } else {
+        console.error('Token refresh failed:', result.error);
+        throw new Error(result.error || 'Token refresh failed');
       }
-    } finally {
-      this.isRefreshing = false;
-      // Notify waiting requests
-      this.refreshQueue.forEach((resolve) => resolve());
-      this.refreshQueue = [];
+    } catch (error) {
+      console.error('Token refresh error:', error);
+      throw error;
     }
   }
 
