@@ -1,12 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useWorkouts } from '@/hooks/useWorkouts';
 import { WorkoutList } from '@/components/workouts/WorkoutList';
+import { GarminSync } from '@/components/garmin/GarminSync';
+import { Button } from '@/components/ui/Button';
 import type { WorkoutListFilters } from '@/lib/types';
+import type { GarminSyncResponse } from '@/lib/api-client';
 
 export default function WorkoutsPage() {
   const [filters, setFilters] = useState<WorkoutListFilters>({});
+  const [showGarminSync, setShowGarminSync] = useState(false);
 
   const {
     workouts,
@@ -21,10 +25,22 @@ export default function WorkoutsPage() {
     analyzeWorkout,
     setPage,
     setFilters: updateFilters,
+    refetch,
   } = useWorkouts({
     pageSize: 10,
     filters,
   });
+
+  const handleSyncComplete = useCallback((result: GarminSyncResponse) => {
+    // Refetch workouts after successful sync
+    if (result.success && result.synced_count > 0) {
+      refetch();
+    }
+  }, [refetch]);
+
+  const handleCloseSyncModal = useCallback(() => {
+    setShowGarminSync(false);
+  }, []);
 
   const handleFiltersChange = (newFilters: WorkoutListFilters) => {
     setFilters(newFilters);
@@ -48,17 +64,40 @@ export default function WorkoutsPage() {
           </p>
         </div>
 
-        {/* Stats summary */}
-        {total > 0 && (
-          <div className="hidden sm:flex items-center gap-6">
-            <StatCard label="Total Workouts" value={total.toString()} />
-            <StatCard
-              label="This Week"
-              value={getThisWeekCount(workouts).toString()}
+        <div className="flex items-center gap-4">
+          {/* Stats summary */}
+          {total > 0 && (
+            <div className="hidden sm:flex items-center gap-6">
+              <StatCard label="Total Workouts" value={total.toString()} />
+              <StatCard
+                label="This Week"
+                value={getThisWeekCount(workouts).toString()}
+              />
+            </div>
+          )}
+
+          {/* Garmin Sync Button */}
+          <Button
+            variant="primary"
+            onClick={() => setShowGarminSync(true)}
+            leftIcon={<SyncIcon className="w-4 h-4" />}
+          >
+            Sync Garmin
+          </Button>
+        </div>
+      </div>
+
+      {/* Garmin Sync Modal */}
+      {showGarminSync && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-md mx-4">
+            <GarminSync
+              onSyncComplete={handleSyncComplete}
+              onClose={handleCloseSyncModal}
             />
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Main content */}
       <div>
@@ -140,4 +179,18 @@ function getThisWeekCount(workouts: { date: string }[]): number {
   startOfWeek.setHours(0, 0, 0, 0);
 
   return workouts.filter((w) => new Date(w.date) >= startOfWeek).length;
+}
+
+// Sync icon component
+function SyncIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+      />
+    </svg>
+  );
 }

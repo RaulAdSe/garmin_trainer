@@ -366,3 +366,4 @@ async function syncTrainingData() {
 
 console.log('[SW] Service worker loaded');
 
+

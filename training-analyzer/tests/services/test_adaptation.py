@@ -354,3 +354,4 @@ class TestAdaptationRecommendation:
         assert data["volume_multiplier"] == 0.5
         assert data["confidence"] == 0.85
 
+

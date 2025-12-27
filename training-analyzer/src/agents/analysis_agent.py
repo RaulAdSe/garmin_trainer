@@ -161,6 +161,23 @@ class AnalysisAgent:
                 rest_hr=ctx_data.get("rest_hr", 55),
                 threshold_hr=ctx_data.get("threshold_hr", 165),
                 vdot=ctx_data.get("vdot"),
+                # VO2max and fitness level
+                vo2max_running=ctx_data.get("vo2max_running"),
+                vo2max_cycling=ctx_data.get("vo2max_cycling"),
+                training_status=ctx_data.get("training_status"),
+                # Race predictions
+                race_prediction_5k=ctx_data.get("race_prediction_5k"),
+                race_prediction_10k=ctx_data.get("race_prediction_10k"),
+                race_prediction_half=ctx_data.get("race_prediction_half"),
+                race_prediction_marathon=ctx_data.get("race_prediction_marathon"),
+                # Daily activity (7-day averages)
+                avg_daily_steps=ctx_data.get("avg_daily_steps"),
+                avg_active_minutes=ctx_data.get("avg_active_minutes"),
+                # Previous day activity (day before workout)
+                prev_day_steps=ctx_data.get("prev_day_steps"),
+                prev_day_active_minutes=ctx_data.get("prev_day_active_minutes"),
+                prev_day_date=ctx_data.get("prev_day_date"),
+                # Goals
                 race_goal=ctx_data.get("race_goal"),
                 race_date=ctx_data.get("race_date"),
                 target_time=ctx_data.get("target_time"),
@@ -577,6 +594,10 @@ def build_athlete_context_from_briefing(briefing: Dict[str, Any]) -> Dict[str, A
     """
     training_status = briefing.get("training_status", {}) or {}
     readiness = briefing.get("readiness", {}) or {}
+    fitness_level = briefing.get("fitness_level", {}) or {}
+    race_predictions = briefing.get("race_predictions", {}) or {}
+    daily_activity = briefing.get("daily_activity", {}) or {}
+    prev_day_activity = briefing.get("prev_day_activity", {}) or {}
 
     return {
         "ctl": training_status.get("ctl", 0.0),
@@ -586,6 +607,22 @@ def build_athlete_context_from_briefing(briefing: Dict[str, Any]) -> Dict[str, A
         "risk_zone": training_status.get("risk_zone", "unknown"),
         "readiness_score": readiness.get("score", 50.0),
         "readiness_zone": readiness.get("zone", "yellow"),
+        # VO2max and fitness level
+        "vo2max_running": fitness_level.get("vo2max_running"),
+        "vo2max_cycling": fitness_level.get("vo2max_cycling"),
+        "training_status": fitness_level.get("training_status"),
+        # Race predictions (in seconds)
+        "race_prediction_5k": race_predictions.get("5k"),
+        "race_prediction_10k": race_predictions.get("10k"),
+        "race_prediction_half": race_predictions.get("half_marathon"),
+        "race_prediction_marathon": race_predictions.get("marathon"),
+        # Daily activity (7-day averages)
+        "avg_daily_steps": daily_activity.get("avg_steps"),
+        "avg_active_minutes": daily_activity.get("avg_active_minutes"),
+        # Previous day activity (day before workout)
+        "prev_day_steps": prev_day_activity.get("steps"),
+        "prev_day_active_minutes": prev_day_activity.get("active_minutes"),
+        "prev_day_date": prev_day_activity.get("date"),
     }
 
 

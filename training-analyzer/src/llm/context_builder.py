@@ -3,12 +3,41 @@
 from typing import Optional, List, Dict, Any
 
 
+def _format_time(seconds: int) -> str:
+    """Format seconds to HH:MM:SS or MM:SS format."""
+    if not seconds:
+        return "N/A"
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    secs = seconds % 60
+    if hours > 0:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+    return f"{minutes}:{secs:02d}"
+
+
+def _classify_activity_level(steps: Optional[int]) -> str:
+    """Classify activity level based on step count."""
+    if steps is None:
+        return "UNKNOWN"
+    if steps < 5000:
+        return "LOW - rest day"
+    elif steps <= 12000:
+        return "NORMAL"
+    else:
+        return "HIGH - very active"
+
+
 def build_athlete_context_prompt(
     fitness_metrics: Optional[Dict[str, Any]] = None,
     profile: Optional[Any] = None,
     goals: Optional[List[Dict[str, Any]]] = None,
     readiness: Optional[Dict[str, Any]] = None,
     recent_activities: Optional[List[Dict[str, Any]]] = None,
+    vo2max: Optional[Dict[str, Any]] = None,
+    race_predictions: Optional[Dict[str, Any]] = None,
+    training_status: Optional[str] = None,
+    daily_activity: Optional[Dict[str, Any]] = None,
+    prev_day_activity: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     Build a formatted athlete context string for LLM prompt injection.
@@ -22,6 +51,11 @@ def build_athlete_context_prompt(
         goals: List of race goals
         readiness: Current readiness score and factors
         recent_activities: Recent workout history
+        vo2max: VO2max values (running and/or cycling)
+        race_predictions: Garmin race predictions (5K, 10K, HM, Marathon in seconds)
+        training_status: Current training status (productive, unproductive, etc.)
+        daily_activity: Daily activity averages (steps, active_minutes)
+        prev_day_activity: Previous day activity data (steps, active_minutes, date)
 
     Returns:
         Formatted context string
@@ -36,6 +70,62 @@ def build_athlete_context_prompt(
         parts.append(f"  TSB (Training Stress Balance): {fitness_metrics.get('tsb', 0):.1f}")
         parts.append(f"  ACWR (Acute:Chronic Ratio): {fitness_metrics.get('acwr', 1.0):.2f}")
         parts.append(f"  Risk Zone: {fitness_metrics.get('risk_zone', 'unknown')}")
+        parts.append("")
+
+    # Fitness level section (VO2max and training status)
+    if vo2max or training_status:
+        parts.append("FITNESS LEVEL:")
+        if vo2max:
+            if vo2max.get("running"):
+                parts.append(f"  VO2max (Running): {vo2max.get('running'):.1f} ml/kg/min")
+            if vo2max.get("cycling"):
+                parts.append(f"  VO2max (Cycling): {vo2max.get('cycling'):.1f} ml/kg/min")
+        if training_status:
+            parts.append(f"  Training Status: {training_status}")
+        parts.append("")
+
+    # Race predictions section
+    if race_predictions:
+        parts.append("RACE PREDICTIONS (Garmin):")
+        predictions = []
+        if race_predictions.get("5k"):
+            predictions.append(f"5K: {_format_time(race_predictions.get('5k'))}")
+        if race_predictions.get("10k"):
+            predictions.append(f"10K: {_format_time(race_predictions.get('10k'))}")
+        if race_predictions.get("half_marathon"):
+            predictions.append(f"HM: {_format_time(race_predictions.get('half_marathon'))}")
+        if race_predictions.get("marathon"):
+            predictions.append(f"Marathon: {_format_time(race_predictions.get('marathon'))}")
+        if predictions:
+            parts.append(f"  {' | '.join(predictions)}")
+        parts.append("")
+
+    # Daily activity section
+    if prev_day_activity or daily_activity:
+        parts.append("DAILY ACTIVITY:")
+
+        # Previous day activity (most important for workout context)
+        if prev_day_activity:
+            prev_steps = prev_day_activity.get("steps")
+            prev_active = prev_day_activity.get("active_minutes")
+            prev_date = prev_day_activity.get("date", "")
+
+            if prev_steps is not None:
+                activity_level = _classify_activity_level(prev_steps)
+                date_label = f"({prev_date})" if prev_date else ""
+                active_str = f", {prev_active} active min" if prev_active else ""
+                parts.append(f"  Previous day {date_label}: {prev_steps:,} steps{active_str} ({activity_level})")
+
+        # 7-day average
+        if daily_activity:
+            avg_parts = []
+            if daily_activity.get("steps"):
+                avg_parts.append(f"{daily_activity.get('steps'):,} steps/day")
+            if daily_activity.get("active_minutes"):
+                avg_parts.append(f"{daily_activity.get('active_minutes')} active min/day")
+            if avg_parts:
+                parts.append(f"  7-day average: {', '.join(avg_parts)}")
+
         parts.append("")
 
     # Physiology section

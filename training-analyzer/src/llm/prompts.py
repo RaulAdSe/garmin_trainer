@@ -20,6 +20,9 @@ ANALYSIS GUIDELINES:
 5. If something was off (HR too high, pace inconsistent), explain why it matters
 6. Consider the athlete's current CTL/ATL/TSB when evaluating effort
 7. Reference their race goals and training paces when applicable
+8. Use VO2max to assess if workout intensity was appropriate for their fitness level
+9. Compare workout performance to Garmin race predictions when relevant
+10. Consider daily activity levels (high step counts indicate cumulative fatigue even without formal workouts)
 
 KEY METRICS TO ANALYZE:
 - Pace consistency and whether it matched the workout intent
@@ -27,6 +30,12 @@ KEY METRICS TO ANALYZE:
 - Zone distribution - was the intensity appropriate?
 - Training load (HRSS/TRIMP) - was it aligned with current fatigue state?
 - Comparison to similar recent workouts
+- VO2max context: Was the effort appropriate for the athlete's aerobic capacity?
+- Race prediction alignment: How does this workout pace compare to predicted race paces?
+- Previous day activity impact: Compare previous day steps to 7-day average
+  * LOW (<5k steps): Athlete should be fresher, expect better performance
+  * NORMAL (5k-12k): Typical day, no special consideration
+  * HIGH (>12k): Cumulative fatigue may explain elevated HR or reduced performance
 
 FORMAT YOUR RESPONSE AS:
 **Summary**: 2-3 sentence overview of the workout
@@ -71,6 +80,9 @@ ANALYSIS GUIDELINES:
 4. Be actionable: what should they take away from this workout?
 5. No redundancy - each field should add NEW information
 6. Avoid generic praise - be specific about what was good/bad
+7. Use VO2max to assess if workout intensity was appropriate for their fitness level
+8. Compare workout performance to Garmin race predictions when relevant
+9. Consider daily activity levels (high step counts indicate cumulative fatigue even without formal workouts)
 
 KEY METRICS TO ANALYZE:
 - Pace consistency and whether it matched the workout intent
@@ -78,6 +90,12 @@ KEY METRICS TO ANALYZE:
 - Zone distribution - was the intensity appropriate?
 - Training load (HRSS/TRIMP) - was it aligned with current fatigue state?
 - Comparison to similar recent workouts
+- VO2max context: Was the effort appropriate for the athlete's aerobic capacity?
+- Race prediction alignment: How does this workout pace compare to predicted race paces?
+- Previous day activity impact: Compare previous day steps to 7-day average
+  * LOW (<5k steps): Athlete should be fresher, expect better performance
+  * NORMAL (5k-12k): Typical day, no special consideration
+  * HIGH (>12k): Cumulative fatigue may explain elevated HR or reduced performance
 
 SCORING GUIDELINES:
 When providing scores, use these scales:

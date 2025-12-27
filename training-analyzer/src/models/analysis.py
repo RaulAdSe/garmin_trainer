@@ -366,6 +366,26 @@ class AthleteContext:
     threshold_hr: int = 165
     vdot: Optional[float] = None
 
+    # VO2max and fitness level
+    vo2max_running: Optional[float] = None  # ml/kg/min
+    vo2max_cycling: Optional[float] = None  # ml/kg/min
+    training_status: Optional[str] = None  # productive, unproductive, maintaining, etc.
+
+    # Garmin race predictions (in seconds)
+    race_prediction_5k: Optional[int] = None
+    race_prediction_10k: Optional[int] = None
+    race_prediction_half: Optional[int] = None
+    race_prediction_marathon: Optional[int] = None
+
+    # Daily activity (past 7 days averages)
+    avg_daily_steps: Optional[int] = None
+    avg_active_minutes: Optional[int] = None
+
+    # Previous day activity (the day BEFORE the workout)
+    prev_day_steps: Optional[int] = None
+    prev_day_active_minutes: Optional[int] = None
+    prev_day_date: Optional[str] = None
+
     # HR Zones (as tuples of (min, max))
     hr_zones: Dict[int, tuple] = field(default_factory=dict)
 
@@ -413,6 +433,15 @@ class AthleteContext:
             pace_strs.append(f"{name}: {pace_min}:{pace_s:02d}/km")
         return ", ".join(pace_strs)
 
+    def format_race_prediction(self, seconds: int) -> str:
+        """Format race prediction time from seconds to human-readable."""
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        secs = seconds % 60
+        if hours > 0:
+            return f"{hours}:{minutes:02d}:{secs:02d}"
+        return f"{minutes}:{secs:02d}"
+
     def to_prompt_context(self) -> str:
         """Convert to formatted string for LLM prompt injection."""
         lines = [
@@ -420,6 +449,66 @@ class AthleteContext:
             f"ACWR: {self.acwr:.2f} | Risk Zone: {self.risk_zone}",
             f"Readiness: {self.readiness_score:.0f}/100 ({self.readiness_zone})",
         ]
+
+        # VO2max and training status
+        if self.vo2max_running or self.vo2max_cycling or self.training_status:
+            lines.append("")
+            lines.append("FITNESS LEVEL:")
+            if self.vo2max_running:
+                lines.append(f"  VO2max (Running): {self.vo2max_running:.1f} ml/kg/min")
+            if self.vo2max_cycling:
+                lines.append(f"  VO2max (Cycling): {self.vo2max_cycling:.1f} ml/kg/min")
+            if self.training_status:
+                lines.append(f"  Training Status: {self.training_status}")
+
+        # Race predictions
+        has_predictions = any([
+            self.race_prediction_5k,
+            self.race_prediction_10k,
+            self.race_prediction_half,
+            self.race_prediction_marathon
+        ])
+        if has_predictions:
+            lines.append("")
+            lines.append("RACE PREDICTIONS (Garmin):")
+            predictions = []
+            if self.race_prediction_5k:
+                predictions.append(f"5K: {self.format_race_prediction(self.race_prediction_5k)}")
+            if self.race_prediction_10k:
+                predictions.append(f"10K: {self.format_race_prediction(self.race_prediction_10k)}")
+            if self.race_prediction_half:
+                predictions.append(f"HM: {self.format_race_prediction(self.race_prediction_half)}")
+            if self.race_prediction_marathon:
+                predictions.append(f"Marathon: {self.format_race_prediction(self.race_prediction_marathon)}")
+            lines.append(f"  {' | '.join(predictions)}")
+
+        # Daily activity
+        if self.prev_day_steps is not None or self.avg_daily_steps or self.avg_active_minutes:
+            lines.append("")
+            lines.append("DAILY ACTIVITY:")
+
+            # Previous day activity with classification
+            if self.prev_day_steps is not None:
+                # Classify activity level
+                if self.prev_day_steps < 5000:
+                    activity_level = "LOW - rest day"
+                elif self.prev_day_steps <= 12000:
+                    activity_level = "NORMAL"
+                else:
+                    activity_level = "HIGH - very active"
+
+                prev_day_label = f"({self.prev_day_date})" if self.prev_day_date else ""
+                active_min_str = f", {self.prev_day_active_minutes} active min" if self.prev_day_active_minutes else ""
+                lines.append(f"  Previous day {prev_day_label}: {self.prev_day_steps:,} steps{active_min_str} ({activity_level})")
+
+            # 7-day average
+            if self.avg_daily_steps or self.avg_active_minutes:
+                avg_parts = []
+                if self.avg_daily_steps:
+                    avg_parts.append(f"{self.avg_daily_steps:,} steps/day")
+                if self.avg_active_minutes:
+                    avg_parts.append(f"{self.avg_active_minutes} active min/day")
+                lines.append(f"  7-day average: {', '.join(avg_parts)}")
 
         if self.vdot:
             lines.append(f"VDOT: {self.vdot:.1f}")
@@ -766,15 +855,20 @@ def calculate_recovery_hours(
     load_score: int,
     tsb: Optional[float] = None,
     execution_rating: Optional[str] = None,
+    vo2max: Optional[float] = None,
 ) -> int:
     """
     Estimate recovery hours needed based on workout intensity and current fitness.
+
+    Higher VO2max indicates better aerobic fitness and typically faster recovery.
+    Athletes with higher VO2max can clear metabolic byproducts more efficiently.
 
     Args:
         training_effect: Training effect score (0.0-5.0)
         load_score: Training load score
         tsb: Training Stress Balance (fatigue indicator)
         execution_rating: How well the workout was executed
+        vo2max: VO2max value in ml/kg/min (optional, used to adjust recovery)
 
     Returns:
         Estimated recovery hours (typically 12-72)
@@ -807,6 +901,29 @@ def calculate_recovery_hours(
             base_hours += 6
         elif tsb > 10:
             base_hours -= 6
+
+    # Adjust for VO2max (higher fitness = faster recovery)
+    # Research suggests well-trained athletes recover faster due to:
+    # - Better lactate clearance
+    # - More efficient cardiovascular system
+    # - Enhanced mitochondrial function
+    if vo2max is not None:
+        if vo2max > 60:
+            # Elite/highly trained: reduce recovery by 15-20%
+            recovery_reduction = 0.80 + (0.05 * (70 - min(vo2max, 70)) / 10)
+            base_hours = int(base_hours * recovery_reduction)
+        elif vo2max > 55:
+            # Well-trained: reduce recovery by 10-15%
+            recovery_reduction = 0.85 + (0.05 * (60 - vo2max) / 5)
+            base_hours = int(base_hours * recovery_reduction)
+        elif vo2max > 50:
+            # Trained: reduce recovery by 5-10%
+            recovery_reduction = 0.90 + (0.05 * (55 - vo2max) / 5)
+            base_hours = int(base_hours * recovery_reduction)
+        elif vo2max < 40:
+            # Lower fitness: increase recovery by 10%
+            base_hours = int(base_hours * 1.10)
+        # 40-50 is average range, no adjustment
 
     # Clamp to reasonable range
     return max(12, min(96, base_hours))

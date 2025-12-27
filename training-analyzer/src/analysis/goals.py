@@ -2,12 +2,14 @@
 Race Goal and Performance Prediction
 
 Set goals and track progress toward them.
+Includes VO2max-based training pace calculations and goal feasibility assessment.
 """
 
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from enum import Enum
 from typing import List, Optional, Dict, Any
+import math
 
 
 class RaceDistance(Enum):
@@ -548,3 +550,384 @@ def format_goal_progress(progress: GoalProgress) -> str:
         lines.append(f"  - {rec}")
 
     return "\n".join(lines)
+
+
+# ============================================================================
+# VO2max-based Training Pace Calculation (Jack Daniels' VDOT)
+# ============================================================================
+
+# VDOT lookup table mapping VO2max to training paces in sec/km
+# Based on Jack Daniels' Running Formula
+# This is a simplified version - full tables have more granular values
+VDOT_PACE_TABLE = {
+    # VO2max: (easy_pace, marathon_pace, threshold_pace, interval_pace, repetition_pace)
+    # All values in seconds per kilometer
+    30: (450, 395, 365, 330, 300),  # Very slow
+    35: (420, 365, 335, 305, 275),
+    40: (390, 340, 310, 280, 255),
+    45: (365, 315, 285, 260, 235),
+    50: (340, 295, 265, 242, 218),
+    55: (320, 275, 250, 225, 203),
+    60: (300, 260, 235, 210, 190),
+    65: (285, 245, 222, 198, 178),
+    70: (270, 232, 210, 188, 168),
+    75: (258, 220, 200, 178, 160),
+    80: (246, 210, 190, 170, 153),
+    85: (235, 200, 182, 162, 145),
+}
+
+
+def _interpolate_pace(vo2max: float, pace_index: int) -> int:
+    """
+    Interpolate a pace value from the VDOT table.
+
+    Args:
+        vo2max: VO2max value
+        pace_index: Index of pace type (0=easy, 1=marathon, 2=threshold, 3=interval, 4=rep)
+
+    Returns:
+        Interpolated pace in seconds per kilometer
+    """
+    # Clamp to table range
+    vo2max = max(30, min(85, vo2max))
+
+    # Find surrounding values
+    vdot_values = sorted(VDOT_PACE_TABLE.keys())
+
+    # Find lower and upper bounds
+    lower_vdot = 30
+    upper_vdot = 85
+
+    for v in vdot_values:
+        if v <= vo2max:
+            lower_vdot = v
+        if v >= vo2max:
+            upper_vdot = v
+            break
+
+    # If exact match
+    if lower_vdot == upper_vdot:
+        return VDOT_PACE_TABLE[lower_vdot][pace_index]
+
+    # Linear interpolation
+    lower_pace = VDOT_PACE_TABLE[lower_vdot][pace_index]
+    upper_pace = VDOT_PACE_TABLE[upper_vdot][pace_index]
+
+    ratio = (vo2max - lower_vdot) / (upper_vdot - lower_vdot)
+    interpolated = lower_pace - (lower_pace - upper_pace) * ratio
+
+    return int(round(interpolated))
+
+
+def calculate_training_paces_from_vo2max(vo2max: float) -> Dict[str, int]:
+    """
+    Calculate training paces from VO2max using Jack Daniels' VDOT tables.
+
+    This provides more accurate training paces than estimating from goal race pace,
+    as it's based on actual measured fitness level.
+
+    Args:
+        vo2max: VO2max value in ml/kg/min (typically 30-85 for runners)
+
+    Returns:
+        Dictionary with paces in seconds per kilometer:
+        - easy_pace: For recovery and base building (Zone 1-2)
+        - marathon_pace: Sustainable race pace (Zone 3)
+        - threshold_pace: Lactate threshold pace (Zone 4)
+        - interval_pace: VO2max training pace (Zone 4-5)
+        - repetition_pace: Speed/economy work (Zone 5)
+
+    Example:
+        >>> paces = calculate_training_paces_from_vo2max(55.0)
+        >>> paces['easy_pace']  # ~5:20/km
+        320
+        >>> paces['threshold_pace']  # ~4:10/km
+        250
+    """
+    if vo2max < 30:
+        vo2max = 30
+    elif vo2max > 85:
+        vo2max = 85
+
+    return {
+        "easy_pace": _interpolate_pace(vo2max, 0),
+        "marathon_pace": _interpolate_pace(vo2max, 1),
+        "threshold_pace": _interpolate_pace(vo2max, 2),
+        "interval_pace": _interpolate_pace(vo2max, 3),
+        "repetition_pace": _interpolate_pace(vo2max, 4),
+    }
+
+
+def format_pace_from_seconds(pace_sec: int) -> str:
+    """Format pace in seconds to min:sec/km string."""
+    minutes = pace_sec // 60
+    seconds = pace_sec % 60
+    return f"{minutes}:{seconds:02d}/km"
+
+
+def calculate_training_paces_from_vo2max_detailed(vo2max: float) -> Dict[str, Dict[str, Any]]:
+    """
+    Calculate training paces from VO2max with detailed information.
+
+    Similar to calculate_training_paces_from_vo2max but includes formatted
+    paces, descriptions, and heart rate zone information.
+
+    Args:
+        vo2max: VO2max value in ml/kg/min
+
+    Returns:
+        Dictionary with detailed pace information for each training type
+    """
+    base_paces = calculate_training_paces_from_vo2max(vo2max)
+
+    pace_details = {
+        "easy": {
+            "name": "Easy",
+            "pace_sec": base_paces["easy_pace"],
+            "pace_formatted": format_pace_from_seconds(base_paces["easy_pace"]),
+            "hr_zone": "Zone 1-2",
+            "description": "Conversational pace for recovery and base building",
+            "purpose": "Aerobic base, active recovery",
+        },
+        "marathon": {
+            "name": "Marathon Pace",
+            "pace_sec": base_paces["marathon_pace"],
+            "pace_formatted": format_pace_from_seconds(base_paces["marathon_pace"]),
+            "hr_zone": "Zone 3",
+            "description": "Sustainable race pace for marathon distance",
+            "purpose": "Race-specific fitness, fat metabolism",
+        },
+        "threshold": {
+            "name": "Threshold",
+            "pace_sec": base_paces["threshold_pace"],
+            "pace_formatted": format_pace_from_seconds(base_paces["threshold_pace"]),
+            "hr_zone": "Zone 4",
+            "description": "Comfortably hard, sustainable for 20-60 min",
+            "purpose": "Raise lactate threshold, improve endurance",
+        },
+        "interval": {
+            "name": "Interval (VO2max)",
+            "pace_sec": base_paces["interval_pace"],
+            "pace_formatted": format_pace_from_seconds(base_paces["interval_pace"]),
+            "hr_zone": "Zone 4-5",
+            "description": "Hard efforts for 3-5 min intervals",
+            "purpose": "Improve VO2max and aerobic power",
+        },
+        "repetition": {
+            "name": "Repetition",
+            "pace_sec": base_paces["repetition_pace"],
+            "pace_formatted": format_pace_from_seconds(base_paces["repetition_pace"]),
+            "hr_zone": "Zone 5",
+            "description": "Fast, short repetitions with full recovery",
+            "purpose": "Improve speed and running economy",
+        },
+    }
+
+    # Add mile equivalents
+    for pace_type in pace_details:
+        pace_sec = pace_details[pace_type]["pace_sec"]
+        pace_mile = int(pace_sec * 1.60934)
+        min_mile = pace_mile // 60
+        sec_mile = pace_mile % 60
+        pace_details[pace_type]["pace_mile_formatted"] = f"{min_mile}:{sec_mile:02d}/mi"
+
+    return pace_details
+
+
+# ============================================================================
+# Goal Feasibility Assessment
+# ============================================================================
+
+def assess_goal_feasibility(
+    race_predictions: Dict[str, int],
+    goal_distance: str,
+    goal_time_sec: int,
+) -> Dict[str, Any]:
+    """
+    Compare Garmin race predictions to goal time.
+
+    Uses Garmin's race predictions (based on VO2max and training data) to
+    assess how realistic a goal time is.
+
+    Args:
+        race_predictions: Dictionary with race predictions in seconds:
+            - race_time_5k, race_time_10k, race_time_half, race_time_marathon
+        goal_distance: Target race distance ("5k", "10k", "half_marathon", "marathon")
+        goal_time_sec: Target finish time in seconds
+
+    Returns:
+        Dictionary with:
+        - current_predicted: Predicted time for the goal distance (seconds)
+        - current_predicted_formatted: Predicted time formatted as string
+        - goal_time: Target time (seconds)
+        - goal_time_formatted: Target time formatted as string
+        - gap_seconds: Difference in seconds (positive = goal is faster than prediction)
+        - gap_percent: How much faster the goal is vs prediction (%)
+        - gap_formatted: Human-readable gap (e.g., "2:30 faster than prediction")
+        - feasibility: Rating of goal difficulty
+        - recommendation: What to focus on to achieve the goal
+
+    Feasibility ratings:
+        - "on_track": Goal matches or is slower than current prediction
+        - "achievable": Goal is 0-3% faster than prediction (reasonable stretch)
+        - "ambitious": Goal is 3-7% faster than prediction (requires significant improvement)
+        - "very_ambitious": Goal is >7% faster than prediction (may need to adjust)
+
+    Example:
+        >>> predictions = {"race_time_5k": 1320, "race_time_10k": 2760}
+        >>> result = assess_goal_feasibility(predictions, "5k", 1200)
+        >>> result["feasibility"]
+        "achievable"
+    """
+    # Map goal distance to prediction key
+    distance_mapping = {
+        "5k": "race_time_5k",
+        "10k": "race_time_10k",
+        "half_marathon": "race_time_half",
+        "half": "race_time_half",
+        "marathon": "race_time_marathon",
+    }
+
+    # Normalize goal distance
+    goal_dist_normalized = goal_distance.lower().replace("-", "_").replace(" ", "_")
+    prediction_key = distance_mapping.get(goal_dist_normalized)
+
+    if not prediction_key:
+        return {
+            "error": f"Unknown goal distance: {goal_distance}",
+            "feasibility": "unknown",
+            "recommendation": "Please specify a valid race distance (5k, 10k, half_marathon, or marathon)",
+        }
+
+    # Get current prediction for goal distance
+    current_predicted = race_predictions.get(prediction_key)
+
+    # If no prediction for exact distance, try to estimate from other predictions
+    if current_predicted is None:
+        current_predicted = _estimate_prediction_from_other_distances(
+            race_predictions, goal_dist_normalized
+        )
+
+    if current_predicted is None:
+        return {
+            "error": "No race predictions available",
+            "feasibility": "unknown",
+            "recommendation": "Sync more workouts to generate race predictions",
+        }
+
+    # Calculate gap
+    gap_seconds = current_predicted - goal_time_sec  # Positive = goal is faster
+    gap_percent = (gap_seconds / current_predicted) * 100 if current_predicted > 0 else 0
+
+    # Determine feasibility
+    if gap_percent <= 0:
+        feasibility = "on_track"
+        recommendation = "You're already performing at or better than your goal pace. Focus on maintaining fitness and race execution."
+    elif gap_percent <= 3:
+        feasibility = "achievable"
+        recommendation = "Your goal is within reach with consistent training. Focus on race-specific workouts and threshold runs."
+    elif gap_percent <= 7:
+        feasibility = "ambitious"
+        recommendation = "This goal requires significant improvement. Increase training volume gradually and incorporate more quality sessions."
+    else:
+        feasibility = "very_ambitious"
+        recommendation = "This goal may be challenging to achieve in the near term. Consider adjusting your target or extending your timeline."
+
+    # Format gap for display
+    gap_abs = abs(gap_seconds)
+    gap_min = gap_abs // 60
+    gap_sec = gap_abs % 60
+
+    if gap_seconds > 0:
+        gap_formatted = f"{gap_min}:{gap_sec:02d} faster than prediction"
+    elif gap_seconds < 0:
+        gap_formatted = f"{gap_min}:{gap_sec:02d} ahead of goal"
+    else:
+        gap_formatted = "Exactly on target"
+
+    return {
+        "current_predicted": current_predicted,
+        "current_predicted_formatted": format_time(current_predicted),
+        "goal_time": goal_time_sec,
+        "goal_time_formatted": format_time(goal_time_sec),
+        "gap_seconds": gap_seconds,
+        "gap_percent": round(gap_percent, 1),
+        "gap_formatted": gap_formatted,
+        "feasibility": feasibility,
+        "recommendation": recommendation,
+    }
+
+
+def _estimate_prediction_from_other_distances(
+    race_predictions: Dict[str, int],
+    target_distance: str,
+) -> Optional[int]:
+    """
+    Estimate race prediction for a distance using Riegel formula from other available predictions.
+
+    Args:
+        race_predictions: Available race predictions
+        target_distance: Target distance to estimate
+
+    Returns:
+        Estimated time in seconds, or None if no predictions available
+    """
+    distance_km = {
+        "5k": 5.0,
+        "10k": 10.0,
+        "half_marathon": 21.0975,
+        "marathon": 42.195,
+    }
+
+    target_km = distance_km.get(target_distance)
+    if not target_km:
+        return None
+
+    # Try to find a prediction to estimate from
+    prediction_keys = [
+        ("race_time_5k", 5.0),
+        ("race_time_10k", 10.0),
+        ("race_time_half", 21.0975),
+        ("race_time_marathon", 42.195),
+    ]
+
+    for key, dist_km in prediction_keys:
+        time_sec = race_predictions.get(key)
+        if time_sec and time_sec > 0:
+            # Use Riegel formula: T2 = T1 * (D2/D1)^1.06
+            distance_ratio = target_km / dist_km
+            predicted = time_sec * (distance_ratio ** 1.06)
+            return int(predicted)
+
+    return None
+
+
+def get_goal_feasibility_summary(
+    race_predictions: Dict[str, int],
+    goals: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """
+    Assess feasibility of multiple goals.
+
+    Args:
+        race_predictions: Current race predictions from Garmin
+        goals: List of race goals with distance and target_time_sec
+
+    Returns:
+        List of feasibility assessments for each goal
+    """
+    summaries = []
+
+    for goal in goals:
+        distance = goal.get("distance") or goal.get("distance_name", "")
+        target_time = goal.get("target_time_sec", 0)
+
+        if not distance or not target_time:
+            continue
+
+        assessment = assess_goal_feasibility(race_predictions, distance, target_time)
+        assessment["goal_distance"] = distance
+        assessment["race_date"] = goal.get("race_date")
+        summaries.append(assessment)
+
+    return summaries

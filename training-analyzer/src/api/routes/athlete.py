@@ -1,7 +1,7 @@
 """Athlete context API routes."""
 
-from datetime import date
-from typing import Optional
+from datetime import date, datetime, timedelta
+from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -302,3 +302,316 @@ async def get_fitness_metrics(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get fitness metrics: {str(e)}")
+
+
+# ============================================================================
+# VO2max Trend Tracking Response Models
+# ============================================================================
+
+class VO2maxDataPoint(BaseModel):
+    """A single VO2max data point."""
+    date: str
+    vo2max_running: Optional[float] = None
+    vo2max_cycling: Optional[float] = None
+    training_status: Optional[str] = None
+
+
+class VO2maxTrendResponse(BaseModel):
+    """Response for VO2max trend data."""
+    data_points: List[VO2maxDataPoint]
+    trend: str  # "improving" | "stable" | "declining"
+    change_percent: float
+    current_vo2max_running: Optional[float] = None
+    current_vo2max_cycling: Optional[float] = None
+    peak_vo2max_running: Optional[float] = None
+    peak_vo2max_cycling: Optional[float] = None
+    current_vs_peak_running: Optional[float] = None  # Percentage
+    current_vs_peak_cycling: Optional[float] = None  # Percentage
+    start_date: str
+    end_date: str
+
+
+class RacePredictionsResponse(BaseModel):
+    """Current race predictions."""
+    race_time_5k: Optional[int] = None
+    race_time_5k_formatted: Optional[str] = None
+    race_time_10k: Optional[int] = None
+    race_time_10k_formatted: Optional[str] = None
+    race_time_half: Optional[int] = None
+    race_time_half_formatted: Optional[str] = None
+    race_time_marathon: Optional[int] = None
+    race_time_marathon_formatted: Optional[str] = None
+
+
+class TrainingPacesFromVO2maxResponse(BaseModel):
+    """Training paces calculated from VO2max."""
+    vo2max: float
+    easy_pace: int
+    easy_pace_formatted: str
+    marathon_pace: int
+    marathon_pace_formatted: str
+    threshold_pace: int
+    threshold_pace_formatted: str
+    interval_pace: int
+    interval_pace_formatted: str
+    repetition_pace: int
+    repetition_pace_formatted: str
+
+
+@router.get("/vo2max-trend", response_model=VO2maxTrendResponse)
+async def get_vo2max_trend(
+    days: int = 90,
+    training_db = Depends(get_training_db),
+):
+    """
+    Get VO2max trend over time.
+
+    Analyzes VO2max data from Garmin fitness syncs to show:
+    - Historical data points with VO2max values
+    - Trend direction (improving/stable/declining)
+    - Percentage change over the period
+    - Current vs peak comparison
+
+    Args:
+        days: Number of days to analyze (default 90)
+
+    Returns:
+        VO2maxTrendResponse with trend analysis
+    """
+    try:
+        end_date = date.today()
+        start_date = end_date - timedelta(days=days)
+
+        # Get Garmin fitness data for the date range
+        fitness_data = training_db.get_garmin_fitness_range(
+            start_date.isoformat(),
+            end_date.isoformat(),
+        )
+
+        if not fitness_data:
+            return VO2maxTrendResponse(
+                data_points=[],
+                trend="unknown",
+                change_percent=0.0,
+                start_date=start_date.isoformat(),
+                end_date=end_date.isoformat(),
+            )
+
+        # Convert to data points (sorted by date ascending)
+        data_points = []
+        running_values = []
+        cycling_values = []
+
+        for fd in sorted(fitness_data, key=lambda x: x.date):
+            data_points.append(VO2maxDataPoint(
+                date=fd.date,
+                vo2max_running=fd.vo2max_running,
+                vo2max_cycling=fd.vo2max_cycling,
+                training_status=fd.training_status,
+            ))
+            if fd.vo2max_running is not None:
+                running_values.append((fd.date, fd.vo2max_running))
+            if fd.vo2max_cycling is not None:
+                cycling_values.append((fd.date, fd.vo2max_cycling))
+
+        # Calculate trend and stats
+        current_running = running_values[-1][1] if running_values else None
+        current_cycling = cycling_values[-1][1] if cycling_values else None
+        peak_running = max((v[1] for v in running_values), default=None) if running_values else None
+        peak_cycling = max((v[1] for v in cycling_values), default=None) if cycling_values else None
+
+        # Calculate current vs peak percentages
+        current_vs_peak_running = None
+        current_vs_peak_cycling = None
+        if current_running and peak_running:
+            current_vs_peak_running = round((current_running / peak_running) * 100, 1)
+        if current_cycling and peak_cycling:
+            current_vs_peak_cycling = round((current_cycling / peak_cycling) * 100, 1)
+
+        # Determine trend direction using running VO2max (primary metric)
+        trend = "unknown"
+        change_percent = 0.0
+
+        if len(running_values) >= 2:
+            # Compare first and last values
+            first_value = running_values[0][1]
+            last_value = running_values[-1][1]
+            change_percent = ((last_value - first_value) / first_value) * 100 if first_value > 0 else 0
+            change_percent = round(change_percent, 1)
+
+            # Use a threshold of 2% to determine trend
+            if change_percent > 2:
+                trend = "improving"
+            elif change_percent < -2:
+                trend = "declining"
+            else:
+                trend = "stable"
+        elif len(cycling_values) >= 2:
+            # Fall back to cycling VO2max if running not available
+            first_value = cycling_values[0][1]
+            last_value = cycling_values[-1][1]
+            change_percent = ((last_value - first_value) / first_value) * 100 if first_value > 0 else 0
+            change_percent = round(change_percent, 1)
+
+            if change_percent > 2:
+                trend = "improving"
+            elif change_percent < -2:
+                trend = "declining"
+            else:
+                trend = "stable"
+
+        return VO2maxTrendResponse(
+            data_points=data_points,
+            trend=trend,
+            change_percent=change_percent,
+            current_vo2max_running=current_running,
+            current_vo2max_cycling=current_cycling,
+            peak_vo2max_running=peak_running,
+            peak_vo2max_cycling=peak_cycling,
+            current_vs_peak_running=current_vs_peak_running,
+            current_vs_peak_cycling=current_vs_peak_cycling,
+            start_date=start_date.isoformat(),
+            end_date=end_date.isoformat(),
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get VO2max trend: {str(e)}")
+
+
+@router.get("/race-predictions", response_model=RacePredictionsResponse)
+async def get_race_predictions(
+    training_db = Depends(get_training_db),
+):
+    """
+    Get current Garmin race predictions.
+
+    Returns predicted race times for 5K, 10K, Half Marathon, and Marathon
+    based on current VO2max and training data.
+    """
+    try:
+        # Get latest Garmin fitness data
+        latest = training_db.get_latest_garmin_fitness_data()
+
+        if not latest:
+            return RacePredictionsResponse()
+
+        def format_race_time(seconds: Optional[int]) -> Optional[str]:
+            if seconds is None:
+                return None
+            hours = seconds // 3600
+            minutes = (seconds % 3600) // 60
+            secs = seconds % 60
+            if hours > 0:
+                return f"{hours}:{minutes:02d}:{secs:02d}"
+            return f"{minutes}:{secs:02d}"
+
+        return RacePredictionsResponse(
+            race_time_5k=latest.race_time_5k,
+            race_time_5k_formatted=format_race_time(latest.race_time_5k),
+            race_time_10k=latest.race_time_10k,
+            race_time_10k_formatted=format_race_time(latest.race_time_10k),
+            race_time_half=latest.race_time_half,
+            race_time_half_formatted=format_race_time(latest.race_time_half),
+            race_time_marathon=latest.race_time_marathon,
+            race_time_marathon_formatted=format_race_time(latest.race_time_marathon),
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get race predictions: {str(e)}")
+
+
+@router.get("/training-paces", response_model=TrainingPacesFromVO2maxResponse)
+async def get_training_paces_from_vo2max(
+    training_db = Depends(get_training_db),
+):
+    """
+    Get training paces calculated from current VO2max.
+
+    Uses Jack Daniels' VDOT tables to calculate optimal training paces
+    for easy runs, marathon pace, threshold, interval, and repetition work.
+    """
+    try:
+        from ...analysis.goals import calculate_training_paces_from_vo2max, format_pace_from_seconds
+
+        # Get latest Garmin fitness data
+        latest = training_db.get_latest_garmin_fitness_data()
+
+        if not latest or not latest.vo2max_running:
+            raise HTTPException(
+                status_code=404,
+                detail="No VO2max data available. Sync your Garmin device to get training paces."
+            )
+
+        vo2max = latest.vo2max_running
+        paces = calculate_training_paces_from_vo2max(vo2max)
+
+        return TrainingPacesFromVO2maxResponse(
+            vo2max=vo2max,
+            easy_pace=paces["easy_pace"],
+            easy_pace_formatted=format_pace_from_seconds(paces["easy_pace"]),
+            marathon_pace=paces["marathon_pace"],
+            marathon_pace_formatted=format_pace_from_seconds(paces["marathon_pace"]),
+            threshold_pace=paces["threshold_pace"],
+            threshold_pace_formatted=format_pace_from_seconds(paces["threshold_pace"]),
+            interval_pace=paces["interval_pace"],
+            interval_pace_formatted=format_pace_from_seconds(paces["interval_pace"]),
+            repetition_pace=paces["repetition_pace"],
+            repetition_pace_formatted=format_pace_from_seconds(paces["repetition_pace"]),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get training paces: {str(e)}")
+
+
+@router.get("/goal-feasibility")
+async def get_goal_feasibility(
+    training_db = Depends(get_training_db),
+):
+    """
+    Assess feasibility of current race goals based on VO2max predictions.
+
+    Compares Garmin's race predictions to your set goals to determine
+    how realistic each goal is given your current fitness level.
+    """
+    try:
+        from ...analysis.goals import get_goal_feasibility_summary
+
+        # Get latest Garmin fitness data
+        latest = training_db.get_latest_garmin_fitness_data()
+
+        if not latest:
+            return {
+                "assessments": [],
+                "message": "No VO2max data available. Sync your Garmin device for goal assessment."
+            }
+
+        # Get race goals
+        goals = training_db.get_race_goals(upcoming_only=True)
+
+        if not goals:
+            return {
+                "assessments": [],
+                "message": "No race goals set. Create a goal to see feasibility assessment."
+            }
+
+        # Build race predictions dict
+        race_predictions = {
+            "race_time_5k": latest.race_time_5k,
+            "race_time_10k": latest.race_time_10k,
+            "race_time_half": latest.race_time_half,
+            "race_time_marathon": latest.race_time_marathon,
+        }
+
+        # Assess each goal
+        assessments = get_goal_feasibility_summary(race_predictions, goals)
+
+        return {
+            "assessments": assessments,
+            "current_vo2max": latest.vo2max_running,
+            "training_status": latest.training_status,
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to assess goal feasibility: {str(e)}")

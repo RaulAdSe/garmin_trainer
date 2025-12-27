@@ -321,3 +321,4 @@ class TestFatiguePrediction:
         assert data["recommended_intensity"] == "easy"
         assert data["confidence"] == 0.75
 
+

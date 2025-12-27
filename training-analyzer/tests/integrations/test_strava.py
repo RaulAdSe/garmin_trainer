@@ -287,3 +287,4 @@ class TestStravaClient:
 
         assert client.is_authenticated is False
 
+

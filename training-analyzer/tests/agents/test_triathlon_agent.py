@@ -388,3 +388,4 @@ class TestMultiSportDay:
         assert "brick_workouts" in data
         assert data["notes"] == "Test day"
 
+

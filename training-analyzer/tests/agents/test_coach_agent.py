@@ -325,3 +325,4 @@ class TestCoachingResponse:
         assert data["recommended_workout"]["type"] == "tempo"
         assert data["recommended_workout"]["duration_min"] == 45
 
+

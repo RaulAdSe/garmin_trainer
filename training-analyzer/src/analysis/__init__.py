@@ -1,7 +1,8 @@
 """
 Analysis module for training data.
 
-Provides trend analysis, weekly summaries, and race goal tracking.
+Provides trend analysis, weekly summaries, race goal tracking,
+and time-series data condensation for LLM analysis.
 """
 
 from .trends import (
@@ -24,6 +25,21 @@ from .goals import (
     calculate_training_paces,
     assess_goal_progress,
 )
+from .condensation import (
+    CondensedWorkoutData,
+    HRSummary,
+    PaceSummary,
+    ElevationSummary,
+    SplitsSummary,
+    TrendDirection,
+    TerrainType,
+    condense_workout_data,
+    calculate_hr_summary,
+    calculate_pace_summary,
+    calculate_elevation_summary,
+    calculate_splits_summary,
+    extract_insights,
+)
 
 __all__ = [
     # Trends
@@ -43,4 +59,18 @@ __all__ = [
     "predict_race_time",
     "calculate_training_paces",
     "assess_goal_progress",
+    # Condensation (time-series to LLM summary)
+    "CondensedWorkoutData",
+    "HRSummary",
+    "PaceSummary",
+    "ElevationSummary",
+    "SplitsSummary",
+    "TrendDirection",
+    "TerrainType",
+    "condense_workout_data",
+    "calculate_hr_summary",
+    "calculate_pace_summary",
+    "calculate_elevation_summary",
+    "calculate_splits_summary",
+    "extract_insights",
 ]

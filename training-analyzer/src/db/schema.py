@@ -196,6 +196,40 @@ CREATE INDEX IF NOT EXISTS idx_analysis_cache_type ON analysis_cache(analysis_ty
 CREATE INDEX IF NOT EXISTS idx_analysis_cache_expires ON analysis_cache(expires_at);
 CREATE INDEX IF NOT EXISTS idx_analysis_cache_input_hash ON analysis_cache(input_hash);
 
+-- =============================================================================
+-- Garmin Fitness Data - VO2max, Race Predictions, Training Status
+-- =============================================================================
+
+-- Daily fitness data from Garmin (VO2max, race predictions, training status)
+-- One record per day to track historical changes
+CREATE TABLE IF NOT EXISTS garmin_fitness_data (
+    date TEXT PRIMARY KEY,
+    -- VO2max metrics
+    vo2max_running REAL,           -- Running VO2max (precise value)
+    vo2max_cycling REAL,           -- Cycling VO2max if available
+    fitness_age INTEGER,           -- Garmin's fitness age estimate
+    -- Race predictions (times in seconds)
+    race_time_5k INTEGER,          -- 5K predicted time in seconds
+    race_time_10k INTEGER,         -- 10K predicted time in seconds
+    race_time_half INTEGER,        -- Half marathon predicted time in seconds
+    race_time_marathon INTEGER,    -- Marathon predicted time in seconds
+    -- Training status
+    training_status TEXT,          -- PRODUCTIVE, UNPRODUCTIVE, PEAKING, RECOVERY, etc.
+    training_status_description TEXT, -- Human-readable description
+    fitness_trend TEXT,            -- IMPROVING, MAINTAINING, DECLINING
+    -- Training readiness
+    training_readiness_score INTEGER,  -- 0-100 readiness score
+    training_readiness_level TEXT,     -- HIGH, MODERATE, LOW, POOR
+    -- Acute:Chronic Workload Ratio
+    acwr_percent REAL,             -- ACWR percentage
+    acwr_status TEXT,              -- Status (OPTIMAL, HIGH_RISK, LOW, etc.)
+    -- Metadata
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create index for efficient date-based queries
+CREATE INDEX IF NOT EXISTS idx_garmin_fitness_date ON garmin_fitness_data(date);
+
 -- Insert default profile if not exists (using INSERT OR IGNORE)
 INSERT OR IGNORE INTO user_profile (id, max_hr, rest_hr, threshold_hr, age, gender)
 VALUES (1, 185, 55, 165, 30, 'male');

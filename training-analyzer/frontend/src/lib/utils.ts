@@ -86,15 +86,30 @@ export function getRelativeTime(dateString: string): string {
 export function getWorkoutTypeLabel(type: string): string {
   const labels: Record<string, string> = {
     running: 'Running',
+    trail_running: 'Trail Running',
     cycling: 'Cycling',
     swimming: 'Swimming',
+    walking: 'Walking',
+    hiking: 'Hiking',
     strength: 'Strength',
     hiit: 'HIIT',
     yoga: 'Yoga',
-    walking: 'Walking',
-    other: 'Other',
+    skiing: 'Skiing',
+    football: 'Football',
+    tennis: 'Tennis',
+    basketball: 'Basketball',
+    golf: 'Golf',
+    rowing: 'Rowing',
+    surfing: 'Surfing',
+    elliptical: 'Elliptical',
+    climbing: 'Climbing',
+    martial_arts: 'Martial Arts',
+    skating: 'Skating',
+    dance: 'Dance',
+    triathlon: 'Triathlon',
+    other: 'Activity',
   };
-  return labels[type] || type;
+  return labels[type] || type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 // Get workout type icon (emoji for now, can be replaced with proper icons)

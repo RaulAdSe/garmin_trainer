@@ -409,6 +409,65 @@ class CoachService:
             fitness_status=fitness_metrics,
         )
 
+        # Get Garmin fitness data (VO2max, race predictions, training status)
+        garmin_fitness = self.training_db.get_latest_garmin_fitness_data()
+
+        garmin_fitness_data = None
+        race_predictions = None
+        training_paces = None
+        goal_feasibility = None
+
+        if garmin_fitness:
+            garmin_fitness_data = {
+                "vo2max_running": garmin_fitness.vo2max_running,
+                "vo2max_cycling": garmin_fitness.vo2max_cycling,
+                "fitness_age": garmin_fitness.fitness_age,
+                "training_status": garmin_fitness.training_status,
+                "training_status_description": garmin_fitness.training_status_description,
+                "fitness_trend": garmin_fitness.fitness_trend,
+                "training_readiness_score": garmin_fitness.training_readiness_score,
+                "training_readiness_level": garmin_fitness.training_readiness_level,
+            }
+
+            # Get race predictions
+            if any([
+                garmin_fitness.race_time_5k,
+                garmin_fitness.race_time_10k,
+                garmin_fitness.race_time_half,
+                garmin_fitness.race_time_marathon,
+            ]):
+                race_predictions = garmin_fitness.get_race_predictions_formatted()
+                race_predictions["raw"] = {
+                    "5k": garmin_fitness.race_time_5k,
+                    "10k": garmin_fitness.race_time_10k,
+                    "half_marathon": garmin_fitness.race_time_half,
+                    "marathon": garmin_fitness.race_time_marathon,
+                }
+
+            # Calculate training paces from VO2max
+            if garmin_fitness.vo2max_running:
+                from ..analysis.goals import (
+                    calculate_training_paces_from_vo2max_detailed,
+                    get_goal_feasibility_summary,
+                )
+
+                training_paces = calculate_training_paces_from_vo2max_detailed(
+                    garmin_fitness.vo2max_running
+                )
+
+                # Assess goal feasibility
+                goals = self.training_db.get_race_goals(upcoming_only=True)
+                if goals and race_predictions and race_predictions.get("raw"):
+                    race_pred_for_feasibility = {
+                        "race_time_5k": garmin_fitness.race_time_5k,
+                        "race_time_10k": garmin_fitness.race_time_10k,
+                        "race_time_half": garmin_fitness.race_time_half,
+                        "race_time_marathon": garmin_fitness.race_time_marathon,
+                    }
+                    goal_feasibility = get_goal_feasibility_summary(
+                        race_pred_for_feasibility, goals
+                    )
+
         return {
             "date": date_str,
             "readiness": {
@@ -428,6 +487,10 @@ class CoachService:
                 "warnings": recommendation.warnings,
             },
             "training_status": fitness_metrics,
+            "garmin_fitness": garmin_fitness_data,
+            "race_predictions": race_predictions,
+            "training_paces": training_paces,
+            "goal_feasibility": goal_feasibility,
             "weekly_load": {
                 "current": weekly_load_so_far,
                 "target": target_weekly_load,
@@ -437,6 +500,7 @@ class CoachService:
             "data_sources": {
                 "wellness_available": wellness_data is not None,
                 "fitness_available": fitness_metrics is not None,
+                "garmin_fitness_available": garmin_fitness is not None,
                 "activities_count": len(recent_activities),
             },
         }
@@ -799,3 +863,315 @@ class CoachService:
             "recent_activities": recent_summary,
             "date": date_str,
         }
+
+    def get_historical_athlete_context(
+        self, workout_date: str
+    ) -> Dict[str, Any]:
+        """
+        Get athlete context AS OF a specific historical workout date.
+
+        This is critical for workout analysis: when analyzing a workout from
+        2 weeks ago, we need the CTL/ATL/TSB values that were valid ON THAT DATE,
+        not today's values.
+
+        Args:
+            workout_date: Date string (YYYY-MM-DD) of the workout being analyzed
+
+        Returns:
+            Dictionary with historical context for LLM prompts:
+            - fitness_metrics: CTL, ATL, TSB, ACWR, risk zone AS OF workout_date
+            - physiology: max_hr, rest_hr, lthr (these are relatively stable)
+            - readiness: Readiness score/zone for that date
+            - recent_activities: Training summary for 7 days BEFORE the workout
+            - daily_activity: 7-day average steps and active minutes
+            - prev_day_activity: Activity data for the day BEFORE the workout
+        """
+        from datetime import datetime as dt
+
+        # Parse workout date
+        if isinstance(workout_date, str):
+            target_date = dt.strptime(workout_date, "%Y-%m-%d").date()
+        else:
+            target_date = workout_date
+
+        date_str = target_date.isoformat()
+
+        # Get user profile (physiology is relatively stable over time)
+        profile = self.training_db.get_user_profile()
+
+        # Get fitness metrics FOR THAT SPECIFIC DATE
+        # The database stores daily fitness metrics, so we can retrieve historical values
+        historical_fitness = self.get_fitness_metrics(date_str)
+
+        # If no metrics for that exact date, try to find the closest previous date
+        if not historical_fitness:
+            # Look back up to 7 days for the most recent metrics
+            for days_back in range(1, 8):
+                check_date = (target_date - timedelta(days=days_back)).isoformat()
+                historical_fitness = self.get_fitness_metrics(check_date)
+                if historical_fitness:
+                    break
+
+        # If still no metrics found, try to calculate them from activity history
+        if not historical_fitness:
+            historical_fitness = self._calculate_historical_fitness_metrics(target_date)
+
+        # Get wellness data for that date (for readiness calculation)
+        wellness_data = self.get_wellness_data(date_str)
+
+        # Get activities from the 7 days BEFORE the workout (not including workout day)
+        # This gives context of what training led up to this workout
+        recent_activities = self.get_recent_activities(days=7, end_date=target_date - timedelta(days=1))
+
+        # Calculate readiness as it would have been on that day
+        from ..recommendations.readiness import calculate_readiness
+
+        readiness = calculate_readiness(
+            wellness_data=wellness_data,
+            fitness_metrics=historical_fitness,
+            recent_activities=recent_activities,
+            target_date=target_date,
+        )
+
+        # Build recent activity summary (7 days before workout)
+        recent_summary = {
+            "count": len(recent_activities),
+            "total_distance_km": sum(
+                a.get("distance_km", 0) or 0 for a in recent_activities
+            ),
+            "total_duration_min": sum(
+                a.get("duration_min", 0) or 0 for a in recent_activities
+            ),
+            "total_load": sum(
+                a.get("hrss", 0) or 0 for a in recent_activities
+            ),
+        }
+
+        # Get previous day activity (the day BEFORE the workout)
+        prev_day_date = target_date - timedelta(days=1)
+        prev_day_activity = self._get_daily_activity(prev_day_date)
+
+        # Get 7-day average daily activity (ending the day before the workout)
+        daily_activity = self._get_daily_activity_averages(target_date - timedelta(days=1), days=7)
+
+        # Get Garmin fitness data (VO2max, race predictions) for the workout date
+        garmin_fitness = self.training_db.get_garmin_fitness_for_workout(date_str)
+
+        # Build VO2max and race predictions context
+        vo2max_context = None
+        race_predictions = None
+        training_status_data = None
+
+        if garmin_fitness:
+            if garmin_fitness.vo2max_running or garmin_fitness.vo2max_cycling:
+                vo2max_context = {
+                    "vo2max_running": garmin_fitness.vo2max_running,
+                    "vo2max_cycling": garmin_fitness.vo2max_cycling,
+                    "fitness_age": garmin_fitness.fitness_age,
+                }
+
+            if any([
+                garmin_fitness.race_time_5k,
+                garmin_fitness.race_time_10k,
+                garmin_fitness.race_time_half,
+                garmin_fitness.race_time_marathon,
+            ]):
+                race_predictions = garmin_fitness.get_race_predictions_formatted()
+
+            training_status_data = {
+                "status": garmin_fitness.training_status,
+                "description": garmin_fitness.training_status_description,
+                "trend": garmin_fitness.fitness_trend,
+                "training_readiness_score": garmin_fitness.training_readiness_score,
+                "training_readiness_level": garmin_fitness.training_readiness_level,
+            }
+
+        return {
+            "fitness_metrics": historical_fitness or {
+                "ctl": 0,
+                "atl": 0,
+                "tsb": 0,
+                "acwr": 1.0,
+                "risk_zone": "unknown",
+            },
+            "physiology": {
+                "max_hr": profile.max_hr if profile else 185,
+                "rest_hr": profile.rest_hr if profile else 55,
+                "lthr": profile.threshold_hr if profile else 165,
+                "age": profile.age if profile else None,
+                "gender": profile.gender if profile else None,
+                "weight_kg": profile.weight_kg if profile else None,
+            },
+            "vo2max": vo2max_context,
+            "race_predictions": race_predictions,
+            "garmin_training_status": training_status_data,
+            "readiness": {
+                "score": round(readiness.overall_score, 1),
+                "zone": readiness.zone,
+                "recommendation": readiness.recommendation,
+            },
+            "recent_activities": recent_summary,
+            "daily_activity": daily_activity,
+            "prev_day_activity": prev_day_activity,
+            "date": date_str,
+            "context_type": "historical",  # Flag to indicate this is historical context
+        }
+
+    def _get_daily_activity(
+        self, target_date: date
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get daily activity data (steps, active minutes) for a specific date.
+
+        Args:
+            target_date: The date to get activity for
+
+        Returns:
+            Dictionary with steps, active_minutes, date, or None if not available
+        """
+        with self._get_wellness_connection() as conn:
+            if conn is None:
+                return None
+
+            try:
+                date_str = target_date.isoformat()
+
+                # Query the activity_data table
+                row = conn.execute(
+                    """SELECT total_steps, active_seconds FROM activity_data
+                       WHERE date = ?""",
+                    (date_str,)
+                ).fetchone()
+
+                if row:
+                    active_minutes = None
+                    if row["active_seconds"]:
+                        active_minutes = int(row["active_seconds"] / 60)
+
+                    return {
+                        "steps": row["total_steps"],
+                        "active_minutes": active_minutes,
+                        "date": date_str,
+                    }
+
+                return None
+
+            except sqlite3.Error:
+                return None
+
+    def _get_daily_activity_averages(
+        self, end_date: date, days: int = 7
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get average daily activity data over a period.
+
+        Args:
+            end_date: The last day of the period (inclusive)
+            days: Number of days to average over
+
+        Returns:
+            Dictionary with avg_steps, avg_active_minutes, or None if not available
+        """
+        with self._get_wellness_connection() as conn:
+            if conn is None:
+                return None
+
+            try:
+                start_date = end_date - timedelta(days=days - 1)
+
+                # Query aggregate from activity_data table
+                row = conn.execute(
+                    """SELECT
+                        AVG(total_steps) as avg_steps,
+                        AVG(active_seconds) as avg_active_seconds,
+                        COUNT(*) as days_with_data
+                       FROM activity_data
+                       WHERE date >= ? AND date <= ?""",
+                    (start_date.isoformat(), end_date.isoformat())
+                ).fetchone()
+
+                if row and row["days_with_data"] > 0:
+                    avg_active_minutes = None
+                    if row["avg_active_seconds"]:
+                        avg_active_minutes = int(row["avg_active_seconds"] / 60)
+
+                    return {
+                        "avg_steps": int(row["avg_steps"]) if row["avg_steps"] else None,
+                        "avg_active_minutes": avg_active_minutes,
+                        "days_with_data": row["days_with_data"],
+                    }
+
+                return None
+
+            except sqlite3.Error:
+                return None
+
+    def _calculate_historical_fitness_metrics(
+        self, target_date: date
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Calculate CTL/ATL/TSB for a historical date from activity history.
+
+        This recalculates the fitness metrics from scratch using all activities
+        up to the target date. Used when we don't have stored metrics for a date.
+
+        Args:
+            target_date: The date to calculate metrics for
+
+        Returns:
+            Dictionary with calculated fitness metrics, or None if no data
+        """
+        from ..metrics.fitness import calculate_fitness_metrics
+
+        # Get all activities up to and including the target date
+        # We need enough history to calculate CTL accurately (at least 42 days for full CTL)
+        history_start = target_date - timedelta(days=90)  # 90 days of history
+
+        activities = self.training_db.get_activities_range(
+            history_start.isoformat(),
+            target_date.isoformat(),
+        )
+
+        if not activities:
+            return None
+
+        # Aggregate daily loads (sum of HRSS/TRIMP per day)
+        daily_loads = {}
+        for activity in activities:
+            activity_date = activity.date
+            if isinstance(activity_date, str):
+                from datetime import datetime as dt
+                activity_date = dt.strptime(activity_date, "%Y-%m-%d").date()
+
+            load = activity.hrss or activity.trimp or 0
+            if activity_date in daily_loads:
+                daily_loads[activity_date] += load
+            else:
+                daily_loads[activity_date] = load
+
+        if not daily_loads:
+            return None
+
+        # Convert to list of tuples for the fitness calculation
+        daily_load_list = [(d, load) for d, load in daily_loads.items()]
+
+        # Calculate fitness metrics
+        metrics_list = calculate_fitness_metrics(daily_load_list)
+
+        if not metrics_list:
+            return None
+
+        # Find the metrics for the target date (or closest before)
+        for metrics in reversed(metrics_list):
+            if metrics.date <= target_date:
+                return {
+                    "date": metrics.date.isoformat(),
+                    "daily_load": metrics.daily_load,
+                    "ctl": metrics.ctl,
+                    "atl": metrics.atl,
+                    "tsb": metrics.tsb,
+                    "acwr": metrics.acwr,
+                    "risk_zone": metrics.risk_zone,
+                }
+
+        return None

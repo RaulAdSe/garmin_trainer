@@ -267,6 +267,79 @@ textarea,
   animation: bounce-gentle 1s ease-in-out infinite;
 }
 
+/* Expand/Collapse animations for progressive disclosure */
+@keyframes expandHeight {
+  from {
+    max-height: 0;
+    opacity: 0;
+  }
+  to {
+    max-height: var(--expand-height, 500px);
+    opacity: 1;
+  }
+}
+
+@keyframes collapseHeight {
+  from {
+    max-height: var(--expand-height, 500px);
+    opacity: 1;
+  }
+  to {
+    max-height: 0;
+    opacity: 0;
+  }
+}
+
+.animate-expand {
+  animation: expandHeight 0.2s ease-out forwards;
+  overflow: hidden;
+}
+
+.animate-collapse {
+  animation: collapseHeight 0.2s ease-out forwards;
+  overflow: hidden;
+}
+
+/* Insight card hover effects */
+.insight-card-hover {
+  transition: transform 0.15s ease-out, box-shadow 0.15s ease-out, border-color 0.15s ease-out;
+}
+
+@media (hover: hover) {
+  .insight-card-hover:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+}
+
+/* Rotate animation for chevron icons */
+.rotate-chevron {
+  transition: transform 0.2s ease-out;
+}
+
+.rotate-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+/* Scale animation for badges */
+@keyframes badgePop {
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-badge-pop {
+  animation: badgePop 0.3s ease-out;
+}
+
 /* Skeleton loading animation */
 .skeleton {
   background: linear-gradient(

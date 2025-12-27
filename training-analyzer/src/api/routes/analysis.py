@@ -195,6 +195,64 @@ def get_analysis_agent() -> AnalysisAgent:
 
 
 # ============================================================================
+# Historical Context Helper
+# ============================================================================
+
+def _build_athlete_context_from_historical(historical_context: Dict) -> Dict:
+    """
+    Build athlete context dictionary from historical context.
+
+    This is similar to build_athlete_context_from_briefing but uses
+    the historical context structure returned by get_historical_athlete_context.
+
+    Args:
+        historical_context: Dictionary from coach_service.get_historical_athlete_context()
+
+    Returns:
+        Dictionary suitable for AnalysisAgent
+    """
+    fitness_metrics = historical_context.get("fitness_metrics", {}) or {}
+    readiness = historical_context.get("readiness", {}) or {}
+    physiology = historical_context.get("physiology", {}) or {}
+    daily_activity = historical_context.get("daily_activity", {}) or {}
+    prev_day_activity = historical_context.get("prev_day_activity", {}) or {}
+
+    # Calculate risk zone from ACWR if not provided
+    acwr = fitness_metrics.get("acwr", 1.0)
+    if acwr < 0.8:
+        risk_zone = "undertrained"
+    elif acwr <= 1.3:
+        risk_zone = "optimal"
+    elif acwr <= 1.5:
+        risk_zone = "caution"
+    else:
+        risk_zone = "danger"
+
+    return {
+        "ctl": fitness_metrics.get("ctl", 0.0),
+        "atl": fitness_metrics.get("atl", 0.0),
+        "tsb": fitness_metrics.get("tsb", 0.0),
+        "acwr": acwr,
+        "risk_zone": fitness_metrics.get("risk_zone", risk_zone),
+        "readiness_score": readiness.get("score", 50.0),
+        "readiness_zone": readiness.get("zone", "yellow"),
+        "max_hr": physiology.get("max_hr", 185),
+        "rest_hr": physiology.get("rest_hr", 55),
+        "threshold_hr": physiology.get("lthr", 165),
+        # Daily activity (7-day averages)
+        "avg_daily_steps": daily_activity.get("avg_steps"),
+        "avg_active_minutes": daily_activity.get("avg_active_minutes"),
+        # Previous day activity (day before workout)
+        "prev_day_steps": prev_day_activity.get("steps"),
+        "prev_day_active_minutes": prev_day_activity.get("active_minutes"),
+        "prev_day_date": prev_day_activity.get("date"),
+        # Flag to indicate historical context was used
+        "context_date": historical_context.get("date"),
+        "is_historical": True,
+    }
+
+
+# ============================================================================
 # API Routes
 # ============================================================================
 
@@ -218,11 +276,15 @@ async def analyze_workout(
     - Areas for improvement
     - How it fits into training
 
+    IMPORTANT: The analysis uses HISTORICAL athlete context (CTL/ATL/TSB) from
+    the workout date, not current values. This ensures accurate context when
+    analyzing workouts from days or weeks ago.
+
     The analysis is contextualized with the athlete's:
-    - Current fitness (CTL/ATL/TSB)
+    - Historical fitness (CTL/ATL/TSB AS OF workout date)
     - HR zones and training paces
     - Race goals
-    - Recent training history
+    - Recent training history (before the workout)
 
     Args:
         workout_id: The ID of the workout to analyze
@@ -255,11 +317,22 @@ async def analyze_workout(
 
         workout_dict = workout.to_dict()
 
-        # Get athlete context
-        briefing = coach_service.get_daily_briefing(date.today())
+        # Extract the workout date for historical context
+        workout_date = workout_dict.get("date")
+        if not workout_date:
+            # Fallback to today if no date available
+            workout_date = date.today().isoformat()
+            logger.warning(f"[analyze_workout] No date found for workout {workout_id}, using today")
 
-        # Build context for agent
-        athlete_context = build_athlete_context_from_briefing(briefing)
+        logger.info(f"[analyze_workout] Using historical context for workout date: {workout_date}")
+
+        # Get HISTORICAL athlete context (CTL/ATL/TSB as of the workout date)
+        # This is critical for accurate analysis - we need the fitness state
+        # that existed WHEN the workout was performed, not today's values
+        historical_context = coach_service.get_historical_athlete_context(workout_date)
+
+        # Build context for agent from historical data
+        athlete_context = _build_athlete_context_from_historical(historical_context)
 
         # Add additional context from profile and goals
         profile = training_db.get_user_profile()
@@ -275,20 +348,27 @@ async def analyze_workout(
             athlete_context["race_date"] = first_goal.get("race_date")
             athlete_context["target_time"] = first_goal.get("target_time_formatted")
 
-        # Get similar workouts for comparison
+        # Get similar workouts for comparison (from before the workout date)
         include_similar = request.include_similar if request else True
         similar_workouts = []
         if include_similar:
-            recent = coach_service.get_recent_activities(days=14)
+            # Get activities from before the workout for fair comparison
+            from datetime import datetime as dt
+            if isinstance(workout_date, str):
+                workout_date_obj = dt.strptime(workout_date, "%Y-%m-%d").date()
+            else:
+                workout_date_obj = workout_date
+            recent = coach_service.get_recent_activities(days=14, end_date=workout_date_obj)
             similar_workouts = get_similar_workouts(recent, workout_dict, limit=3)
 
         if stream:
             # Streaming response (raw LLM output)
+            # Note: streaming uses athlete_context which now contains historical data
             return await _stream_analysis(
                 workout_dict,
                 athlete_context,
                 similar_workouts,
-                briefing,
+                historical_context,
                 training_db,
             )
 
@@ -368,10 +448,13 @@ async def _stream_analysis(
     workout_dict: dict,
     athlete_context: dict,
     similar_workouts: list,
-    briefing: dict,
+    historical_context: dict,
     training_db,
 ):
-    """Stream analysis response from LLM."""
+    """Stream analysis response from LLM.
+
+    Uses historical context for accurate analysis of past workouts.
+    """
     from ...models.analysis import (
         calculate_training_effect,
         calculate_load_score,
@@ -379,12 +462,13 @@ async def _stream_analysis(
         calculate_overall_score,
     )
 
-    # Build prompts for streaming
+    # Build prompts for streaming using HISTORICAL context
+    # This ensures streaming analysis also uses the correct historical metrics
     context_prompt = build_athlete_context_prompt(
-        fitness_metrics=briefing.get("training_status"),
+        fitness_metrics=historical_context.get("fitness_metrics"),
         profile=training_db.get_user_profile(),
         goals=training_db.get_race_goals(),
-        readiness=briefing.get("readiness"),
+        readiness=historical_context.get("readiness"),
     )
 
     system_prompt = WORKOUT_ANALYSIS_SYSTEM.format(
@@ -657,28 +741,29 @@ async def batch_analyze(
     Efficient for analyzing a week or training block.
     Uses caching to avoid re-analyzing already processed workouts.
 
+    IMPORTANT: Each workout is analyzed with its HISTORICAL context (CTL/ATL/TSB)
+    from the workout date, not today's values. This ensures accurate analysis
+    even when batch-processing workouts from different dates.
+
     Args:
         request: BatchAnalysisRequest with list of workout IDs
 
     Returns:
         BatchAnalysisResponse with all analysis results
     """
+    import logging
+    from datetime import datetime as dt
+
+    logger = logging.getLogger(__name__)
+
     try:
         results = []
         cached_count = 0
 
-        # Get context once for all workouts
-        briefing = coach_service.get_daily_briefing(date.today())
-        athlete_context = build_athlete_context_from_briefing(briefing)
-
-        # Add profile info
+        # Get profile info once (this doesn't change per workout)
         profile = training_db.get_user_profile()
-        if profile:
-            athlete_context["max_hr"] = getattr(profile, "max_hr", 185)
-            athlete_context["rest_hr"] = getattr(profile, "rest_hr", 55)
-            athlete_context["threshold_hr"] = getattr(profile, "threshold_hr", 165)
 
-        # Process each workout
+        # Process each workout with its OWN historical context
         for workout_id in request.workout_ids:
             try:
                 # Check cache first
@@ -694,7 +779,7 @@ async def batch_analyze(
                         continue
 
                 # Get workout data
-                workout = training_db.get_activity(workout_id)
+                workout = training_db.get_activity_metrics(workout_id)
                 if not workout:
                     results.append(AnalysisResponse(
                         success=False,
@@ -705,11 +790,32 @@ async def batch_analyze(
 
                 workout_dict = workout.to_dict()
 
-                # Get similar workouts
-                recent = coach_service.get_recent_activities(days=14)
+                # Extract workout date for HISTORICAL context
+                workout_date = workout_dict.get("date")
+                if not workout_date:
+                    workout_date = date.today().isoformat()
+                    logger.warning(f"[batch_analyze] No date for workout {workout_id}, using today")
+
+                # Get HISTORICAL context for THIS specific workout's date
+                # This is critical: each workout needs context from when it was performed
+                historical_context = coach_service.get_historical_athlete_context(workout_date)
+                athlete_context = _build_athlete_context_from_historical(historical_context)
+
+                # Add profile info
+                if profile:
+                    athlete_context["max_hr"] = getattr(profile, "max_hr", 185)
+                    athlete_context["rest_hr"] = getattr(profile, "rest_hr", 55)
+                    athlete_context["threshold_hr"] = getattr(profile, "threshold_hr", 165)
+
+                # Get similar workouts from BEFORE the workout date
+                if isinstance(workout_date, str):
+                    workout_date_obj = dt.strptime(workout_date, "%Y-%m-%d").date()
+                else:
+                    workout_date_obj = workout_date
+                recent = coach_service.get_recent_activities(days=14, end_date=workout_date_obj)
                 similar_workouts = get_similar_workouts(recent, workout_dict, limit=3)
 
-                # Analyze
+                # Analyze with historical context
                 analysis = await agent.analyze(
                     workout_data=workout_dict,
                     athlete_context=athlete_context,

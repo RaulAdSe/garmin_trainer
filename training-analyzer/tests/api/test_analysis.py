@@ -105,6 +105,24 @@ def mock_coach_service(mock_athlete_context, mock_workout):
         "training_status": mock_athlete_context["fitness"],
         "readiness": mock_athlete_context["readiness"],
     }
+    # Mock get_historical_athlete_context for historical analysis
+    service.get_historical_athlete_context.return_value = {
+        "fitness_metrics": mock_athlete_context["fitness"],
+        "readiness": mock_athlete_context["readiness"],
+        "physiology": {
+            "max_hr": 185,
+            "rest_hr": 55,
+            "lthr": 165,
+        },
+        "recent_activities": {
+            "count": 3,
+            "total_distance_km": 25.0,
+            "total_duration_min": 180.0,
+            "total_load": 150.0,
+        },
+        "date": "2025-12-25",
+        "context_type": "historical",
+    }
     service.get_recent_activities.return_value = [mock_workout]
     return service
 
@@ -118,7 +136,9 @@ def mock_training_db(mock_workout):
     mock_activity = MagicMock()
     mock_activity.to_dict.return_value = mock_workout
 
+    # Support both get_activity and get_activity_metrics for compatibility
     db.get_activity.return_value = mock_activity
+    db.get_activity_metrics.return_value = mock_activity
     db.get_user_profile.return_value = MagicMock(
         max_hr=185,
         rest_hr=55,

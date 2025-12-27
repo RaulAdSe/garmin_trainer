@@ -125,6 +125,72 @@ class DailyFitnessMetrics:
         }
 
 
+@dataclass
+class GarminFitnessData:
+    """Daily Garmin fitness data including VO2max, race predictions, and training status."""
+
+    date: str
+    # VO2max metrics
+    vo2max_running: Optional[float] = None
+    vo2max_cycling: Optional[float] = None
+    fitness_age: Optional[int] = None
+    # Race predictions (times in seconds)
+    race_time_5k: Optional[int] = None
+    race_time_10k: Optional[int] = None
+    race_time_half: Optional[int] = None
+    race_time_marathon: Optional[int] = None
+    # Training status
+    training_status: Optional[str] = None
+    training_status_description: Optional[str] = None
+    fitness_trend: Optional[str] = None
+    # Training readiness
+    training_readiness_score: Optional[int] = None
+    training_readiness_level: Optional[str] = None
+    # ACWR
+    acwr_percent: Optional[float] = None
+    acwr_status: Optional[str] = None
+    updated_at: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        return {
+            "date": self.date,
+            "vo2max_running": self.vo2max_running,
+            "vo2max_cycling": self.vo2max_cycling,
+            "fitness_age": self.fitness_age,
+            "race_time_5k": self.race_time_5k,
+            "race_time_10k": self.race_time_10k,
+            "race_time_half": self.race_time_half,
+            "race_time_marathon": self.race_time_marathon,
+            "training_status": self.training_status,
+            "training_status_description": self.training_status_description,
+            "fitness_trend": self.fitness_trend,
+            "training_readiness_score": self.training_readiness_score,
+            "training_readiness_level": self.training_readiness_level,
+            "acwr_percent": self.acwr_percent,
+            "acwr_status": self.acwr_status,
+        }
+
+    def format_race_time(self, seconds: Optional[int]) -> Optional[str]:
+        """Format race time in seconds to HH:MM:SS or MM:SS."""
+        if seconds is None:
+            return None
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        secs = seconds % 60
+        if hours > 0:
+            return f"{hours}:{minutes:02d}:{secs:02d}"
+        return f"{minutes}:{secs:02d}"
+
+    def get_race_predictions_formatted(self) -> dict:
+        """Get race predictions with formatted times."""
+        return {
+            "5k": self.format_race_time(self.race_time_5k),
+            "10k": self.format_race_time(self.race_time_10k),
+            "half_marathon": self.format_race_time(self.race_time_half),
+            "marathon": self.format_race_time(self.race_time_marathon),
+        }
+
+
 def get_default_db_path() -> Path:
     """Get the default database path."""
     # Check environment variable first
@@ -133,7 +199,9 @@ def get_default_db_path() -> Path:
         return Path(env_path)
 
     # Default to training-analyzer directory
-    return Path(__file__).parent.parent.parent.parent / "training.db"
+    # Path: training-analyzer/src/db/database.py
+    # Go up 3 levels to training-analyzer/, then add training.db
+    return Path(__file__).parent.parent.parent / "training.db"
 
 
 class TrainingDatabase:
@@ -614,3 +682,99 @@ class TrainingDatabase:
             ).fetchall()
 
             return [dict(row) for row in rows]
+
+    # === Garmin Fitness Data Methods ===
+
+    def save_garmin_fitness_data(self, data: GarminFitnessData) -> None:
+        """Save or update Garmin fitness data for a specific date."""
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO garmin_fitness_data
+                (date, vo2max_running, vo2max_cycling, fitness_age,
+                 race_time_5k, race_time_10k, race_time_half, race_time_marathon,
+                 training_status, training_status_description, fitness_trend,
+                 training_readiness_score, training_readiness_level,
+                 acwr_percent, acwr_status, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                (
+                    data.date,
+                    data.vo2max_running,
+                    data.vo2max_cycling,
+                    data.fitness_age,
+                    data.race_time_5k,
+                    data.race_time_10k,
+                    data.race_time_half,
+                    data.race_time_marathon,
+                    data.training_status,
+                    data.training_status_description,
+                    data.fitness_trend,
+                    data.training_readiness_score,
+                    data.training_readiness_level,
+                    data.acwr_percent,
+                    data.acwr_status,
+                ),
+            )
+
+    def get_garmin_fitness_data(self, date_str: str) -> Optional[GarminFitnessData]:
+        """Get Garmin fitness data for a specific date."""
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM garmin_fitness_data WHERE date = ?",
+                (date_str,),
+            ).fetchone()
+
+            if row:
+                return GarminFitnessData(**dict(row))
+            return None
+
+    def get_garmin_fitness_range(
+        self, start_date: str, end_date: str
+    ) -> List[GarminFitnessData]:
+        """Get Garmin fitness data for a date range."""
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM garmin_fitness_data
+                WHERE date >= ? AND date <= ?
+                ORDER BY date DESC
+                """,
+                (start_date, end_date),
+            ).fetchall()
+
+            return [GarminFitnessData(**dict(row)) for row in rows]
+
+    def get_latest_garmin_fitness_data(self) -> Optional[GarminFitnessData]:
+        """Get the most recent Garmin fitness data."""
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM garmin_fitness_data ORDER BY date DESC LIMIT 1"
+            ).fetchone()
+
+            if row:
+                return GarminFitnessData(**dict(row))
+            return None
+
+    def get_garmin_fitness_for_workout(self, workout_date: str) -> Optional[GarminFitnessData]:
+        """
+        Get the Garmin fitness data that was valid for a specific workout date.
+
+        Returns the fitness data from that date or the most recent data before it.
+        This is useful for looking up what the athlete's VO2max/predictions were
+        at the time of a specific workout.
+        """
+        with self._get_connection() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM garmin_fitness_data
+                WHERE date <= ?
+                ORDER BY date DESC
+                LIMIT 1
+                """,
+                (workout_date,),
+            ).fetchone()
+
+            if row:
+                return GarminFitnessData(**dict(row))
+            return None
