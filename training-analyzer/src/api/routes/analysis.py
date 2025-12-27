@@ -10,6 +10,10 @@ from fastapi.responses import StreamingResponse
 
 from ..deps import get_coach_service, get_training_db, get_workout_repository
 from ...db.repositories.workout_repository import WorkoutRepository
+from ...db.repositories.analysis_cache_repository import (
+    AnalysisCacheRepository,
+    get_analysis_cache_repository,
+)
 from ...llm.providers import get_llm_client, ModelType
 from ...llm.context_builder import build_athlete_context_prompt, format_workout_for_prompt
 from ...llm.prompts import (
@@ -40,40 +44,122 @@ router = APIRouter()
 
 
 # ============================================================================
-# In-Memory Cache
+# Persistent Analysis Cache (Database-backed with in-memory layer)
 # ============================================================================
 
 class AnalysisCache:
-    """Simple in-memory cache for workout analyses."""
+    """Database-backed cache for workout analyses with in-memory layer for speed."""
 
-    def __init__(self, max_size: int = 100):
-        self._cache: Dict[str, WorkoutAnalysisResult] = {}
-        self._max_size = max_size
+    ANALYSIS_TYPE = "workout_analysis"
+    # TTL: 30 days (analyses don't change unless regenerated)
+    TTL_SECONDS = 30 * 24 * 60 * 60
+
+    def __init__(self, max_memory_size: int = 100):
+        self._memory_cache: Dict[str, WorkoutAnalysisResult] = {}
+        self._max_memory_size = max_memory_size
+        self._db_repo: Optional[AnalysisCacheRepository] = None
+
+    def _get_repo(self) -> AnalysisCacheRepository:
+        """Lazy-load the database repository."""
+        if self._db_repo is None:
+            self._db_repo = get_analysis_cache_repository()
+        return self._db_repo
+
+    def _cache_key(self, workout_id: str) -> str:
+        """Generate cache key for a workout."""
+        return f"{self.ANALYSIS_TYPE}:{workout_id}"
 
     def get(self, workout_id: str) -> Optional[WorkoutAnalysisResult]:
-        """Get cached analysis for a workout."""
-        return self._cache.get(workout_id)
+        """Get cached analysis for a workout (memory first, then database)."""
+        # Check memory cache first
+        if workout_id in self._memory_cache:
+            return self._memory_cache[workout_id]
+
+        # Check database
+        try:
+            cache_key = self._cache_key(workout_id)
+            entry = self._get_repo().get_cached(cache_key)
+            if entry and entry.result:
+                # Reconstruct WorkoutAnalysisResult from stored JSON
+                analysis = WorkoutAnalysisResult.model_validate(entry.result)
+                # Store in memory cache for faster subsequent access
+                self._add_to_memory(workout_id, analysis)
+                return analysis
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(
+                f"Failed to load analysis from database for {workout_id}: {e}"
+            )
+
+        return None
+
+    def _add_to_memory(self, workout_id: str, analysis: WorkoutAnalysisResult) -> None:
+        """Add to memory cache with LRU eviction."""
+        if len(self._memory_cache) >= self._max_memory_size:
+            # Remove oldest entry
+            oldest_key = next(iter(self._memory_cache))
+            del self._memory_cache[oldest_key]
+        self._memory_cache[workout_id] = analysis
 
     def set(self, workout_id: str, analysis: WorkoutAnalysisResult) -> None:
-        """Cache an analysis result."""
-        # Simple LRU: remove oldest if at capacity
-        if len(self._cache) >= self._max_size:
-            oldest_key = next(iter(self._cache))
-            del self._cache[oldest_key]
-
+        """Cache an analysis result (both memory and database)."""
         analysis.cached_at = datetime.utcnow()
-        self._cache[workout_id] = analysis
+
+        # Add to memory cache
+        self._add_to_memory(workout_id, analysis)
+
+        # Persist to database
+        try:
+            self._get_repo().cache_analysis(
+                analysis_type=self.ANALYSIS_TYPE,
+                input_data=workout_id,
+                result=analysis.model_dump(mode="json"),
+                model_name=analysis.model_used,
+                ttl_seconds=self.TTL_SECONDS,
+            )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(
+                f"Failed to persist analysis to database for {workout_id}: {e}"
+            )
 
     def invalidate(self, workout_id: str) -> bool:
-        """Remove a workout from cache."""
-        if workout_id in self._cache:
-            del self._cache[workout_id]
-            return True
-        return False
+        """Remove a workout from cache (both memory and database)."""
+        removed = False
+
+        # Remove from memory
+        if workout_id in self._memory_cache:
+            del self._memory_cache[workout_id]
+            removed = True
+
+        # Remove from database
+        try:
+            cache_key = self._cache_key(workout_id)
+            if self._get_repo().invalidate_cache(cache_key):
+                removed = True
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(
+                f"Failed to invalidate analysis in database for {workout_id}: {e}"
+            )
+
+        return removed
 
     def clear(self) -> None:
-        """Clear all cached analyses."""
-        self._cache.clear()
+        """Clear all cached analyses (both memory and database)."""
+        self._memory_cache.clear()
+
+        try:
+            # Clear only workout analyses from database
+            repo = self._get_repo()
+            entries = repo.get_all(analysis_type=self.ANALYSIS_TYPE, limit=1000)
+            for entry in entries:
+                repo.delete(entry.cache_key)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(
+                f"Failed to clear analyses from database: {e}"
+            )
 
 
 # Singleton cache instance

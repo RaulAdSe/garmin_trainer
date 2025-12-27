@@ -74,7 +74,7 @@ class AnalysisCacheRepository(CachingRepository[AnalysisCacheEntry]):
             if env_path:
                 self.db_path = Path(env_path)
             else:
-                self.db_path = Path(__file__).parent.parent.parent.parent.parent / "training.db"
+                self.db_path = Path(__file__).parent.parent.parent.parent / "training.db"
 
         self._ensure_table_exists()
 
