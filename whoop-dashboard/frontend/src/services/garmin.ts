@@ -17,16 +17,21 @@ const isNative = Capacitor.isNativePlatform();
 
 // Native HTTP wrapper that falls back to fetch on web
 async function nativeGet(url: string, headers?: Record<string, string>): Promise<{ data: unknown; status: number }> {
-  if (isNative) {
-    const response: HttpResponse = await CapacitorHttp.get({
-      url,
-      headers: headers || {},
-    });
-    return { data: response.data, status: response.status };
-  } else {
-    const response = await fetch(url, { headers, credentials: 'include' });
-    const data = await response.json().catch(() => response.text());
-    return { data, status: response.status };
+  try {
+    if (isNative) {
+      const response: HttpResponse = await CapacitorHttp.get({
+        url,
+        headers: headers || {},
+      });
+      return { data: response.data, status: response.status };
+    } else {
+      const response = await fetch(url, { headers, credentials: 'include' });
+      const data = await response.json().catch(() => response.text());
+      return { data, status: response.status };
+    }
+  } catch (error) {
+    console.error('[HTTP] GET failed:', url, error);
+    return { data: null, status: 0 }; // Return status 0 for network errors
   }
 }
 
@@ -35,39 +40,49 @@ async function nativePost(
   body?: string | Record<string, unknown>,
   headers?: Record<string, string>
 ): Promise<{ data: unknown; status: number; headers: Record<string, string> }> {
-  if (isNative) {
-    const response: HttpResponse = await CapacitorHttp.post({
-      url,
-      headers: headers || {},
-      data: body,
-    });
-    return { data: response.data, status: response.status, headers: response.headers };
-  } else {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: typeof body === 'string' ? body : JSON.stringify(body),
-      credentials: 'include',
-    });
-    const data = await response.json().catch(() => response.text());
-    const respHeaders: Record<string, string> = {};
-    response.headers.forEach((v, k) => respHeaders[k] = v);
-    return { data, status: response.status, headers: respHeaders };
+  try {
+    if (isNative) {
+      const response: HttpResponse = await CapacitorHttp.post({
+        url,
+        headers: headers || {},
+        data: body,
+      });
+      return { data: response.data, status: response.status, headers: response.headers };
+    } else {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: typeof body === 'string' ? body : JSON.stringify(body),
+        credentials: 'include',
+      });
+      const data = await response.json().catch(() => response.text());
+      const respHeaders: Record<string, string> = {};
+      response.headers.forEach((v, k) => respHeaders[k] = v);
+      return { data, status: response.status, headers: respHeaders };
+    }
+  } catch (error) {
+    console.error('[HTTP] POST failed:', url, error);
+    return { data: null, status: 0, headers: {} };
   }
 }
 
 async function nativeGetText(url: string, headers?: Record<string, string>): Promise<{ data: string; status: number }> {
-  if (isNative) {
-    const response: HttpResponse = await CapacitorHttp.get({
-      url,
-      headers: headers || {},
-      responseType: 'text',
-    });
-    return { data: response.data as string, status: response.status };
-  } else {
-    const response = await fetch(url, { headers, credentials: 'include' });
-    const data = await response.text();
-    return { data, status: response.status };
+  try {
+    if (isNative) {
+      const response: HttpResponse = await CapacitorHttp.get({
+        url,
+        headers: headers || {},
+        responseType: 'text',
+      });
+      return { data: response.data as string, status: response.status };
+    } else {
+      const response = await fetch(url, { headers, credentials: 'include' });
+      const data = await response.text();
+      return { data, status: response.status };
+    }
+  } catch (error) {
+    console.error('[HTTP] GET text failed:', url, error);
+    return { data: '', status: 0 };
   }
 }
 
@@ -77,6 +92,105 @@ const GC_MODERN = 'https://connect.garmin.com/modern';
 const SIGNIN_URL = 'https://sso.garmin.com/sso/signin';
 const OAUTH_URL = 'https://connectapi.garmin.com/oauth-service/oauth';
 const CONNECT_API = 'https://connect.garmin.com';
+
+// OAuth1 consumer credentials (from https://thegarth.s3.amazonaws.com/oauth_consumer.json)
+const OAUTH_CONSUMER_KEY = 'fc3e99d2-118c-44b8-8ae3-03370dde24c0';
+const OAUTH_CONSUMER_SECRET = 'E08WAR897WEy2knn7aFBrvegVAf0AFdWBBF';
+
+// Helper: percent encode for OAuth (RFC 3986)
+function percentEncode(str: string): string {
+  return encodeURIComponent(str)
+    .replace(/!/g, '%21')
+    .replace(/\*/g, '%2A')
+    .replace(/'/g, '%27')
+    .replace(/\(/g, '%28')
+    .replace(/\)/g, '%29');
+}
+
+// Helper: generate HMAC-SHA1 signature for OAuth1
+async function hmacSha1(key: string, message: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(key);
+  const messageData = encoder.encode(message);
+
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    keyData,
+    { name: 'HMAC', hash: 'SHA-1' },
+    false,
+    ['sign']
+  );
+
+  const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+
+  // Convert to base64
+  const bytes = new Uint8Array(signature);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+// Helper: build OAuth1 authorization header with HMAC-SHA1
+async function buildOAuth1Header(
+  method: string,
+  url: string,
+  params: Record<string, string>,
+  consumerKey: string,
+  consumerSecret: string,
+  tokenKey?: string,
+  tokenSecret?: string
+): Promise<string> {
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const nonce = Math.random().toString(36).substring(2, 15) +
+                Math.random().toString(36).substring(2, 15);
+
+  // OAuth params
+  const oauthParams: Record<string, string> = {
+    oauth_consumer_key: consumerKey,
+    oauth_nonce: nonce,
+    oauth_signature_method: 'HMAC-SHA1',
+    oauth_timestamp: timestamp,
+    oauth_version: '1.0',
+  };
+
+  if (tokenKey) {
+    oauthParams.oauth_token = tokenKey;
+  }
+
+  // Combine all params for signature base string
+  const allParams: Record<string, string> = { ...oauthParams, ...params };
+
+  // Sort and encode params
+  const sortedParams = Object.keys(allParams)
+    .sort()
+    .map(key => `${percentEncode(key)}=${percentEncode(allParams[key])}`)
+    .join('&');
+
+  // Build signature base string
+  const baseUrl = url.split('?')[0];
+  const signatureBaseString = [
+    method.toUpperCase(),
+    percentEncode(baseUrl),
+    percentEncode(sortedParams),
+  ].join('&');
+
+  // Build signing key
+  const signingKey = `${percentEncode(consumerSecret)}&${percentEncode(tokenSecret || '')}`;
+
+  // Generate signature
+  const signature = await hmacSha1(signingKey, signatureBaseString);
+  oauthParams.oauth_signature = signature;
+
+  // Build Authorization header
+  const headerParams = Object.keys(oauthParams)
+    .sort()
+    .map(key => `${percentEncode(key)}="${percentEncode(oauthParams[key])}"`)
+    .join(', ');
+
+  return `OAuth ${headerParams}`;
+}
 
 // Token storage keys
 const TOKEN_KEY = 'garmin_tokens';
@@ -123,13 +237,32 @@ class GarminService {
   private oauth2Token: OAuth2Token | null = null;
   // Token refresh queue - prevents multiple simultaneous refresh calls
   private refreshPromise: Promise<void> | null = null;
+  // Track if tokens have been loaded from storage
+  private tokensLoaded = false;
+  private loadingTokens: Promise<void> | null = null;
 
   constructor() {
-    this.loadTokens();
+    // Don't call loadTokens() here - it's async and can't be awaited in constructor
+    // Tokens will be loaded lazily when needed
   }
 
-  // Load tokens from Preferences
+  // Load tokens from Preferences (with deduplication)
   private async loadTokens(): Promise<void> {
+    // If tokens are already loaded, skip
+    if (this.tokensLoaded) return;
+
+    // If currently loading, wait for that to complete
+    if (this.loadingTokens) {
+      await this.loadingTokens;
+      return;
+    }
+
+    this.loadingTokens = this.doLoadTokens();
+    await this.loadingTokens;
+    this.loadingTokens = null;
+  }
+
+  private async doLoadTokens(): Promise<void> {
     try {
       const { value } = await Preferences.get({ key: TOKEN_KEY });
       if (value) {
@@ -137,8 +270,11 @@ class GarminService {
         this.oauth1Token = tokens.oauth1;
         this.oauth2Token = tokens.oauth2;
       }
+      this.tokensLoaded = true;
+      console.log('[Garmin] Tokens loaded from storage:', !!this.oauth2Token);
     } catch (error) {
-      console.error('Failed to load tokens:', error);
+      console.error('[Garmin] Failed to load tokens:', error);
+      this.tokensLoaded = true; // Mark as loaded even on error to prevent infinite retries
     }
   }
 
@@ -169,194 +305,254 @@ class GarminService {
 
   // Check if authenticated
   async isAuthenticated(): Promise<boolean> {
+    // If we already have tokens in memory, use them (don't overwrite with stale storage)
+    if (this.oauth2Token !== null) {
+      return true;
+    }
+    // Otherwise, try to load from storage
     await this.loadTokens();
     return this.oauth2Token !== null;
   }
 
-  // Login and sync via backend API (training-analyzer)
-  // The backend uses Python's garminconnect library which properly handles authentication
+  // Login directly with Garmin SSO (on-device, no backend required)
+  // This follows the exact approach from the Python garth library
   async login(email: string, password: string): Promise<LoginResult> {
     try {
-      // Store credentials for sync (not sent anywhere yet)
+      console.log('[Garmin] Starting direct SSO login...');
+
+      // Store credentials
       await Preferences.set({ key: 'garmin_email', value: email });
-      // Store password securely in iOS Keychain
       await secureStorage.setPassword(password);
 
-      // Mark as "authenticated" - actual auth happens during sync
-      this.oauth2Token = {
-        access_token: 'pending_sync',
-        token_type: 'Bearer',
-        expires_in: 3600,
-        expires_at: Date.now() + 3600000,
-      };
-      await this.saveTokens();
+      const SSO = 'https://sso.garmin.com/sso';
+      const SSO_EMBED = `${SSO}/embed`;
 
-      return { success: true };
-    } catch (error) {
-      console.error('Login error:', error);
-      return { success: false, error: error instanceof Error ? error.message : 'Failed to save credentials' };
-    }
-  }
+      // Params for embed widget flow (matches garth library exactly)
+      const embedParams = new URLSearchParams({
+        'id': 'gauth-widget',
+        'embedWidget': 'true',
+        'gauthHost': SSO,
+      });
 
-  // Sync via backend API
-  async syncViaBackend(days: number = 7, onProgress?: (current: number, total: number) => void): Promise<SyncResult> {
-    try {
-      const { value: email } = await Preferences.get({ key: 'garmin_email' });
-      const password = await secureStorage.getPassword();
+      const signinParams = new URLSearchParams({
+        'id': 'gauth-widget',
+        'embedWidget': 'true',
+        'gauthHost': SSO_EMBED,
+        'service': SSO_EMBED,
+        'source': SSO_EMBED,
+        'redirectAfterAccountLoginUrl': SSO_EMBED,
+        'redirectAfterAccountCreationUrl': SSO_EMBED,
+      });
 
-      if (!email || !password) {
-        return { success: false, daysProcessed: 0, error: 'Not authenticated' };
+      // Step 1: Set cookies with embed request
+      console.log('[Garmin] Setting cookies...');
+      await nativeGetText(`${SSO_EMBED}?${embedParams.toString()}`, {
+        'User-Agent': 'com.garmin.android.apps.connectmobile',
+      });
+
+      // Step 2: Get CSRF token from signin page
+      console.log('[Garmin] Fetching CSRF token...');
+      const signinUrl = `${SSO}/signin?${signinParams.toString()}`;
+      const csrfResponse = await nativeGetText(signinUrl, {
+        'User-Agent': 'com.garmin.android.apps.connectmobile',
+      });
+
+      if (csrfResponse.status !== 200) {
+        return { success: false, error: `Failed to load login page (${csrfResponse.status})` };
       }
 
-      // Try to call the training-analyzer backend API
-      // Default to localhost for development, can be configured for production
-      const backendUrl = 'http://localhost:8000';
+      // Extract CSRF token (exact regex from garth)
+      const csrfMatch = csrfResponse.data.match(/name="_csrf"\s+value="(.+?)"/);
+      if (!csrfMatch) {
+        console.log('[Garmin] CSRF not found in response');
+        return { success: false, error: 'Could not find CSRF token' };
+      }
+      const csrf = csrfMatch[1];
+      console.log('[Garmin] CSRF token found');
 
-      console.log('Syncing via backend API...');
-      onProgress?.(0, days);
+      // Step 3: Submit login credentials
+      console.log('[Garmin] Submitting credentials...');
+      const loginData = new URLSearchParams();
+      loginData.append('username', email);
+      loginData.append('password', password);
+      loginData.append('embed', 'true');
+      loginData.append('_csrf', csrf);
 
-      const response = await nativePost(
-        `${backendUrl}/api/v1/garmin/sync-wellness`,
-        JSON.stringify({ email, password, days }),
+      const loginResponse = await nativePost(
+        signinUrl,
+        loginData.toString(),
         {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
+          'User-Agent': 'com.garmin.android.apps.connectmobile',
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Referer': signinUrl,
         }
       );
 
-      if (response.status !== 200) {
-        const errorData = response.data as { detail?: string };
-        const errorMsg = errorData?.detail || `Backend sync failed (${response.status})`;
+      console.log('[Garmin] Login response status:', loginResponse.status);
 
-        // If backend is not available, fall back to direct sync attempt
-        if (response.status === 0 || errorMsg.includes('fetch')) {
-          console.log('Backend not available, attempting direct sync...');
-          return this.sync(days, onProgress);
-        }
+      const responseText = typeof loginResponse.data === 'string'
+        ? loginResponse.data
+        : JSON.stringify(loginResponse.data);
 
-        return { success: false, daysProcessed: 0, error: errorMsg };
+      // Check page title for success (garth checks for "Success" title)
+      const titleMatch = responseText.match(/<title>(.+?)<\/title>/);
+      const title = titleMatch ? titleMatch[1] : '';
+      console.log('[Garmin] Response title:', title);
+
+      if (title.includes('MFA')) {
+        return { success: false, error: 'MFA required - not yet supported in app' };
       }
 
-      const syncData = response.data as { success: boolean; synced_count: number; message: string };
-      console.log('Sync complete, fetching wellness data...');
-      onProgress?.(Math.floor(days * 0.8), days);
-
-      // Now fetch the wellness data from the backend and save it locally
-      const historyResponse = await nativeGet(`${backendUrl}/api/v1/garmin/wellness-history?days=${days}`, {
-        'Accept': 'application/json',
-      });
-
-      if (historyResponse.status === 200) {
-        const historyData = historyResponse.data as {
-          success: boolean;
-          days: Array<{
-            date: string;
-            resting_heart_rate: number | null;
-            sleep_hours: number | null;
-            sleep_score: number | null;
-            deep_sleep_pct: number | null;
-            rem_sleep_pct: number | null;
-            hrv: number | null;
-            hrv_status: string | null;
-            body_battery_high: number | null;
-            body_battery_low: number | null;
-            body_battery_charged: number | null;
-            body_battery_drained: number | null;
-            avg_stress: number | null;
-            steps: number | null;
-            steps_goal: number | null;
-            active_calories: number | null;
-            intensity_minutes: number | null;
-          }>;
-        };
-
-        if (historyData.success && historyData.days) {
-          console.log(`Saving ${historyData.days.length} days to local storage...`);
-          await db.initialize();
-
-          for (const day of historyData.days) {
-            const sleepSeconds = day.sleep_hours ? day.sleep_hours * 3600 : 0;
-            const deepPct = day.deep_sleep_pct || 0;
-            const remPct = day.rem_sleep_pct || 0;
-
-            await db.saveWellness({
-              date: day.date,
-              wellness: {
-                date: day.date,
-                fetched_at: new Date().toISOString(),
-                resting_heart_rate: day.resting_heart_rate,
-                training_readiness_score: null,
-              },
-              sleep: sleepSeconds > 0 ? {
-                date: day.date,
-                sleep_start: null,
-                sleep_end: null,
-                total_sleep_seconds: sleepSeconds,
-                deep_sleep_seconds: Math.round(sleepSeconds * deepPct / 100),
-                light_sleep_seconds: Math.round(sleepSeconds * (100 - deepPct - remPct) / 100),
-                rem_sleep_seconds: Math.round(sleepSeconds * remPct / 100),
-                awake_seconds: 0,
-                sleep_score: day.sleep_score,
-                sleep_efficiency: null,
-                avg_spo2: null,
-                avg_respiration: null,
-              } : null,
-              hrv: day.hrv ? {
-                date: day.date,
-                hrv_weekly_avg: null,
-                hrv_last_night_avg: day.hrv,
-                hrv_last_night_5min_high: null,
-                hrv_status: day.hrv_status,
-                baseline_low: null,
-                baseline_balanced_low: null,
-                baseline_balanced_upper: null,
-              } : null,
-              stress: day.body_battery_charged ? {
-                date: day.date,
-                avg_stress_level: day.avg_stress,
-                max_stress_level: null,
-                rest_stress_duration: 0,
-                low_stress_duration: 0,
-                medium_stress_duration: 0,
-                high_stress_duration: 0,
-                body_battery_charged: day.body_battery_charged,
-                body_battery_drained: day.body_battery_drained,
-                body_battery_high: day.body_battery_high,
-                body_battery_low: day.body_battery_low,
-              } : null,
-              activity: day.steps ? {
-                date: day.date,
-                steps: day.steps,
-                steps_goal: day.steps_goal || 10000,
-                total_distance_m: 0,
-                active_calories: day.active_calories,
-                total_calories: null,
-                intensity_minutes: day.intensity_minutes || 0,
-                floors_climbed: 0,
-              } : null,
-            });
-          }
-          console.log('Local storage updated successfully');
+      if (title !== 'Success') {
+        // Check for specific errors
+        if (responseText.includes('locked') || responseText.includes('LOCKED')) {
+          return { success: false, error: 'Account is locked. Please try again later.' };
         }
+        if (title.toLowerCase().includes('error') ||
+            responseText.toLowerCase().includes('credentials')) {
+          return { success: false, error: 'Invalid email or password' };
+        }
+        console.log('[Garmin] Unexpected title, response snippet:', responseText.substring(0, 300));
+        return { success: false, error: `Login failed - unexpected response: ${title}` };
       }
 
-      onProgress?.(days, days);
+      // Extract ticket (exact regex from garth: embed\?ticket=([^"]+)")
+      const ticketMatch = responseText.match(/embed\?ticket=([^"]+)"/);
+      if (!ticketMatch) {
+        console.log('[Garmin] No ticket in response');
+        return { success: false, error: 'Login succeeded but no ticket received' };
+      }
 
-      return {
-        success: syncData.success,
-        daysProcessed: syncData.synced_count,
-        error: syncData.success ? undefined : syncData.message,
+      const ticket = ticketMatch[1];
+      console.log('[Garmin] Got ticket:', ticket.substring(0, 10) + '...');
+
+      // Step 3: Exchange ticket for OAuth1 tokens using HMAC-SHA1 signing
+      const preAuthUrl = `${OAUTH_URL}/preauthorized`;
+      const preAuthQueryParams: Record<string, string> = {
+        'ticket': ticket,
+        'login-url': GARMIN_SSO_EMBED,
+        'accepts-mfa-tokens': 'true',
       };
-    } catch (error) {
-      console.error('Backend sync error:', error);
 
-      // Fall back to direct sync
-      console.log('Falling back to direct sync...');
-      return this.sync(days, onProgress);
+      console.log('[Garmin] Exchanging ticket for OAuth1...');
+      const preAuthHeader = await buildOAuth1Header(
+        'GET',
+        preAuthUrl,
+        preAuthQueryParams,
+        OAUTH_CONSUMER_KEY,
+        OAUTH_CONSUMER_SECRET
+      );
+
+      const preAuthQueryString = Object.entries(preAuthQueryParams)
+        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+        .join('&');
+
+      const oauth1Response = await nativeGetText(
+        `${preAuthUrl}?${preAuthQueryString}`,
+        {
+          'User-Agent': 'com.garmin.android.apps.connectmobile',
+          'Authorization': preAuthHeader,
+        }
+      );
+
+      console.log('[Garmin] OAuth1 response status:', oauth1Response.status);
+
+      if (oauth1Response.status !== 200) {
+        console.log('[Garmin] OAuth1 error response:', oauth1Response.data?.substring(0, 300));
+        return { success: false, error: `OAuth1 exchange failed (${oauth1Response.status})` };
+      }
+
+      // Parse OAuth1 response
+      const oauth1Data = new URLSearchParams(oauth1Response.data);
+      const oauth1Token = oauth1Data.get('oauth_token');
+      const oauth1Secret = oauth1Data.get('oauth_token_secret');
+
+      if (!oauth1Token || !oauth1Secret) {
+        console.log('[Garmin] OAuth1 response:', oauth1Response.data.substring(0, 200));
+        return { success: false, error: 'Failed to get OAuth1 tokens' };
+      }
+
+      this.oauth1Token = {
+        oauth_token: oauth1Token,
+        oauth_token_secret: oauth1Secret,
+      };
+
+      console.log('[Garmin] Got OAuth1 tokens, exchanging for OAuth2...');
+
+      // Step 4: Exchange OAuth1 for OAuth2 using HMAC-SHA1 signing
+      const oauth2Url = `${OAUTH_URL}/exchange/user/2.0`;
+      const oauth2Header = await buildOAuth1Header(
+        'POST',
+        oauth2Url,
+        {}, // No additional params for POST body
+        OAUTH_CONSUMER_KEY,
+        OAUTH_CONSUMER_SECRET,
+        oauth1Token,
+        oauth1Secret
+      );
+
+      const oauth2Response = await nativePost(
+        oauth2Url,
+        '',
+        {
+          'User-Agent': 'com.garmin.android.apps.connectmobile',
+          'Authorization': oauth2Header,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        }
+      );
+
+      console.log('[Garmin] OAuth2 response status:', oauth2Response.status);
+
+      if (oauth2Response.status !== 200) {
+        console.log('[Garmin] OAuth2 error:', oauth2Response.data);
+        return { success: false, error: `OAuth2 exchange failed (${oauth2Response.status})` };
+      }
+
+      const oauth2Data = oauth2Response.data as {
+        access_token?: string;
+        token_type?: string;
+        expires_in?: number;
+        refresh_token?: string;
+        scope?: string;
+      };
+
+      if (!oauth2Data.access_token) {
+        return { success: false, error: 'No access token received' };
+      }
+
+      this.oauth2Token = {
+        access_token: oauth2Data.access_token,
+        token_type: oauth2Data.token_type || 'Bearer',
+        expires_in: oauth2Data.expires_in || 3600,
+        refresh_token: oauth2Data.refresh_token,
+        expires_at: Date.now() + ((oauth2Data.expires_in || 3600) * 1000),
+      };
+
+      // Save tokens
+      await this.saveTokens();
+
+      // Also save refresh token securely
+      if (oauth2Data.refresh_token) {
+        await secureStorage.setRefreshToken(oauth2Data.refresh_token);
+      }
+
+      console.log('[Garmin] Login successful! Token expires in', oauth2Data.expires_in, 'seconds');
+      return { success: true };
+
+    } catch (error) {
+      console.error('[Garmin] Login error:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Login failed' };
     }
   }
 
-  // Exchange ticket for OAuth1 token
+  // Sync wellness data - uses direct Garmin API (on-device, no backend)
+  async syncViaBackend(days: number = 7, onProgress?: (current: number, total: number) => void): Promise<SyncResult> {
+    // Use direct on-device sync (no backend required)
+    console.log('[Garmin] Starting direct on-device sync...');
+    return this.sync(days, onProgress);
+  }
+
+  // Exchange ticket for OAuth1 token (legacy - kept for reference)
   private async exchangeTicketForOAuth1(ticket: string): Promise<LoginResult> {
     try {
       // Consumer credentials should be set via environment variables
@@ -450,28 +646,23 @@ class GarminService {
     }
 
     try {
-      const CONSUMER_KEY = process.env.NEXT_PUBLIC_GARMIN_CONSUMER_KEY || '';
+      console.log('[Garmin] OAuth2 exchange starting...');
 
-      // Build simple OAuth1 header with the token
-      const timestamp = Math.floor(Date.now() / 1000).toString();
-      const nonce = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      // Use HMAC-SHA1 signing (same as login method)
+      const oauth2Url = `${OAUTH_URL}/exchange/user/2.0`;
+      const oauth2Header = await buildOAuth1Header(
+        'POST',
+        oauth2Url,
+        {},
+        OAUTH_CONSUMER_KEY,
+        OAUTH_CONSUMER_SECRET,
+        this.oauth1Token.oauth_token,
+        this.oauth1Token.oauth_token_secret
+      );
 
-      // For the exchange endpoint, we need OAuth1 header with token
-      const authHeader = [
-        `OAuth oauth_consumer_key="${CONSUMER_KEY}"`,
-        `oauth_token="${this.oauth1Token.oauth_token}"`,
-        `oauth_signature_method="HMAC-SHA1"`,
-        `oauth_timestamp="${timestamp}"`,
-        `oauth_nonce="${nonce}"`,
-        `oauth_version="1.0"`,
-        `oauth_signature="placeholder"`,
-      ].join(', ');
-
-      console.log('OAuth2 exchange starting...');
-
-      const response = await nativePost(`${OAUTH_URL}/exchange/user/2.0`, '', {
+      const response = await nativePost(oauth2Url, '', {
         'User-Agent': 'com.garmin.android.apps.connectmobile',
-        'Authorization': authHeader,
+        'Authorization': oauth2Header,
         'Content-Type': 'application/x-www-form-urlencoded',
       });
 

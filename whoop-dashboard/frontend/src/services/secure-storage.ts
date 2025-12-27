@@ -78,22 +78,12 @@ class SecureStorageService {
   }
 
   private async doInitialize(): Promise<void> {
-    if (this.isNative) {
-      try {
-        // Dynamically import the secure storage plugin
-        const module = await import('@aparajita/capacitor-secure-storage');
-        this.SecureStorage = module.SecureStorage;
-        this.initialized = true;
-        console.log('[SecureStorage] Initialized with native Keychain storage');
-      } catch (error) {
-        console.warn('[SecureStorage] Failed to load secure storage plugin, falling back to Preferences:', error);
-        this.SecureStorage = null;
-        this.initialized = true;
-      }
-    } else {
-      console.warn('[SecureStorage] Running on web - using Preferences fallback (NOT SECURE for production)');
-      this.initialized = true;
-    }
+    // NOTE: The @aparajita/capacitor-secure-storage plugin is not properly linked via SPM
+    // and causes crashes. Using Preferences fallback until plugin is properly configured.
+    // TODO: Re-enable Keychain storage when SPM integration is fixed
+    console.log('[SecureStorage] Using Preferences storage (Keychain plugin disabled)');
+    this.SecureStorage = null;
+    this.initialized = true;
   }
 
   /**

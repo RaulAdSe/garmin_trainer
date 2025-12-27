@@ -17,6 +17,13 @@ const config: CapacitorConfig = {
       iosDatabaseLocation: 'Library/CapacitorDatabase',
     },
   },
+  // Exclude SecureStorage from native plugins - it's not properly linked via SPM
+  // and causes crashes. Using Preferences fallback instead.
+  includePlugins: [
+    '@capacitor/browser',
+    '@capacitor/network',
+    '@capacitor/preferences',
+  ],
 };
 
 export default config;
