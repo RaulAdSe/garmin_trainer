@@ -24,6 +24,12 @@ from .goals import (
     predict_race_time,
     calculate_training_paces,
     assess_goal_progress,
+    # VO2max-based calculations
+    calculate_training_paces_from_vo2max,
+    calculate_training_paces_from_vo2max_detailed,
+    assess_goal_feasibility,
+    get_goal_feasibility_summary,
+    format_pace_from_seconds,
 )
 from .condensation import (
     CondensedWorkoutData,
@@ -59,6 +65,12 @@ __all__ = [
     "predict_race_time",
     "calculate_training_paces",
     "assess_goal_progress",
+    # VO2max-based calculations
+    "calculate_training_paces_from_vo2max",
+    "calculate_training_paces_from_vo2max_detailed",
+    "assess_goal_feasibility",
+    "get_goal_feasibility_summary",
+    "format_pace_from_seconds",
     # Condensation (time-series to LLM summary)
     "CondensedWorkoutData",
     "HRSummary",
