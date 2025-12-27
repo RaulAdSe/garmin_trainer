@@ -778,3 +778,82 @@ class TrainingDatabase:
             if row:
                 return GarminFitnessData(**dict(row))
             return None
+
+    # =========================================================================
+    # Workout Analyses - Simple CRUD for AI-generated insights
+    # =========================================================================
+
+    def save_workout_analysis(
+        self,
+        workout_id: str,
+        summary: str,
+        what_went_well: List[str],
+        improvements: List[str],
+        training_context: str,
+        execution_rating: str,
+        overall_score: int,
+        training_effect_score: float,
+        load_score: int,
+        recovery_hours: int,
+        model_used: str,
+    ) -> None:
+        """Save or update a workout analysis."""
+        import json
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO workout_analyses (
+                    workout_id, summary, what_went_well, improvements,
+                    training_context, execution_rating, overall_score,
+                    training_effect_score, load_score, recovery_hours,
+                    model_used, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                (
+                    workout_id,
+                    summary,
+                    json.dumps(what_went_well),
+                    json.dumps(improvements),
+                    training_context,
+                    execution_rating,
+                    overall_score,
+                    training_effect_score,
+                    load_score,
+                    recovery_hours,
+                    model_used,
+                ),
+            )
+
+    def get_workout_analysis(self, workout_id: str) -> Optional[Dict[str, Any]]:
+        """Get analysis for a workout, or None if not analyzed."""
+        import json
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM workout_analyses WHERE workout_id = ?",
+                (workout_id,),
+            ).fetchone()
+
+            if row:
+                data = dict(row)
+                # Parse JSON arrays
+                data["what_went_well"] = json.loads(data.get("what_went_well") or "[]")
+                data["improvements"] = json.loads(data.get("improvements") or "[]")
+                return data
+            return None
+
+    def delete_workout_analysis(self, workout_id: str) -> bool:
+        """Delete a workout analysis. Returns True if deleted."""
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "DELETE FROM workout_analyses WHERE workout_id = ?",
+                (workout_id,),
+            )
+            return cursor.rowcount > 0
+
+    def get_analyzed_workout_ids(self) -> List[str]:
+        """Get list of workout IDs that have been analyzed."""
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                "SELECT workout_id FROM workout_analyses"
+            ).fetchall()
+            return [row["workout_id"] for row in rows]

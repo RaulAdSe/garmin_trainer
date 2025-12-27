@@ -178,23 +178,25 @@ CREATE INDEX IF NOT EXISTS idx_training_plans_created_at ON training_plans(creat
 CREATE INDEX IF NOT EXISTS idx_training_plans_is_active ON training_plans(is_active);
 CREATE INDEX IF NOT EXISTS idx_training_plans_goal_race_date ON training_plans(json_extract(goal_json, '$.race_date'));
 
--- LLM analysis result cache to save API costs
-CREATE TABLE IF NOT EXISTS analysis_cache (
-    cache_key TEXT PRIMARY KEY,        -- Hash of input parameters
-    analysis_type TEXT NOT NULL,       -- Type of analysis (workout, weekly, etc.)
-    input_hash TEXT NOT NULL,          -- Hash of the input data for validation
-    result_json TEXT NOT NULL,         -- Cached analysis result
-    model_name TEXT,                   -- LLM model used for analysis
-    tokens_used INTEGER,               -- Token count for cost tracking
+-- Workout analyses - permanent storage for AI-generated workout insights
+CREATE TABLE IF NOT EXISTS workout_analyses (
+    workout_id TEXT PRIMARY KEY,       -- References activity_metrics.activity_id
+    summary TEXT NOT NULL,             -- Main analysis summary
+    what_went_well TEXT,               -- JSON array of positive observations
+    improvements TEXT,                 -- JSON array of areas for improvement
+    training_context TEXT,             -- How workout fits into training
+    execution_rating TEXT,             -- excellent, good, fair, needs_improvement
+    overall_score INTEGER,             -- 0-100 overall score
+    training_effect_score REAL,        -- Training effect (1.0-5.0)
+    load_score INTEGER,                -- Load score (0-100+)
+    recovery_hours INTEGER,            -- Recommended recovery time
+    model_used TEXT,                   -- LLM model used for analysis
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    expires_at TEXT,                   -- Optional expiration timestamp
-    hit_count INTEGER DEFAULT 0        -- Track cache hits for analytics
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
--- Indexes for efficient cache lookups
-CREATE INDEX IF NOT EXISTS idx_analysis_cache_type ON analysis_cache(analysis_type);
-CREATE INDEX IF NOT EXISTS idx_analysis_cache_expires ON analysis_cache(expires_at);
-CREATE INDEX IF NOT EXISTS idx_analysis_cache_input_hash ON analysis_cache(input_hash);
+-- Index for efficient queries
+CREATE INDEX IF NOT EXISTS idx_workout_analyses_created ON workout_analyses(created_at);
 
 -- =============================================================================
 -- Garmin Fitness Data - VO2max, Race Predictions, Training Status

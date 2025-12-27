@@ -1,19 +1,16 @@
 """Workout analysis API routes."""
 
 import asyncio
+import logging
 from datetime import date, datetime
 from typing import Dict, Optional
-from functools import lru_cache
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from ..deps import get_coach_service, get_training_db, get_workout_repository
 from ...db.repositories.workout_repository import WorkoutRepository
-from ...db.repositories.analysis_cache_repository import (
-    AnalysisCacheRepository,
-    get_analysis_cache_repository,
-)
+from ...db.database import TrainingDatabase
 from ...llm.providers import get_llm_client, ModelType
 from ...llm.context_builder import build_athlete_context_prompt, format_workout_for_prompt
 from ...llm.prompts import (
@@ -41,134 +38,77 @@ from ...models.analysis import (
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# Persistent Analysis Cache (Database-backed with in-memory layer)
+# Simple Analysis Storage (Direct DB access)
 # ============================================================================
 
-class AnalysisCache:
-    """Database-backed cache for workout analyses with in-memory layer for speed."""
+# In-memory cache for session performance (optional optimization)
+_memory_cache: Dict[str, WorkoutAnalysisResult] = {}
 
-    ANALYSIS_TYPE = "workout_analysis"
-    # No expiration - analyses are kept forever
-    TTL_SECONDS = None
 
-    def __init__(self, max_memory_size: int = 100):
-        self._memory_cache: Dict[str, WorkoutAnalysisResult] = {}
-        self._max_memory_size = max_memory_size
-        self._db_repo: Optional[AnalysisCacheRepository] = None
+def get_analysis(db: TrainingDatabase, workout_id: str) -> Optional[WorkoutAnalysisResult]:
+    """Get analysis for a workout from DB (with memory cache for speed)."""
+    # Check memory first
+    if workout_id in _memory_cache:
+        return _memory_cache[workout_id]
 
-    def _get_repo(self) -> AnalysisCacheRepository:
-        """Lazy-load the database repository."""
-        if self._db_repo is None:
-            self._db_repo = get_analysis_cache_repository()
-        return self._db_repo
-
-    def _cache_key(self, workout_id: str) -> str:
-        """Generate cache key for a workout."""
-        return f"{self.ANALYSIS_TYPE}:{workout_id}"
-
-    def get(self, workout_id: str) -> Optional[WorkoutAnalysisResult]:
-        """Get cached analysis for a workout (memory first, then database)."""
-        # Check memory cache first
-        if workout_id in self._memory_cache:
-            return self._memory_cache[workout_id]
-
-        # Check database
+    # Check database
+    data = db.get_workout_analysis(workout_id)
+    if data:
         try:
-            cache_key = self._cache_key(workout_id)
-            entry = self._get_repo().get_cached(cache_key)
-            if entry and entry.result:
-                # Reconstruct WorkoutAnalysisResult from stored JSON
-                analysis = WorkoutAnalysisResult.model_validate(entry.result)
-                # Store in memory cache for faster subsequent access
-                self._add_to_memory(workout_id, analysis)
-                return analysis
+            analysis = WorkoutAnalysisResult(
+                workout_id=workout_id,
+                analysis_id=f"db_{workout_id}",
+                status=AnalysisStatus.COMPLETED,
+                summary=data.get("summary", ""),
+                what_worked_well=data.get("what_went_well", []),
+                observations=data.get("improvements", []),
+                training_fit=data.get("training_context", ""),
+                execution_rating=data.get("execution_rating", "good"),
+                overall_score=data.get("overall_score", 0),
+                training_effect_score=data.get("training_effect_score", 0),
+                load_score=data.get("load_score", 0),
+                recovery_hours=data.get("recovery_hours", 0),
+                model_used=data.get("model_used", ""),
+                generated_at=datetime.fromisoformat(data["created_at"]) if data.get("created_at") else None,
+            )
+            _memory_cache[workout_id] = analysis
+            return analysis
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(
-                f"Failed to load analysis from database for {workout_id}: {e}"
-            )
+            logger.warning(f"Failed to parse analysis for {workout_id}: {e}")
 
-        return None
-
-    def _add_to_memory(self, workout_id: str, analysis: WorkoutAnalysisResult) -> None:
-        """Add to memory cache with LRU eviction."""
-        if len(self._memory_cache) >= self._max_memory_size:
-            # Remove oldest entry
-            oldest_key = next(iter(self._memory_cache))
-            del self._memory_cache[oldest_key]
-        self._memory_cache[workout_id] = analysis
-
-    def set(self, workout_id: str, analysis: WorkoutAnalysisResult) -> None:
-        """Cache an analysis result (both memory and database)."""
-        analysis.cached_at = datetime.utcnow()
-
-        # Add to memory cache
-        self._add_to_memory(workout_id, analysis)
-
-        # Persist to database
-        try:
-            self._get_repo().cache_analysis(
-                analysis_type=self.ANALYSIS_TYPE,
-                input_data=workout_id,
-                result=analysis.model_dump(mode="json"),
-                model_name=analysis.model_used,
-                ttl_seconds=self.TTL_SECONDS,
-            )
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).error(
-                f"Failed to persist analysis to database for {workout_id}: {e}"
-            )
-
-    def invalidate(self, workout_id: str) -> bool:
-        """Remove a workout from cache (both memory and database)."""
-        removed = False
-
-        # Remove from memory
-        if workout_id in self._memory_cache:
-            del self._memory_cache[workout_id]
-            removed = True
-
-        # Remove from database
-        try:
-            cache_key = self._cache_key(workout_id)
-            if self._get_repo().invalidate_cache(cache_key):
-                removed = True
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(
-                f"Failed to invalidate analysis in database for {workout_id}: {e}"
-            )
-
-        return removed
-
-    def clear(self) -> None:
-        """Clear all cached analyses (both memory and database)."""
-        self._memory_cache.clear()
-
-        try:
-            # Clear only workout analyses from database
-            repo = self._get_repo()
-            entries = repo.get_all(analysis_type=self.ANALYSIS_TYPE, limit=1000)
-            for entry in entries:
-                repo.delete(entry.cache_key)
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(
-                f"Failed to clear analyses from database: {e}"
-            )
+    return None
 
 
-# Singleton cache instance
-_analysis_cache = AnalysisCache()
+def save_analysis(db: TrainingDatabase, workout_id: str, analysis: WorkoutAnalysisResult) -> None:
+    """Save analysis to DB (and memory cache)."""
+    try:
+        db.save_workout_analysis(
+            workout_id=workout_id,
+            summary=analysis.summary,
+            what_went_well=analysis.what_worked_well,
+            improvements=analysis.observations,
+            training_context=analysis.training_fit or "",
+            execution_rating=analysis.execution_rating,
+            overall_score=analysis.overall_score,
+            training_effect_score=analysis.training_effect_score,
+            load_score=analysis.load_score,
+            recovery_hours=analysis.recovery_hours,
+            model_used=analysis.model_used or "",
+        )
+        _memory_cache[workout_id] = analysis
+    except Exception as e:
+        logger.error(f"Failed to save analysis for {workout_id}: {e}")
 
 
-def get_analysis_cache() -> AnalysisCache:
-    """Get the analysis cache singleton."""
-    return _analysis_cache
+def delete_analysis(db: TrainingDatabase, workout_id: str) -> bool:
+    """Delete analysis from DB and memory."""
+    if workout_id in _memory_cache:
+        del _memory_cache[workout_id]
+    return db.delete_workout_analysis(workout_id)
 
 
 # Singleton agent instance
@@ -264,7 +204,6 @@ async def analyze_workout(
     include_details: bool = Query(default=True, description="Include detailed time-series analysis (HR dynamics, pace patterns, etc.)"),
     coach_service=Depends(get_coach_service),
     training_db=Depends(get_training_db),
-    cache: AnalysisCache = Depends(get_analysis_cache),
     agent: AnalysisAgent = Depends(get_analysis_agent),
 ):
     """
@@ -294,19 +233,17 @@ async def analyze_workout(
     Returns:
         AnalysisResponse with the analysis result
     """
-    import logging
-    logger = logging.getLogger(__name__)
     logger.info(f"[analyze_workout] Starting analysis for workout_id={workout_id}")
 
     try:
-        # Check cache first (unless force_refresh)
+        # Check DB first (unless force_refresh)
         force_refresh = request.force_refresh if request else False
         if not force_refresh and not stream:
-            cached = cache.get(workout_id)
-            if cached:
+            existing = get_analysis(training_db, workout_id)
+            if existing:
                 return AnalysisResponse(
                     success=True,
-                    analysis=cached,
+                    analysis=existing,
                     cached=True,
                 )
 
@@ -420,8 +357,8 @@ async def analyze_workout(
             splits=splits,
         )
 
-        # Cache the result
-        cache.set(workout_id, analysis)
+        # Save to database
+        save_analysis(training_db, workout_id, analysis)
 
         return AnalysisResponse(
             success=True,
@@ -449,11 +386,12 @@ async def _stream_analysis(
     athlete_context: dict,
     similar_workouts: list,
     historical_context: dict,
-    training_db,
+    training_db: TrainingDatabase,
 ):
     """Stream analysis response from LLM.
 
     Uses historical context for accurate analysis of past workouts.
+    Persists the analysis to database after streaming completes.
     """
     from ...models.analysis import (
         calculate_training_effect,
@@ -545,9 +483,11 @@ async def _stream_analysis(
             yield f"data: {json_lib.dumps({'type': 'content', 'content': chunk})}\n\n"
 
         # Send done event with analysis including scores
+        workout_id = workout_dict.get("activity_id", "")
+        generated_at = datetime.now()
         analysis = {
-            "id": workout_dict.get("activity_id", ""),
-            "workoutId": workout_dict.get("activity_id", ""),
+            "id": workout_id,
+            "workoutId": workout_id,
             "summary": full_content,
             "whatWentWell": [],
             "improvements": [],
@@ -558,9 +498,35 @@ async def _stream_analysis(
             "trainingEffectScore": training_effect,
             "loadScore": load_score,
             "recoveryHours": recovery_hours,
-            "generatedAt": datetime.now().isoformat(),
+            "generatedAt": generated_at.isoformat(),
             "modelUsed": "gpt-5-mini",
         }
+
+        # Save to database
+        if workout_id:
+            try:
+                from ...models.analysis import WorkoutAnalysisResult, AnalysisStatus
+                import uuid
+                analysis_result = WorkoutAnalysisResult(
+                    workout_id=workout_id,
+                    analysis_id=f"stream_{uuid.uuid4().hex[:8]}",
+                    status=AnalysisStatus.COMPLETED,
+                    summary=full_content,
+                    what_worked_well=[],
+                    observations=[],
+                    training_context="",
+                    execution_rating=execution_rating,
+                    overall_score=overall_score,
+                    training_effect_score=training_effect,
+                    load_score=load_score,
+                    recovery_hours=recovery_hours,
+                    generated_at=generated_at,
+                    model_used="gpt-5-mini",
+                )
+                save_analysis(training_db, workout_id, analysis_result)
+            except Exception as e:
+                logger.error(f"Failed to save streaming analysis for {workout_id}: {e}")
+
         yield f"data: {json_lib.dumps({'type': 'done', 'analysis': analysis})}\n\n"
         yield "data: [DONE]\n\n"
 
@@ -576,28 +542,28 @@ async def _stream_analysis(
 
 
 @router.get("/workout/{workout_id}", response_model=AnalysisResponse)
-async def get_cached_analysis(
+async def get_existing_analysis(
     workout_id: str,
-    cache: AnalysisCache = Depends(get_analysis_cache),
+    training_db=Depends(get_training_db),
 ):
     """
-    Get cached analysis for a workout.
+    Get existing analysis for a workout.
 
-    Returns the cached analysis if available, otherwise indicates it needs
+    Returns the analysis if available, otherwise indicates it needs
     to be generated using the POST endpoint.
 
     Args:
         workout_id: The ID of the workout
 
     Returns:
-        AnalysisResponse with cached analysis or indication that none exists
+        AnalysisResponse with analysis or indication that none exists
     """
-    cached = cache.get(workout_id)
+    existing = get_analysis(training_db, workout_id)
 
-    if cached:
+    if existing:
         return AnalysisResponse(
             success=True,
-            analysis=cached,
+            analysis=existing,
             cached=True,
         )
 
@@ -615,7 +581,6 @@ async def get_recent_with_analysis(
     include_summaries: bool = Query(default=True, description="Include AI summaries"),
     coach_service=Depends(get_coach_service),
     training_db=Depends(get_training_db),
-    cache: AnalysisCache = Depends(get_analysis_cache),
 ):
     """
     Get recent workouts with quick AI summaries.
@@ -652,11 +617,11 @@ async def get_recent_with_analysis(
             # Generate summaries concurrently
             async def get_summary(activity: dict) -> str:
                 try:
-                    # Check if we have a cached full analysis
+                    # Check if we have an existing full analysis
                     workout_id = activity.get("activity_id")
-                    cached = cache.get(workout_id)
-                    if cached and cached.summary:
-                        return cached.summary
+                    existing = get_analysis(training_db, workout_id)
+                    if existing and existing.summary:
+                        return existing.summary
 
                     # Generate quick summary
                     system_prompt = QUICK_SUMMARY_SYSTEM.format(
@@ -682,7 +647,7 @@ async def get_recent_with_analysis(
 
             for activity, summary in zip(activities, summaries):
                 workout_id = activity.get("activity_id")
-                cached = cache.get(workout_id)
+                existing = get_analysis(training_db, workout_id)
 
                 workouts.append(RecentWorkoutWithAnalysis(
                     workout_id=workout_id,
@@ -693,14 +658,14 @@ async def get_recent_with_analysis(
                     avg_hr=activity.get("avg_hr"),
                     hrss=activity.get("hrss"),
                     ai_summary=summary,
-                    execution_rating=cached.execution_rating if cached else None,
-                    has_full_analysis=cached is not None,
+                    execution_rating=existing.execution_rating if existing else None,
+                    has_full_analysis=existing is not None,
                 ))
         else:
             # Just return workout data without summaries
             for activity in activities:
                 workout_id = activity.get("activity_id")
-                cached = cache.get(workout_id)
+                existing = get_analysis(training_db, workout_id)
 
                 workouts.append(RecentWorkoutWithAnalysis(
                     workout_id=workout_id,
@@ -711,8 +676,8 @@ async def get_recent_with_analysis(
                     avg_hr=activity.get("avg_hr"),
                     hrss=activity.get("hrss"),
                     ai_summary=None,
-                    execution_rating=cached.execution_rating if cached else None,
-                    has_full_analysis=cached is not None,
+                    execution_rating=existing.execution_rating if existing else None,
+                    has_full_analysis=existing is not None,
                 ))
 
         return RecentWorkoutsResponse(
@@ -732,14 +697,13 @@ async def batch_analyze(
     request: BatchAnalysisRequest,
     coach_service=Depends(get_coach_service),
     training_db=Depends(get_training_db),
-    cache: AnalysisCache = Depends(get_analysis_cache),
     agent: AnalysisAgent = Depends(get_analysis_agent),
 ):
     """
     Batch analyze multiple workouts.
 
     Efficient for analyzing a week or training block.
-    Uses caching to avoid re-analyzing already processed workouts.
+    Skips already-analyzed workouts unless force_refresh is set.
 
     IMPORTANT: Each workout is analyzed with its HISTORICAL context (CTL/ATL/TSB)
     from the workout date, not today's values. This ensures accurate analysis
@@ -766,13 +730,13 @@ async def batch_analyze(
         # Process each workout with its OWN historical context
         for workout_id in request.workout_ids:
             try:
-                # Check cache first
+                # Check if already analyzed
                 if not request.force_refresh:
-                    cached = cache.get(workout_id)
-                    if cached:
+                    existing = get_analysis(training_db, workout_id)
+                    if existing:
                         results.append(AnalysisResponse(
                             success=True,
-                            analysis=cached,
+                            analysis=existing,
                             cached=True,
                         ))
                         cached_count += 1
@@ -822,8 +786,8 @@ async def batch_analyze(
                     similar_workouts=similar_workouts,
                 )
 
-                # Cache the result
-                cache.set(workout_id, analysis)
+                # Save to database
+                save_analysis(training_db, workout_id, analysis)
 
                 results.append(AnalysisResponse(
                     success=True,
@@ -856,36 +820,22 @@ async def batch_analyze(
         )
 
 
-@router.delete("/cache/{workout_id}")
-async def invalidate_cache(
+@router.delete("/workout/{workout_id}/analysis")
+async def delete_workout_analysis(
     workout_id: str,
-    cache: AnalysisCache = Depends(get_analysis_cache),
+    training_db=Depends(get_training_db),
 ):
     """
-    Invalidate cached analysis for a workout.
+    Delete analysis for a workout.
 
     Args:
-        workout_id: The ID of the workout to invalidate
+        workout_id: The ID of the workout
 
     Returns:
         Success status
     """
-    removed = cache.invalidate(workout_id)
+    removed = delete_analysis(training_db, workout_id)
     return {
         "workout_id": workout_id,
         "removed": removed,
     }
-
-
-@router.delete("/cache")
-async def clear_cache(
-    cache: AnalysisCache = Depends(get_analysis_cache),
-):
-    """
-    Clear all cached analyses.
-
-    Returns:
-        Success status
-    """
-    cache.clear()
-    return {"status": "cache cleared"}
