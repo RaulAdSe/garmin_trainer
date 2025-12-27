@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useEffect, useState, useCallback } from 'react';
+import { useMemo, useEffect, useState, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import type { GPSCoordinate } from '@/types/workout-detail';
 
@@ -21,6 +21,15 @@ const CircleMarker = dynamic(
   () => import('react-leaflet').then((mod) => mod.CircleMarker),
   { ssr: false }
 );
+
+// FitBounds component to auto-fit map to route bounds
+const FitBounds = dynamic(
+  () => import('./FitBounds').then((mod) => mod.FitBounds),
+  { ssr: false }
+);
+
+// Throttle interval for map hover (ms)
+const HOVER_THROTTLE_MS = 50;
 
 // Route colors
 const ROUTE_COLOR = '#14b8a6'; // teal-500
@@ -120,6 +129,82 @@ export function RouteMap({
   const startPoint = gpsData[0];
   const endPoint = gpsData[gpsData.length - 1];
 
+  // Throttling refs for smooth map hover
+  const lastHoverTimeRef = useRef<number>(0);
+  const lastChartIndexRef = useRef<number | null>(null);
+  const pendingHoverRef = useRef<{ lat: number; lng: number } | null>(null);
+  const throttleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (throttleTimeoutRef.current !== null) {
+        clearTimeout(throttleTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Process hover update
+  const processHover = useCallback((lat: number, lng: number) => {
+    const gpsIdx = findNearestGPSIndex(lat, lng);
+    const chartIdx = getChartIndex(gpsIdx);
+
+    // Only update if the index actually changed
+    if (chartIdx !== lastChartIndexRef.current) {
+      lastChartIndexRef.current = chartIdx;
+      onHoverIndex?.(chartIdx);
+    }
+  }, [findNearestGPSIndex, getChartIndex, onHoverIndex]);
+
+  // Handle polyline hover/move - time-based throttling
+  // Must be defined before early returns to satisfy Rules of Hooks
+  const handlePolylineHover = useCallback((e: { latlng: { lat: number; lng: number } }) => {
+    if (!onHoverIndex) return;
+
+    const now = Date.now();
+    const lat = e.latlng.lat;
+    const lng = e.latlng.lng;
+
+    // Store the latest position
+    pendingHoverRef.current = { lat, lng };
+
+    // If enough time has passed, process immediately
+    if (now - lastHoverTimeRef.current >= HOVER_THROTTLE_MS) {
+      lastHoverTimeRef.current = now;
+      processHover(lat, lng);
+      pendingHoverRef.current = null;
+
+      // Clear any pending timeout
+      if (throttleTimeoutRef.current !== null) {
+        clearTimeout(throttleTimeoutRef.current);
+        throttleTimeoutRef.current = null;
+      }
+    } else if (throttleTimeoutRef.current === null) {
+      // Schedule a trailing update
+      const remaining = HOVER_THROTTLE_MS - (now - lastHoverTimeRef.current);
+      throttleTimeoutRef.current = setTimeout(() => {
+        throttleTimeoutRef.current = null;
+        if (pendingHoverRef.current) {
+          lastHoverTimeRef.current = Date.now();
+          processHover(pendingHoverRef.current.lat, pendingHoverRef.current.lng);
+          pendingHoverRef.current = null;
+        }
+      }, remaining);
+    }
+  }, [onHoverIndex, processHover]);
+
+  // Handle mouse leave
+  const handlePolylineLeave = useCallback(() => {
+    // Clear any pending timeout
+    if (throttleTimeoutRef.current !== null) {
+      clearTimeout(throttleTimeoutRef.current);
+      throttleTimeoutRef.current = null;
+    }
+    pendingHoverRef.current = null;
+    lastChartIndexRef.current = null;
+    onHoverIndex?.(null);
+  }, [onHoverIndex]);
+
   // Map height classes - taller as requested
   const heightClass = "h-96 sm:h-[500px]";
 
@@ -164,19 +249,6 @@ export function RouteMap({
     );
   }
 
-  // Handle polyline hover/move
-  const handlePolylineHover = (e: { latlng: { lat: number; lng: number } }) => {
-    if (!onHoverIndex) return;
-    const gpsIdx = findNearestGPSIndex(e.latlng.lat, e.latlng.lng);
-    const chartIdx = getChartIndex(gpsIdx);
-    onHoverIndex(chartIdx);
-  };
-
-  // Handle mouse leave
-  const handlePolylineLeave = () => {
-    onHoverIndex?.(null);
-  };
-
   return (
     <div className={`bg-gray-900 rounded-xl border border-gray-800 p-4 ${className}`}>
       <div className="flex items-center justify-between mb-3">
@@ -206,13 +278,15 @@ export function RouteMap({
       <div className={`${heightClass} rounded-lg overflow-hidden`}>
         <MapContainer
           center={center}
-          bounds={bounds || undefined}
           zoom={13}
           className="h-full w-full"
           style={{ background: '#1f2937' }}
           scrollWheelZoom={true}
           zoomControl={true}
         >
+          {/* Auto-fit to route bounds on load */}
+          {bounds && <FitBounds bounds={bounds} />}
+
           {/* Terrain map tiles - Esri World Topo (good terrain colors, not too intense) */}
           <TileLayer
             attribution='&copy; <a href="https://www.esri.com/">Esri</a> &mdash; Sources: Esri, HERE, Garmin, USGS, NGA'
@@ -220,18 +294,26 @@ export function RouteMap({
             maxZoom={18}
           />
 
-          {/* Route polyline - interactive with continuous hover tracking */}
+          {/* Invisible wider polyline for easier hover detection */}
+          <Polyline
+            positions={positions}
+            color="transparent"
+            weight={20}
+            opacity={0}
+            eventHandlers={{
+              mouseover: handlePolylineHover,
+              mousemove: handlePolylineHover,
+              mouseout: handlePolylineLeave,
+            }}
+          />
+
+          {/* Visible route polyline */}
           <Polyline
             positions={positions}
             color={ROUTE_COLOR}
             weight={4}
             opacity={0.9}
-            eventHandlers={{
-              click: handlePolylineHover,
-              mouseover: handlePolylineHover,
-              mousemove: handlePolylineHover,
-              mouseout: handlePolylineLeave,
-            }}
+            interactive={false}
           />
 
           {/* Start marker */}
@@ -258,7 +340,7 @@ export function RouteMap({
             />
           )}
 
-          {/* Active position marker - shows when hovering charts */}
+          {/* Active position marker - shows when hovering charts or map */}
           {activePoint && (
             <CircleMarker
               center={[activePoint.lat, activePoint.lon]}
@@ -267,6 +349,7 @@ export function RouteMap({
               fillOpacity={0.9}
               color="#fff"
               weight={3}
+              interactive={false}
             />
           )}
         </MapContainer>
