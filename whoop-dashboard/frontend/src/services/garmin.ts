@@ -349,9 +349,9 @@ class GarminService {
   // Exchange ticket for OAuth1 token
   private async exchangeTicketForOAuth1(ticket: string): Promise<LoginResult> {
     try {
-      // Use the consumer credentials from Garmin Connect Mobile app
-      const CONSUMER_KEY = 'fc3e99d2-118c-44b8-8ae3-03370dde24c0';
-      const CONSUMER_SECRET = 'E08WAR897WEy2knn7aFBrvegVAf0AFdWBBF';
+      // Consumer credentials should be set via environment variables
+      const CONSUMER_KEY = process.env.NEXT_PUBLIC_GARMIN_CONSUMER_KEY || '';
+      const CONSUMER_SECRET = process.env.NEXT_PUBLIC_GARMIN_CONSUMER_SECRET || '';
 
       // Build OAuth1 authorization header for the preauthorized request
       const timestamp = Math.floor(Date.now() / 1000).toString();
@@ -440,7 +440,7 @@ class GarminService {
     }
 
     try {
-      const CONSUMER_KEY = 'fc3e99d2-118c-44b8-8ae3-03370dde24c0';
+      const CONSUMER_KEY = process.env.NEXT_PUBLIC_GARMIN_CONSUMER_KEY || '';
 
       // Build simple OAuth1 header with the token
       const timestamp = Math.floor(Date.now() / 1000).toString();

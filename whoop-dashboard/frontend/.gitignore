@@ -40,8 +40,5 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# iOS / Xcode
-ios/DerivedData/
-ios/Pods/
-*.xcworkspace
-!ios/App/App.xcodeproj
+# iOS / Xcode (entire directory - build artifacts with compiled secrets)
+ios/

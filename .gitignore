@@ -38,3 +38,10 @@ out/
 # Temp
 *.tmp
 *.log
+
+# Local config
+.mcp.json
+
+# Workflows and progress notes
+n8n/
+progress/
