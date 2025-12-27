@@ -15,12 +15,13 @@ import {
   getHRZoneLabel,
 } from '@/lib/utils';
 import { WorkoutScoreBadge } from './WorkoutScoreBadge';
+import { useIsAnalyzing } from '@/hooks/useWorkouts';
 
 interface WorkoutCardProps {
   workout: Workout;
   analysis?: WorkoutAnalysis | null;
   onAnalyze?: () => void;
-  isAnalyzing?: boolean;
+  isAnalyzing?: boolean; // Deprecated: now uses shared state via useIsAnalyzing
   className?: string;
 }
 
@@ -28,9 +29,11 @@ export function WorkoutCard({
   workout,
   analysis,
   onAnalyze,
-  isAnalyzing = false,
+  isAnalyzing: _isAnalyzingProp, // Keep prop for backwards compat but use hook
   className,
 }: WorkoutCardProps) {
+  // Use shared analyzing state (works across all components)
+  const isAnalyzing = useIsAnalyzing(workout.id);
   const [isExpanded, setIsExpanded] = useState(false);
 
   const hasAnalysis = !!analysis;

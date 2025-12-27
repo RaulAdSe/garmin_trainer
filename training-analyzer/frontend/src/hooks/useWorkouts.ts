@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, useIsMutating } from '@tanstack/react-query';
 import {
   getWorkouts,
   getWorkout,
@@ -26,6 +26,23 @@ export const workoutKeys = {
   analyses: () => [...workoutKeys.all, 'analysis'] as const,
   analysis: (workoutId: string) => [...workoutKeys.analyses(), workoutId] as const,
 };
+
+// Mutation keys for shared state across components
+export const mutationKeys = {
+  analyzeWorkout: ['analyze-workout'] as const,
+};
+
+// Hook to check if a workout is being analyzed (works across all components)
+export function useIsAnalyzing(workoutId: string): boolean {
+  const count = useIsMutating({
+    mutationKey: mutationKeys.analyzeWorkout,
+    predicate: (mutation) => {
+      const variables = mutation.state.variables as { workoutId?: string } | undefined;
+      return variables?.workoutId === workoutId;
+    },
+  });
+  return count > 0;
+}
 
 interface UseWorkoutsOptions {
   page?: number;
@@ -135,8 +152,9 @@ export function useWorkouts(options: UseWorkoutsOptions = {}): UseWorkoutsReturn
     fetchAnalyses();
   }, [data?.items, analyses, fetchedAnalysisIds]);
 
-  // Analyze workout mutation
+  // Analyze workout mutation (uses shared mutationKey for cross-component state)
   const analyzeMutation = useMutation({
+    mutationKey: mutationKeys.analyzeWorkout,
     mutationFn: async ({
       workoutId,
       regenerate,
@@ -287,11 +305,12 @@ export function useWorkoutAnalysis(
     staleTime: 10 * 60 * 1000, // 10 minutes
   });
 
-  // Mutation to generate analysis
+  // Mutation to generate analysis (uses shared mutationKey for cross-component state)
   const analyzeMutation = useMutation({
-    mutationFn: async (regenerate: boolean = false) => {
+    mutationKey: mutationKeys.analyzeWorkout,
+    mutationFn: async ({ workoutId: wId, regenerate }: { workoutId: string; regenerate: boolean }) => {
       return analyzeWorkout({
-        workoutId,
+        workoutId: wId,
         includeContext: true,
         regenerate,
       });
@@ -303,10 +322,13 @@ export function useWorkoutAnalysis(
 
   const handleAnalyze = useCallback(
     async (regenerate = false) => {
-      await analyzeMutation.mutateAsync(regenerate);
+      await analyzeMutation.mutateAsync({ workoutId, regenerate });
     },
-    [analyzeMutation]
+    [analyzeMutation, workoutId]
   );
+
+  // Use shared analyzing state (works across all components)
+  const isAnalyzing = useIsAnalyzing(workoutId);
 
   return {
     analysis: existingAnalysis ?? null,
@@ -315,7 +337,7 @@ export function useWorkoutAnalysis(
     error: error as Error | null,
     refetch,
     analyze: handleAnalyze,
-    isAnalyzing: analyzeMutation.isPending,
+    isAnalyzing,
   };
 }
 
