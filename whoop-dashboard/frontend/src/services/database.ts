@@ -8,6 +8,9 @@ import { Preferences } from '@capacitor/preferences';
 // Storage keys
 const WELLNESS_DATA_KEY = 'wellness_data';
 
+// Data retention - keep only last N days to limit storage growth
+const DATA_RETENTION_DAYS = 90;
+
 // Types
 export interface DailyWellness {
   date: string;
@@ -124,6 +127,9 @@ class DatabaseService {
     };
 
     await this.save();
+
+    // Auto-prune old data to keep storage bounded
+    await this.pruneOldData();
   }
 
   // Get wellness data for a specific date
@@ -167,6 +173,28 @@ class DatabaseService {
   async clear(): Promise<void> {
     this.data = {};
     await Preferences.remove({ key: WELLNESS_DATA_KEY });
+  }
+
+  // Remove data older than retention period
+  private async pruneOldData(): Promise<number> {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - DATA_RETENTION_DAYS);
+    const cutoffStr = cutoffDate.toISOString().split('T')[0];
+
+    const datesToRemove = Object.keys(this.data).filter(date => date < cutoffStr);
+
+    if (datesToRemove.length > 0) {
+      datesToRemove.forEach(date => delete this.data[date]);
+      await this.save();
+      console.log(`Pruned ${datesToRemove.length} records older than ${cutoffStr}`);
+    }
+
+    return datesToRemove.length;
+  }
+
+  // Get current retention setting
+  getRetentionDays(): number {
+    return DATA_RETENTION_DAYS;
   }
 }
 
