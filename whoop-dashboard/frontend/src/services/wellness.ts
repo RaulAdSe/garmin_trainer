@@ -499,7 +499,12 @@ class WellnessService {
     recovery: number;
     strain: number;
     steps: number;
+    steps_goal: number;
     body_battery: number | null;
+    body_battery_drained: number | null;
+    active_calories: number | null;
+    intensity_minutes: number | null;
+    stress_avg: number | null;
     resting_hr: number | null;
   }>> {
     await db.initialize();
@@ -540,7 +545,12 @@ class WellnessService {
         recovery,
         strain,
         steps: record.activity?.steps ?? 0,
+        steps_goal: record.activity?.steps_goal ?? 10000,
         body_battery: record.stress?.body_battery_charged ?? null,
+        body_battery_drained: record.stress?.body_battery_drained ?? null,
+        active_calories: record.activity?.active_calories ?? null,
+        intensity_minutes: record.activity?.intensity_minutes ?? null,
+        stress_avg: record.stress?.avg_stress_level ?? null,
         resting_hr: record.wellness?.resting_heart_rate ?? null,
       };
     });

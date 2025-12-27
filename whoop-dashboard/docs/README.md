@@ -102,3 +102,4 @@ npm run dev
 - **[pyproject.toml](../pyproject.toml)** - Python dependencies
 - **[frontend/package.json](../frontend/package.json)** - Node.js dependencies
 
+

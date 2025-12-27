@@ -549,9 +549,42 @@ function TrendPeriodToggle({
   );
 }
 
+// Overview period toggle component - minimal design for non-invasive UX
+type OverviewPeriod = 7 | 14 | 30;
+
+function OverviewPeriodToggle({
+  value,
+  onChange,
+}: {
+  value: OverviewPeriod;
+  onChange: (period: OverviewPeriod) => void;
+}) {
+  const periods: OverviewPeriod[] = [7, 14, 30];
+
+  return (
+    <div className="inline-flex rounded-md bg-gray-800/50 p-0.5 text-[10px]">
+      {periods.map((period) => (
+        <button
+          key={period}
+          onClick={() => onChange(period)}
+          className={`px-1.5 py-0.5 rounded transition-all ${
+            value === period
+              ? 'bg-gray-700 text-white'
+              : 'text-gray-500 hover:text-gray-400'
+          }`}
+        >
+          {period}D
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function Dashboard() {
   // Trend period state - shared across all trend charts
   const [trendPeriod, setTrendPeriod] = useState<TrendPeriod>(14);
+  // Overview period state - for weekly summary averages (7, 14, or 30 days)
+  const [overviewPeriod, setOverviewPeriod] = useState<OverviewPeriod>(7);
 
   // Use client-side hook with dynamic period
   const { history, loading, error: historyError } = useWellnessHistory(trendPeriod);
@@ -612,11 +645,17 @@ export default function Dashboard() {
   const strain = calculateStrain(selectedDay);
   const recoveryColor = getRecoveryColor(recovery);
 
-  // Calculate weekly averages
-  const weekData = history.slice(0, 7);
-  const avgRecovery = Math.round(weekData.reduce((sum, d) => sum + calculateRecovery(d), 0) / weekData.length);
-  const avgStrain = Math.round(weekData.reduce((sum, d) => sum + calculateStrain(d), 0) / weekData.length * 10) / 10;
-  const avgSleep = Math.round(weekData.reduce((sum, d) => sum + (d.sleep?.total_hours || 0), 0) / weekData.length * 10) / 10;
+  // Calculate averages based on selected overview period (7, 14, or 30 days)
+  const periodData = history.slice(0, overviewPeriod);
+  const avgRecovery = periodData.length > 0
+    ? Math.round(periodData.reduce((sum, d) => sum + calculateRecovery(d), 0) / periodData.length)
+    : 0;
+  const avgStrain = periodData.length > 0
+    ? Math.round(periodData.reduce((sum, d) => sum + calculateStrain(d), 0) / periodData.length * 10) / 10
+    : 0;
+  const avgSleep = periodData.length > 0
+    ? Math.round(periodData.reduce((sum, d) => sum + (d.sleep?.total_hours || 0), 0) / periodData.length * 10) / 10
+    : 0;
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -672,6 +711,8 @@ export default function Dashboard() {
             avgRecovery={avgRecovery}
             avgStrain={avgStrain}
             avgSleep={avgSleep}
+            overviewPeriod={overviewPeriod}
+            onOverviewPeriodChange={setOverviewPeriod}
             onSelectDay={handleSelectDay}
             onShowInfo={setActiveInfoModal}
             garminSync={garminSync}
@@ -745,6 +786,8 @@ function OverviewView({
   avgRecovery,
   avgStrain,
   avgSleep,
+  overviewPeriod,
+  onOverviewPeriodChange,
   onSelectDay,
   onShowInfo,
   garminSync,
@@ -759,6 +802,8 @@ function OverviewView({
   avgRecovery: number;
   avgStrain: number;
   avgSleep: number;
+  overviewPeriod: OverviewPeriod;
+  onOverviewPeriodChange: (period: OverviewPeriod) => void;
   onSelectDay: (day: DayData) => void;
   onShowInfo: (key: string) => void;
   garminSync: GarminSyncState;
@@ -818,20 +863,26 @@ function OverviewView({
       </div>
 
       {/* Weekly Summary Bar */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-gray-900 rounded-xl p-3 text-center">
-          <div className="text-gray-500 text-xs mb-1">AVG RECOVERY</div>
-          <div className="text-xl font-bold" style={{ color: getRecoveryColor(avgRecovery) }}>
-            {avgRecovery}%
+      <div className="space-y-2">
+        <div className="flex items-center justify-between px-1">
+          <div className="text-gray-500 text-xs">{overviewPeriod}-DAY AVERAGES</div>
+          <OverviewPeriodToggle value={overviewPeriod} onChange={onOverviewPeriodChange} />
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-gray-900 rounded-xl p-3 text-center">
+            <div className="text-gray-500 text-xs mb-1">RECOVERY</div>
+            <div className="text-xl font-bold" style={{ color: getRecoveryColor(avgRecovery) }}>
+              {avgRecovery}%
+            </div>
           </div>
-        </div>
-        <div className="bg-gray-900 rounded-xl p-3 text-center">
-          <div className="text-gray-500 text-xs mb-1">AVG STRAIN</div>
-          <div className="text-xl font-bold text-blue-400">{avgStrain}</div>
-        </div>
-        <div className="bg-gray-900 rounded-xl p-3 text-center">
-          <div className="text-gray-500 text-xs mb-1">AVG SLEEP</div>
-          <div className="text-xl font-bold text-purple-400">{avgSleep}h</div>
+          <div className="bg-gray-900 rounded-xl p-3 text-center">
+            <div className="text-gray-500 text-xs mb-1">STRAIN</div>
+            <div className="text-xl font-bold text-blue-400">{avgStrain}</div>
+          </div>
+          <div className="bg-gray-900 rounded-xl p-3 text-center">
+            <div className="text-gray-500 text-xs mb-1">SLEEP</div>
+            <div className="text-xl font-bold text-purple-400">{avgSleep}h</div>
+          </div>
         </div>
       </div>
 

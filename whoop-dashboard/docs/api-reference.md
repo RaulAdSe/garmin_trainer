@@ -304,3 +304,4 @@ curl http://localhost:3000/api/wellness/today
 curl "http://localhost:3000/api/wellness/history?days=7"
 ```
 
+
