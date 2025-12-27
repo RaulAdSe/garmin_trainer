@@ -9,7 +9,7 @@ This guide will help you set up and run the Training Analyzer locally.
 - **Python 3.11+** for the FastAPI backend
 - **Node.js 18+** for the Next.js frontend
 - **OpenAI API Key** for AI-powered features
-- **Training data** in SQLite format (from Garmin sync)
+- **Garmin Connect account** for activity data
 
 ---
 
@@ -49,6 +49,10 @@ Create a `.env` file in the `training-analyzer` directory:
 ```env
 # Required: OpenAI API key
 OPENAI_API_KEY=sk-your-key-here
+
+# Garmin OAuth (for syncing activities)
+GARMIN_EMAIL=your-garmin-email
+GARMIN_PASSWORD=your-garmin-password
 
 # Optional: API configuration
 API_HOST=0.0.0.0
@@ -90,6 +94,29 @@ The dashboard will be available at http://localhost:3000
 
 ---
 
+## Syncing Garmin Data
+
+### First-Time Setup
+
+1. Navigate to the dashboard at http://localhost:3000
+2. Click "Connect Garmin" or go to Settings
+3. Complete the OAuth flow to authorize access
+4. Select date range and sync activities
+
+### Via API
+
+```bash
+# Sync last 90 days of activities
+curl -X POST http://localhost:8000/api/v1/garmin/sync \
+  -H "Content-Type: application/json" \
+  -d '{
+    "start_date": "2024-10-01",
+    "end_date": "2024-12-27"
+  }'
+```
+
+---
+
 ## Using the CLI
 
 The Training Analyzer includes a powerful CLI for quick access:
@@ -115,7 +142,22 @@ training-analyzer metrics --days 30
 
 ## Core Features
 
-### 1. Workout Analysis
+### 1. Dashboard
+
+The main dashboard provides:
+- **Day Selector**: Navigate between days to view historical data
+- **Period Toggle**: Switch between 14D, 30D, and 90D trend views
+- **Metric Cards**: CTL, ATL, TSB, ACWR with trend indicators
+- **Trend Charts**: Interactive visualizations of fitness metrics
+
+### 2. Workout List
+
+View and manage your workouts:
+- **Filtering**: By type, date range, and search
+- **Pagination**: Server-side pagination for large datasets
+- **Analysis**: One-click AI analysis for each workout
+
+### 3. Workout Analysis
 
 Get AI-powered insights on your completed workouts:
 
@@ -135,7 +177,7 @@ curl -X POST http://localhost:8000/api/v1/analysis/workout/12345
 - Areas for improvement
 - How it fits in your training context
 
-### 2. Training Plan Generation
+### 4. Training Plan Generation
 
 Create periodized plans based on your goals:
 
@@ -157,18 +199,18 @@ curl -X POST http://localhost:8000/api/v1/plans/generate \
 ```
 
 **Via Frontend:**
-1. Navigate to "Plans" → "New Plan"
+1. Navigate to "Plans" > "New Plan"
 2. Enter your race goal
 3. Set your constraints
 4. Click "Generate Plan"
 
 **What you get:**
-- Periodized structure (Base → Build → Peak → Taper)
+- Periodized structure (Base > Build > Peak > Taper)
 - Week-by-week sessions
 - Target paces and HR zones
 - Load progression
 
-### 3. Workout Design
+### 5. Workout Design
 
 Create structured workouts for your Garmin:
 
@@ -195,7 +237,7 @@ curl http://localhost:8000/api/v1/workouts/{id}/fit --output workout.fit
 - `long` - Extended aerobic endurance
 - `fartlek` - Speed play with varied intensity
 
-### 4. Readiness Score
+### 6. Readiness Score
 
 Check your daily training readiness:
 
@@ -207,9 +249,9 @@ curl http://localhost:8000/api/v1/athlete/readiness
 **Readiness Zones:**
 | Zone | Score | Recommendation |
 |------|-------|----------------|
-| 🟢 Green | 67-100 | Great day for quality training |
-| 🟡 Yellow | 34-66 | Moderate intensity OK |
-| 🔴 Red | 0-33 | Rest or very light activity |
+| Green | 67-100 | Great day for quality training |
+| Yellow | 34-66 | Moderate intensity OK |
+| Red | 0-33 | Rest or very light activity |
 
 ---
 
@@ -229,30 +271,29 @@ Export structured workouts to your Garmin device:
 
 1. Download the FIT file
 2. Go to Garmin Connect web
-3. Navigate to Training → Workouts
+3. Navigate to Training > Workouts
 4. Click Import and select the FIT file
 
 ---
 
-## Data Requirements
+## Running Tests
 
-### Training Database
+The project includes 778 tests across 26 files:
 
-The system reads from `training.db` which should contain:
+```bash
+# Run all tests
+cd training-analyzer
+pytest tests/ -v
 
-- **Activities**: Workout data from Garmin
-- **Fitness Metrics**: CTL/ATL/TSB values
-- **User Profile**: Max HR, rest HR, threshold HR
-- **Race Goals**: Target races with times
+# Run specific categories
+pytest tests/agents/ -v    # Agent tests
+pytest tests/api/ -v       # API integration tests
+pytest tests/metrics/ -v   # Metric calculation tests
+pytest tests/db/ -v        # Database tests
 
-### Wellness Database (Optional)
-
-For enhanced readiness, link to `wellness.db`:
-
-- HRV data
-- Sleep data
-- Body Battery
-- Stress levels
+# With coverage
+pytest tests/ --cov=src/training_analyzer --cov-report=html
+```
 
 ---
 
@@ -272,8 +313,8 @@ For enhanced readiness, link to `wellness.db`:
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `OPENAI_API_KEY` | Required | Your OpenAI API key |
-| `LLM_MODEL` | gpt-4o | Model for analysis |
-| `LLM_FAST_MODEL` | gpt-4o-mini | Model for quick summaries |
+| `LLM_MODEL` | gpt-5-mini | Model for analysis |
+| `LLM_FAST_MODEL` | gpt-5-nano | Model for quick summaries |
 
 ---
 
@@ -302,7 +343,13 @@ CORS_ORIGINS=http://localhost:3000
 
 ### Workout analysis is slow
 
-First-time analysis calls the LLM. Subsequent requests are cached.
+First-time analysis calls the LLM. Subsequent requests are cached in the database.
+
+### Garmin sync fails
+
+1. Check your Garmin credentials in `.env`
+2. Try re-authenticating via the OAuth flow
+3. Check the API logs for specific errors
 
 ---
 
@@ -312,5 +359,3 @@ First-time analysis calls the LLM. Subsequent requests are cached.
 - Check [API Reference](./api-reference.md) for all endpoints
 - See [Metrics Explained](./metrics-explained.md) for calculations
 - Review [coaching_app_plan.md](./coaching_app_plan.md) for roadmap
-
-

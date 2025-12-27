@@ -23,7 +23,7 @@ Fetches today's (or most recent available) wellness data with calculated recover
 ```typescript
 {
   // Date of the data
-  date: string;  // "2024-12-26"
+  date: string;  // "2024-12-27"
 
   // Sleep data
   sleep: {
@@ -56,6 +56,8 @@ Fetches today's (or most recent available) wellness data with calculated recover
     steps: number;         // 8432
     steps_goal: number;    // 10000
     steps_pct: number;     // 84.3
+    intensity_minutes: number | null;
+    active_calories: number | null;
   } | null;
 
   // Resting heart rate
@@ -67,6 +69,9 @@ Fetches today's (or most recent available) wellness data with calculated recover
 
   // Calculated recovery score (0-100)
   recovery: number;  // 78
+
+  // Calculated strain score (0-21)
+  strain: number;  // 12.5
 
   // Actionable insight
   insight: {
@@ -126,6 +131,7 @@ Array<{
   };
 
   strain: {
+    value: number;  // Calculated strain 0-21
     body_battery_charged: number | null;
     body_battery_drained: number | null;
     stress_avg: number | null;
@@ -141,6 +147,9 @@ Array<{
 
   resting_hr: number | null;
   rhr_direction: DirectionIndicator | null;
+
+  // Calculated recovery score
+  recovery: number;
 
   baselines: Baselines;
 
@@ -179,6 +188,7 @@ Personal baselines calculated from historical data:
   rhr_7d_avg: number | null;
   rhr_30d_avg: number | null;
   recovery_7d_avg: number | null;
+  strain_7d_avg: number | null;
 }
 ```
 
@@ -246,7 +256,7 @@ Multi-day trend detection:
 
 ```typescript
 {
-  metric: 'HRV' | 'Recovery';
+  metric: 'HRV' | 'Recovery' | 'Sleep' | 'Strain';
   direction: 'declining' | 'improving';
   days: number;           // Days in trend
   change_pct: number;     // Total change
@@ -284,13 +294,19 @@ const data = await response.json();
 
 console.log(`Recovery: ${data.recovery}%`);
 console.log(`Decision: ${data.insight.decision}`);
+console.log(`Strain: ${data.strain}/21`);
 
-// Fetch history
-const historyResponse = await fetch('/api/wellness/history?days=7');
+// Check recovery zone
+const zone = data.recovery >= 67 ? 'green'
+           : data.recovery >= 34 ? 'yellow'
+           : 'red';
+
+// Fetch history for trends
+const historyResponse = await fetch('/api/wellness/history?days=14');
 const history = await historyResponse.json();
 
 history.forEach(day => {
-  console.log(`${day.date}: ${calculateRecovery(day)}%`);
+  console.log(`${day.date}: Recovery ${day.recovery}%, Strain ${day.strain.value}`);
 });
 ```
 
@@ -304,4 +320,50 @@ curl http://localhost:3000/api/wellness/today
 curl "http://localhost:3000/api/wellness/history?days=7"
 ```
 
+---
 
+## Recovery Zone Thresholds
+
+The API calculates recovery zones based on the following thresholds:
+
+| Zone | Score Range | Strain Target |
+|------|-------------|---------------|
+| GREEN | 67-100% | 14-21 |
+| YELLOW | 34-66% | 8-14 |
+| RED | 0-33% | 0-8 |
+
+---
+
+## Calculations
+
+### Recovery Score
+
+```
+recovery = (hrv_score * 1.5 + sleep_score * 1.0 + body_battery * 1.0) / 3.5
+```
+
+Where:
+- `hrv_score = min(100, max(0, (hrv / baseline) * 80 + 20))`
+- `sleep_score = min(100, max(0, (hours / baseline) * 85 + 15))`
+- `body_battery = body_battery_charged` (0-100)
+
+### Strain Score
+
+```
+strain = min(21,
+  min(8, steps / 2000) +
+  min(8, body_battery_drained / 12) +
+  min(5, intensity_minutes / 20)
+)
+```
+
+### Sleep Target
+
+```
+tonight_target = base_need + strain_adjustment + debt_repayment
+```
+
+Where:
+- `base_need = 7-day sleep average`
+- `strain_adjustment = max(0, (yesterday_strain - 10) * 0.05)`
+- `debt_repayment = total_debt / 7`

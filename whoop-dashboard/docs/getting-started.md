@@ -14,7 +14,7 @@ This guide will help you set up and run the WHOOP Dashboard locally.
 
 ## Installation
 
-### 1. Clone the Repository
+### 1. Navigate to the Project
 
 ```bash
 cd /path/to/garmin_insights/whoop-dashboard
@@ -87,19 +87,19 @@ whoop show
 
 Output:
 ```
-  ╔══════════════════════════════╗
-  ║         2024-12-26          ║
-  ╠══════════════════════════════╣
-  ║                              ║
-  ║      RECOVERY: 78%           ║
-  ║                              ║
-  ╠══════════════════════════════╣
-  ║  Sleep: 7.25h              ║
-  ║  Deep: 18% | REM: 22%    ║
-  ║  HRV: 48ms (BALANCED)      ║
-  ║  Energy: +72 / -58        ║
-  ║  Steps: 8432 (84%)        ║
-  ╚══════════════════════════════╝
+  +------------------------------+
+  |         2024-12-27           |
+  +------------------------------+
+  |                              |
+  |      RECOVERY: 78%           |
+  |                              |
+  +------------------------------+
+  |  Sleep: 7.25h                |
+  |  Deep: 18% | REM: 22%        |
+  |  HRV: 48ms (BALANCED)        |
+  |  Energy: +72 / -58           |
+  |  Steps: 8432 (84%)           |
+  +------------------------------+
 ```
 
 ### Step 3: Launch the Dashboard
@@ -122,9 +122,9 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 The main view showing your daily status:
 
 - **Hero Decision**: GO / MODERATE / RECOVER with explanation
-- **Recovery Gauge**: Visual 0-100% score
-- **Daily Stats**: Strain, Sleep, HRV, RHR cards
-- **Weekly Summary**: Zone distribution, streaks, patterns
+- **Recovery Gauge**: Visual 0-100% score with zone colors
+- **Daily Stats**: Strain, Sleep, HRV, RHR cards with direction indicators
+- **Weekly Summary**: Zone distribution, streaks, detected patterns
 
 ### Recovery Tab
 
@@ -148,8 +148,36 @@ Sleep quality and debt tracking:
 
 - Sleep duration with efficiency
 - Tonight's personalized target calculation
-- Sleep stage distribution
+- Sleep stage distribution (deep, REM, light)
 - Accumulated sleep debt
+
+---
+
+## iOS Deployment
+
+The app can be deployed to iOS devices using Capacitor:
+
+### Build for iOS
+
+```bash
+cd frontend
+
+# Build static export
+npm run build
+
+# Sync to iOS project
+npx cap sync ios
+
+# Open in Xcode
+npx cap open ios
+```
+
+### Run on Device
+
+1. Open the iOS project in Xcode
+2. Select your development team
+3. Connect your iOS device
+4. Build and run (Cmd+R)
 
 ---
 
@@ -165,9 +193,9 @@ Sleep quality and debt tracking:
 
 | Recovery Zone | What It Means | Action |
 |---------------|---------------|--------|
-| 🟢 GREEN (67-100%) | Body is primed | Push hard, high-intensity OK |
-| 🟡 YELLOW (34-66%) | Moderate readiness | Technique work, steady cardio |
-| 🔴 RED (0-33%) | Recovery needed | Rest, mobility, light yoga |
+| GREEN (67-100%) | Body is primed | Push hard, high-intensity OK |
+| YELLOW (34-66%) | Moderate readiness | Technique work, steady cardio |
+| RED (0-33%) | Recovery needed | Rest, mobility, light yoga |
 
 ---
 
@@ -186,6 +214,28 @@ Or set up a cron job:
 # Fetch at 8am daily
 0 8 * * * cd /path/to/whoop-dashboard && whoop fetch
 ```
+
+---
+
+## Database Management
+
+### View Statistics
+
+```bash
+whoop stats
+```
+
+Shows:
+- Database path and size
+- Total records
+- Date range covered
+- Data completeness
+
+### Data Retention
+
+The system automatically retains 90 days of data:
+- Older data is purged to keep the database size manageable
+- Sufficient for baseline calculations and trend analysis
 
 ---
 
@@ -218,6 +268,12 @@ whoop stats
 
 The frontend expects the database at `../wellness.db` relative to the `frontend` folder. Check your directory structure.
 
+### iOS Build Fails
+
+1. Ensure Xcode is installed and up to date
+2. Run `npx cap sync ios` after any frontend changes
+3. Check that CocoaPods is installed: `sudo gem install cocoapods`
+
 ---
 
 ## Next Steps
@@ -225,5 +281,4 @@ The frontend expects the database at `../wellness.db` relative to the `frontend`
 - Read [VISION.md](../VISION.md) to understand the product philosophy
 - Check [architecture.md](./architecture.md) for technical details
 - See [metrics-explained.md](./metrics-explained.md) for metric deep-dives
-
-
+- Review [api-reference.md](./api-reference.md) for API documentation

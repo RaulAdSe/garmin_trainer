@@ -20,11 +20,12 @@ The WHOOP Dashboard is a **WHOOP-style wellness dashboard** that transforms Garm
                                                        │   (Data Layer)    │
                                                        └─────────┬─────────┘
                                                                   │
-                                                                  ▼
-                                                       ┌───────────────────┐
-                                                       │   React Frontend  │
-                                                       │   (Dashboard UI)  │
-                                                       └───────────────────┘
+                                              ┌───────────────────┼───────────────────┐
+                                              ▼                                       ▼
+                                   ┌───────────────────┐               ┌───────────────────┐
+                                   │   React Frontend  │               │   Capacitor iOS   │
+                                   │   (Web Dashboard) │               │   (Native App)    │
+                                   └───────────────────┘               └───────────────────┘
 ```
 
 ---
@@ -35,10 +36,11 @@ The WHOOP Dashboard is a **WHOOP-style wellness dashboard** that transforms Garm
 |-------|------------|---------|
 | **Data Fetching** | Python 3.10+ | CLI to fetch data from Garmin Connect |
 | **Data Storage** | SQLite | Local database (`wellness.db`) |
-| **Backend API** | Next.js API Routes | Serve data to frontend |
+| **Backend API** | Next.js API Routes | Serve data and calculate metrics |
 | **Frontend** | React 19 + Next.js 16 | Dashboard UI |
 | **Styling** | Tailwind CSS 4 | Utility-first CSS |
 | **Database Access** | better-sqlite3 | Synchronous SQLite for Node.js |
+| **iOS Deployment** | Capacitor | Static export to native iOS app |
 
 ---
 
@@ -54,15 +56,25 @@ whoop-dashboard/
 │   │       │   └── wellness/
 │   │       │       ├── today/route.ts    # Today's data endpoint
 │   │       │       └── history/route.ts  # Historical data endpoint
+│   │       ├── components/  # React components
+│   │       │   ├── RecoveryGauge.tsx     # Recovery score visualization
+│   │       │   ├── StrainCard.tsx        # Strain display
+│   │       │   ├── SleepCard.tsx         # Sleep analysis
+│   │       │   └── InsightCard.tsx       # Actionable insight
 │   │       ├── page.tsx     # Main dashboard page
 │   │       ├── layout.tsx   # Root layout
 │   │       └── globals.css  # Global styles
+│   ├── ios/                 # Capacitor iOS project
+│   │   └── App/             # Xcode project
+│   ├── capacitor.config.ts  # Capacitor configuration
+│   ├── next.config.ts       # Next.js config (static export)
 │   ├── package.json
 │   └── tsconfig.json
 ├── src/
 │   └── whoop_dashboard/
 │       ├── __init__.py
-│       └── cli.py           # Python CLI for data fetching
+│       ├── cli.py           # Python CLI for data fetching
+│       └── services/        # Data fetching and processing
 ├── tests/
 │   └── test_recovery.py     # Recovery calculation tests
 ├── pyproject.toml           # Python project config
@@ -124,12 +136,40 @@ Two API endpoints serve the frontend:
 
 ### 4. Frontend (React Dashboard)
 
-The single-page dashboard (`page.tsx`) provides:
+The single-page dashboard provides:
 
 - **Overview tab**: Recovery score, strain, daily stats, weekly insights
 - **Recovery tab**: Recovery trend, contributing factors
 - **Strain tab**: Strain target, breakdown, trend
 - **Sleep tab**: Sleep stages, debt calculation, personalized targets
+
+### 5. iOS Deployment (Capacitor)
+
+The app uses Next.js static export with Capacitor for iOS:
+
+```bash
+# Build static export
+npm run build
+
+# Sync to iOS project
+npx cap sync ios
+
+# Open in Xcode
+npx cap open ios
+```
+
+**Configuration:**
+```typescript
+// capacitor.config.ts
+const config: CapacitorConfig = {
+  appId: 'com.whoop.dashboard',
+  appName: 'WHOOP Dashboard',
+  webDir: 'out',
+  server: {
+    url: 'http://localhost:3000'  // Development
+  }
+};
+```
 
 ---
 
@@ -174,6 +214,7 @@ Unlike population averages, baselines are calculated from YOUR data:
 ```typescript
 // Rolling averages from historical data
 hrv_7d_avg = average(last 7 days of HRV values)
+hrv_30d_avg = average(last 30 days of HRV values)
 sleep_7d_avg = average(last 7 days of sleep hours)
 rhr_7d_avg = average(last 7 days of resting HR)
 ```
@@ -191,16 +232,34 @@ Each metric includes a direction indicator showing change from baseline:
 }
 ```
 
+### Causality Engine
+
+Detects patterns and correlations in your data:
+
+```typescript
+// Example correlation
+{
+  pattern_type: 'positive',
+  title: "8k+ step days",
+  description: "High step days correlate with +14% recovery",
+  impact: 14.2,
+  confidence: 0.85,
+  sample_size: 23
+}
+```
+
 ---
 
 ## Dependencies
 
-### Python (Backend)
+### Python (Backend/CLI)
 
 ```toml
 [project]
 dependencies = [
     "garmin-client",  # Local shared package for Garmin API
+    "rich",           # CLI formatting
+    "click",          # CLI framework
 ]
 ```
 
@@ -209,9 +268,11 @@ dependencies = [
 ```json
 {
   "dependencies": {
-    "better-sqlite3": "^12.5.0",  // SQLite access
-    "next": "16.1.1",             // React framework
-    "react": "19.2.3"             // UI library
+    "better-sqlite3": "^12.5.0",
+    "next": "16.1.1",
+    "react": "19.2.3",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/ios": "^7.0.0"
   }
 }
 ```
@@ -234,6 +295,24 @@ The CLI looks for Garmin authentication tokens in:
 
 ```
 ../shared/.garth_tokens/
+```
+
+### Capacitor Configuration
+
+```typescript
+// capacitor.config.ts
+import type { CapacitorConfig } from '@capacitor/cli';
+
+const config: CapacitorConfig = {
+  appId: 'com.whoop.dashboard',
+  appName: 'WHOOP Dashboard',
+  webDir: 'out',
+  plugins: {
+    // Plugin configurations
+  }
+};
+
+export default config;
 ```
 
 ---
@@ -262,7 +341,33 @@ whoop show
 
 ```bash
 cd whoop-dashboard
-pytest tests/
+pytest tests/ -v
 ```
 
+### Building for iOS
 
+```bash
+cd frontend
+
+# Build static export
+npm run build
+
+# Sync to iOS
+npx cap sync ios
+
+# Open in Xcode
+npx cap open ios
+
+# Build and run
+# Use Xcode to build and deploy to device/simulator
+```
+
+---
+
+## Data Retention
+
+The system implements 90-day data retention:
+
+- Wellness data older than 90 days is automatically purged
+- Keeps database size manageable for on-device storage
+- Sufficient history for trend analysis and baseline calculations

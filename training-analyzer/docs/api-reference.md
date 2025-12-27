@@ -20,6 +20,77 @@ Currently, no authentication is required (designed for local single-user use).
 
 ## Endpoints
 
+### Garmin Integration
+
+#### GET /garmin/oauth/start
+
+Start the Garmin OAuth flow for authentication.
+
+**Response:**
+Redirects to Garmin Connect login page.
+
+---
+
+#### GET /garmin/oauth/callback
+
+OAuth callback endpoint (called by Garmin after authorization).
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `code` | string | Authorization code from Garmin |
+
+**Response:**
+Redirects to frontend with success/error status.
+
+---
+
+#### POST /garmin/sync
+
+Sync activities from Garmin Connect.
+
+**Request Body:**
+
+```typescript
+{
+  start_date?: string;   // YYYY-MM-DD (default: 1 year ago)
+  end_date?: string;     // YYYY-MM-DD (default: today)
+}
+```
+
+**Response:**
+
+```typescript
+{
+  success: boolean;
+  activities_synced: number;
+  date_range: {
+    start: string;
+    end: string;
+  };
+  errors?: string[];
+}
+```
+
+---
+
+#### GET /garmin/status
+
+Get Garmin connection status.
+
+**Response:**
+
+```typescript
+{
+  connected: boolean;
+  last_sync?: string;      // ISO datetime
+  activities_count?: number;
+}
+```
+
+---
+
 ### Athlete Context
 
 #### GET /athlete/context
@@ -122,6 +193,7 @@ Get historical fitness metrics.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `days` | number | 30 | Number of days of history |
+| `period` | string | '30d' | Period: '14d', '30d', '90d' |
 
 **Response:**
 
@@ -138,6 +210,65 @@ Get historical fitness metrics.
     daily_load: number;
     risk_zone: string;
   }>;
+}
+```
+
+---
+
+### Workouts
+
+#### GET /workouts
+
+List workouts with pagination and filtering.
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `page` | number | 1 | Page number |
+| `pageSize` | number | 10 | Items per page (max 100) |
+| `type` | string | - | Filter by workout type |
+| `startDate` | string | - | Start date (YYYY-MM-DD) |
+| `endDate` | string | - | End date (YYYY-MM-DD) |
+| `search` | string | - | Search workout names |
+
+**Response:**
+
+```typescript
+{
+  items: Array<Workout>;
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+```
+
+---
+
+#### GET /workouts/{workout_id}
+
+Get a specific workout with details.
+
+**Response:**
+
+```typescript
+{
+  id: string;
+  date: string;
+  activity_type: string;
+  name: string;
+  duration_sec: number;
+  distance_m: number | null;
+  avg_hr: number | null;
+  max_hr: number | null;
+  calories: number | null;
+  hrss: number | null;
+  pace_sec_per_km: number | null;
+  elevation_gain_m: number | null;
+  splits: Array<Split> | null;
+  hr_zones_distribution: object | null;
+  analysis: WorkoutAnalysis | null;
 }
 ```
 
@@ -305,29 +436,7 @@ Generate a periodized training plan using AI.
     taper: number;
   };
   total_planned_load: number;
-  weeks: Array<{
-    week_number: number;
-    phase: string;
-    target_load: number;
-    planned_duration_min: number;
-    workout_count: number;
-    quality_session_count: number;
-    sessions: Array<{
-      day_of_week: number;
-      day_name: string;
-      workout_type: string;
-      description: string;
-      target_duration_min: number;
-      target_load: number;
-      target_pace: string | null;
-      target_hr_zone: string | null;
-      intervals: Array<object> | null;
-      notes: string | null;
-    }>;
-    focus: string | null;
-    notes: string | null;
-    is_cutback: boolean;
-  }>;
+  weeks: Array<WeekPlan>;
   is_active: boolean;
   created_at: string;
   updated_at: string | null;
@@ -543,5 +652,3 @@ When the server is running, interactive API docs are available at:
 
 - **Swagger UI**: http://localhost:8000/docs
 - **ReDoc**: http://localhost:8000/redoc
-
-

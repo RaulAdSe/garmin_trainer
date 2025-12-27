@@ -28,36 +28,42 @@ New to the project? Start here:
 
 ## Project Overview
 
-Training Analyzer is an **AI-powered coaching application** that transforms Garmin training data into actionable insights.
+Training Analyzer is an **AI-powered coaching application** that transforms Garmin training data into actionable insights using a multi-agent LLM system.
 
 ### Core Features
 
 | Feature | Description |
 |---------|-------------|
-| **Workout Analysis** | AI commentary on completed workouts |
-| **Training Plans** | Periodized plans from race goals |
-| **Workout Design** | Structured intervals with FIT export |
-| **Readiness Score** | Daily training readiness (0-100) |
-| **Fitness Metrics** | CTL/ATL/TSB/ACWR tracking |
+| **Multi-Agent AI** | LangGraph agents using GPT-5-nano/mini for intelligent analysis |
+| **Workout Analysis** | AI commentary on completed workouts with execution ratings |
+| **Training Plans** | Periodized plans from race goals with adaptive adjustments |
+| **Workout Design** | Structured intervals with FIT export for Garmin devices |
+| **Readiness Score** | Daily training readiness (0-100) based on HRV, sleep, fatigue |
+| **Fitness Metrics** | CTL/ATL/TSB/ACWR tracking with trend visualization |
+| **Garmin Sync** | OAuth-based integration for automatic activity import |
 
 ### Tech Stack
 
 | Component | Technology |
 |-----------|------------|
 | Backend | FastAPI + Python 3.11 |
-| AI/LLM | OpenAI GPT-4o + LangGraph |
-| Frontend | Next.js 16 + React 19 |
-| Database | SQLite |
+| AI/LLM | OpenAI GPT-5-nano/mini + LangGraph |
+| Frontend | Next.js 16 + React 19 + React Query |
+| Database | SQLite with Repository Pattern |
+| Styling | Tailwind CSS 4 |
 | Export | Garmin FIT format |
+| Testing | Pytest (778 tests across 26 files) |
 
 ---
 
 ## Architecture Summary
 
 ```
-Garmin Data → SQLite → FastAPI → LLM Agents → React Dashboard
-                ↓          ↓           ↓
-            Metrics    Analysis    FIT Export
+Garmin Connect → SQLite → FastAPI → LLM Agents → React Dashboard
+      ↓              ↓          ↓           ↓            ↓
+   OAuth         training.db   Services   Analysis    Trend Charts
+                               + Repos    Plans       Day Selector
+                                          Workouts    Period Toggle
 ```
 
 ---
@@ -89,8 +95,11 @@ training-analyzer metrics      # CTL/ATL/TSB
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
+| `/api/v1/garmin/oauth/start` | GET | Start Garmin OAuth |
+| `/api/v1/garmin/sync` | POST | Sync activities |
 | `/api/v1/athlete/context` | GET | Full athlete context |
 | `/api/v1/athlete/readiness` | GET | Today's readiness |
+| `/api/v1/workouts` | GET | List workouts (paginated) |
 | `/api/v1/analysis/workout/{id}` | POST | Analyze workout |
 | `/api/v1/plans/generate` | POST | Generate training plan |
 | `/api/v1/workouts/design` | POST | Design workout |
@@ -113,9 +122,9 @@ training-analyzer metrics      # CTL/ATL/TSB
 
 | Zone | Score | Action |
 |------|-------|--------|
-| 🟢 Green | 67-100 | Quality training OK |
-| 🟡 Yellow | 34-66 | Moderate effort |
-| 🔴 Red | 0-33 | Rest/recovery |
+| Green | 67-100 | Quality training OK |
+| Yellow | 34-66 | Moderate effort |
+| Red | 0-33 | Rest/recovery |
 
 ### ACWR Risk Zones
 
@@ -134,10 +143,33 @@ training-analyzer metrics      # CTL/ATL/TSB
 # Required
 OPENAI_API_KEY=sk-...
 
+# Garmin OAuth
+GARMIN_EMAIL=your-email
+GARMIN_PASSWORD=your-password
+
 # Optional
 API_PORT=8000
 DEBUG=false
 TRAINING_DB_PATH=./training.db
+```
+
+---
+
+## Testing
+
+The project includes a comprehensive test suite with 778 tests across 26 files:
+
+```bash
+# Run all tests
+pytest tests/ -v
+
+# Run specific categories
+pytest tests/agents/ -v    # Agent tests
+pytest tests/api/ -v       # API tests
+pytest tests/metrics/ -v   # Metric tests
+
+# With coverage
+pytest tests/ --cov=src/training_analyzer
 ```
 
 ---
@@ -147,5 +179,3 @@ TRAINING_DB_PATH=./training.db
 - **[README.md](../README.md)** - Project root documentation
 - **[pyproject.toml](../pyproject.toml)** - Python dependencies
 - **[tests/](../tests/)** - Test suite
-
-

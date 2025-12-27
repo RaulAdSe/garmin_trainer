@@ -6,12 +6,12 @@ This document explains the technical architecture and data flow of the Training 
 
 ## Overview
 
-Training Analyzer is an **AI-powered coaching application** that combines Garmin training data with LLM intelligence to provide personalized workout analysis, training plan generation, and structured workout design.
+Training Analyzer is an **AI-powered coaching application** that combines Garmin training data with a multi-agent LLM system to provide personalized workout analysis, training plan generation, and structured workout design.
 
 ```
 ┌──────────────────────┐     ┌───────────────────┐     ┌───────────────────┐
 │   Garmin Connect     │────▶│   SQLite DB       │────▶│   FastAPI Backend │
-│   (Data Source)      │     │   (training.db)   │     │   (API + Services)│
+│   (OAuth + Sync)     │     │   (training.db)   │     │   (API + Services)│
 └──────────────────────┘     └───────────────────┘     └─────────┬─────────┘
                                                                   │
                                       ┌───────────────────────────┼──────────────────┐
@@ -35,13 +35,15 @@ Training Analyzer is an **AI-powered coaching application** that combines Garmin
 
 | Layer | Technology | Purpose |
 |-------|------------|---------|
-| **Backend API** | FastAPI | REST API with async support |
-| **AI/LLM** | OpenAI GPT-4o + LangGraph | Intelligent agents for analysis |
-| **Data Storage** | SQLite | Local database (`training.db`) |
-| **Frontend** | Next.js 16 + React 19 | Modern React dashboard |
-| **Styling** | Tailwind CSS 4 | Utility-first CSS |
+| **Backend API** | FastAPI | REST API with async support, dependency injection |
+| **AI/LLM** | OpenAI GPT-5-nano/mini + LangGraph | Multi-agent system for intelligent analysis |
+| **Data Storage** | SQLite + Repository Pattern | Local database with clean data access |
+| **Frontend** | Next.js 16 + React 19 | Modern React dashboard with App Router |
+| **State Management** | React Query | Server state management with caching |
+| **Styling** | Tailwind CSS 4 | Utility-first CSS framework |
 | **Export** | FIT SDK (fit-tool) | Garmin workout export |
 | **Validation** | Pydantic v2 | Data models and validation |
+| **Testing** | Pytest | 778 tests across 26 files |
 
 ---
 
@@ -63,12 +65,14 @@ training-analyzer/
 │       │   └── routes/
 │       │       ├── analysis.py     # Workout analysis endpoints
 │       │       ├── athlete.py      # Athlete context endpoints
+│       │       ├── garmin.py       # Garmin OAuth & sync
 │       │       ├── export.py       # FIT export endpoints
 │       │       ├── plans.py        # Plan management endpoints
-│       │       └── workouts.py     # Workout design endpoints
+│       │       └── workouts.py     # Workout design & listing
 │       ├── db/                     # Database layer
-│       │   ├── database.py         # Database access
-│       │   └── schema.py           # SQLite schema
+│       │   ├── database.py         # TrainingDatabase class
+│       │   ├── repository.py       # Repository pattern implementation
+│       │   └── schema.py           # SQLite schema definitions
 │       ├── fit/                    # Garmin FIT file encoding
 │       │   └── encoder.py          # FIT file generator
 │       ├── llm/                    # LLM integration
@@ -88,21 +92,38 @@ training-analyzer/
 │       │   └── workout.py          # Workout recommendations
 │       ├── services/               # Business logic
 │       │   ├── coach.py            # Coach service (daily briefing)
+│       │   ├── garmin_service.py   # Garmin sync service
 │       │   ├── plan_service.py     # Plan management
 │       │   └── workout_service.py  # Workout operations
 │       ├── cli.py                  # Command-line interface
-│       ├── config.py               # App configuration
+│       ├── config.py               # App configuration (pydantic-settings)
 │       ├── exceptions.py           # Custom exceptions
 │       └── main.py                 # FastAPI app entry point
 ├── frontend/                       # Next.js frontend
 │   └── src/
 │       ├── app/                    # App router pages
+│       │   ├── dashboard/          # Main dashboard
+│       │   ├── workouts/           # Workout list & details
+│       │   └── plans/              # Training plans
 │       ├── components/             # React components
-│       ├── hooks/                  # Custom hooks (useWorkouts, usePlans)
+│       │   ├── dashboard/          # TrendCharts, MetricCards, DaySelector
+│       │   ├── workouts/           # WorkoutCard, WorkoutList
+│       │   └── ui/                 # Shared UI components
+│       ├── hooks/                  # Custom hooks
+│       │   ├── useWorkouts.ts      # Workout data with React Query
+│       │   ├── usePlans.ts         # Plan management hooks
+│       │   └── useDashboard.ts     # Dashboard data hooks
 │       └── lib/                    # API client, types, utils
-├── tests/                          # Test suite
+│           ├── api-client.ts       # Fetch wrapper with error handling
+│           ├── types.ts            # TypeScript type definitions
+│           └── utils.ts            # Utility functions
+├── tests/                          # Comprehensive test suite
+│   ├── agents/                     # Agent unit tests
+│   ├── api/                        # API integration tests
+│   ├── db/                         # Database tests
+│   ├── metrics/                    # Metric calculation tests
+│   └── services/                   # Service layer tests
 ├── docs/                           # Documentation
-├── training.db                     # SQLite database
 └── pyproject.toml                  # Python project config
 ```
 
@@ -110,22 +131,42 @@ training-analyzer/
 
 ## Core Components
 
-### 1. LLM Agents (LangGraph)
+### 1. Multi-Agent LLM System (LangGraph)
 
-Three specialized agents handle different AI tasks:
+Three specialized agents handle different AI tasks using GPT-5-nano (fast) and GPT-5-mini (quality):
 
-| Agent | Purpose | Input | Output |
-|-------|---------|-------|--------|
-| **AnalysisAgent** | Analyze completed workouts | Workout data + context | Structured analysis with ratings |
-| **PlanAgent** | Generate training plans | Goal + constraints + fitness | Periodized multi-week plan |
-| **WorkoutAgent** | Design structured workouts | Workout type + duration | Interval structure with paces |
+| Agent | Purpose | Model | Input | Output |
+|-------|---------|-------|-------|--------|
+| **AnalysisAgent** | Analyze completed workouts | GPT-5-mini | Workout data + context | Structured analysis with ratings |
+| **PlanAgent** | Generate training plans | GPT-5-mini | Goal + constraints + fitness | Periodized multi-week plan |
+| **WorkoutAgent** | Design structured workouts | GPT-5-nano | Workout type + duration | Interval structure with paces |
 
 ```python
 # Example: Analysis Agent flow
 workout_data → Build Context → Call LLM → Parse Response → WorkoutAnalysisResult
+                    ↓
+            [Fitness metrics, HR zones, recent workouts, goals]
 ```
 
-### 2. Fitness Metrics (Banister Model)
+### 2. Repository Pattern (Database Layer)
+
+Clean separation of data access from business logic:
+
+```python
+# Repository pattern for data access
+class WorkoutRepository:
+    def get_by_id(self, workout_id: str) -> Workout | None
+    def get_recent(self, limit: int = 10) -> list[Workout]
+    def get_with_pagination(self, page: int, size: int) -> PaginatedResult
+    def save_analysis(self, workout_id: str, analysis: Analysis) -> None
+
+# Used by services
+class WorkoutService:
+    def __init__(self, repository: WorkoutRepository):
+        self.repository = repository
+```
+
+### 3. Fitness Metrics (Banister Model)
 
 The Fitness-Fatigue model calculates training load balance:
 
@@ -134,7 +175,7 @@ The Fitness-Fatigue model calculates training load balance:
 - **TSB** (Training Stress Balance): CTL - ATL = "Form"
 - **ACWR** (Acute:Chronic Workload Ratio): ATL / CTL = Injury risk
 
-### 3. Readiness System
+### 4. Readiness System
 
 Combines multiple factors into a 0-100 readiness score:
 
@@ -147,7 +188,23 @@ Combines multiple factors into a 0-100 readiness score:
 | Training Load | 20% | TSB and ACWR |
 | Recovery Days | 10% | Days since hard workout |
 
-### 4. FIT Export
+### 5. Garmin Integration
+
+OAuth-based authentication and activity sync:
+
+```python
+# OAuth flow
+/api/v1/garmin/oauth/start → Redirect to Garmin → /api/v1/garmin/oauth/callback
+
+# Sync activities
+POST /api/v1/garmin/sync
+{
+  "start_date": "2024-01-01",
+  "end_date": "2024-12-27"
+}
+```
+
+### 6. FIT Export
 
 Encodes structured workouts to Garmin FIT format:
 
@@ -162,19 +219,82 @@ Supports:
 
 ---
 
+## Frontend Architecture
+
+### React Query State Management
+
+Server state is managed with React Query for automatic caching and refetching:
+
+```typescript
+// Workout data hook with pagination
+function useWorkouts(filters: WorkoutFilters) {
+  return useQuery({
+    queryKey: ['workouts', filters],
+    queryFn: () => apiClient.getWorkouts(filters),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}
+
+// Mutation for workout analysis
+function useAnalyzeWorkout() {
+  return useMutation({
+    mutationFn: (workoutId: string) => apiClient.analyzeWorkout(workoutId),
+    onSuccess: () => queryClient.invalidateQueries(['workouts']),
+  });
+}
+```
+
+### Component Architecture
+
+```
+Dashboard Page
+├── DaySelector (date navigation)
+├── PeriodToggle (14D/30D/90D)
+├── MetricCards (CTL, ATL, TSB, ACWR)
+└── TrendCharts (interactive charts)
+
+Workouts Page
+├── WorkoutList
+│   ├── FilterBar (search, type, date range)
+│   ├── WorkoutCard[] (individual workouts)
+│   └── Pagination
+└── WorkoutDetail
+    ├── WorkoutSummary
+    ├── AnalysisPanel
+    └── SplitsTable
+```
+
+---
+
 ## Data Flow
+
+### Garmin Sync Flow
+
+```
+1. User initiates OAuth flow
+2. Redirect to Garmin Connect for authorization
+3. Callback with authorization code
+4. Exchange for access token
+5. Fetch activities for date range
+6. Transform and store in training.db
+7. Calculate fitness metrics
+8. Frontend refreshes data
+```
 
 ### Workout Analysis Flow
 
 ```
 1. User selects workout from list
 2. Frontend calls POST /api/v1/analysis/workout/{id}
-3. API gets workout data from training.db
-4. API builds athlete context (fitness, goals, zones)
-5. AnalysisAgent receives workout + context
-6. LLM generates structured analysis
-7. Response cached for future requests
-8. Frontend displays analysis with ratings
+3. API checks for cached analysis in DB
+4. If not cached:
+   a. API gets workout data from training.db
+   b. API builds athlete context (fitness, goals, zones)
+   c. AnalysisAgent receives workout + context
+   d. LLM generates structured analysis
+   e. Analysis stored in DB
+5. Response returned to frontend
+6. Frontend displays analysis with ratings
 ```
 
 ### Plan Generation Flow
@@ -190,18 +310,6 @@ Supports:
 8. User can activate, adapt, or export plan
 ```
 
-### Workout Design Flow
-
-```
-1. User selects workout type (easy, tempo, intervals, etc.)
-2. Frontend calls POST /api/v1/workouts/design
-3. API builds athlete context (paces, HR zones)
-4. WorkoutAgent creates interval structure
-5. Workout stored with ID
-6. User can download as FIT file
-7. FIT synced to Garmin device
-```
-
 ---
 
 ## API Architecture
@@ -210,30 +318,36 @@ Supports:
 
 ```
 /api/v1/
+├── garmin/
+│   ├── GET /oauth/start         # Start OAuth flow
+│   ├── GET /oauth/callback      # OAuth callback
+│   ├── POST /sync               # Sync activities
+│   └── GET /status              # Sync status
 ├── athlete/
-│   ├── GET /context          # Full athlete context for LLM
-│   ├── GET /readiness        # Today's readiness score
-│   └── GET /fitness-metrics  # CTL/ATL/TSB history
-├── analysis/
-│   ├── POST /workout/{id}    # Analyze a workout
-│   ├── GET  /workout/{id}    # Get cached analysis
-│   ├── GET  /recent          # Recent workouts with summaries
-│   └── POST /batch           # Batch analyze multiple
-├── plans/
-│   ├── POST /generate        # Generate new plan
-│   ├── GET  /                # List all plans
-│   ├── GET  /active          # Get active plan
-│   ├── GET  /{id}            # Get specific plan
-│   ├── PUT  /{id}            # Update plan
-│   ├── POST /{id}/activate   # Set as active
-│   └── POST /{id}/adapt      # AI-assisted adaptation
+│   ├── GET /context             # Full athlete context for LLM
+│   ├── GET /readiness           # Today's readiness score
+│   └── GET /fitness-metrics     # CTL/ATL/TSB history
 ├── workouts/
-│   ├── POST /design          # Design structured workout
-│   ├── GET  /{id}            # Get workout
-│   ├── GET  /{id}/fit        # Download FIT file
-│   └── POST /quick/{type}    # Quick workout generation
+│   ├── GET /                    # List with pagination
+│   ├── GET /{id}                # Get workout details
+│   ├── POST /design             # Design structured workout
+│   ├── GET /{id}/fit            # Download FIT file
+│   └── POST /quick/{type}       # Quick workout generation
+├── analysis/
+│   ├── POST /workout/{id}       # Analyze a workout
+│   ├── GET /workout/{id}        # Get cached analysis
+│   ├── GET /recent              # Recent workouts with summaries
+│   └── POST /batch              # Batch analyze multiple
+├── plans/
+│   ├── POST /generate           # Generate new plan
+│   ├── GET /                    # List all plans
+│   ├── GET /active              # Get active plan
+│   ├── GET /{id}                # Get specific plan
+│   ├── PUT /{id}                # Update plan
+│   ├── POST /{id}/activate      # Set as active
+│   └── POST /{id}/adapt         # AI-assisted adaptation
 └── export/
-    └── GET /{id}/fit         # FIT file export
+    └── GET /{id}/fit            # FIT file export
 ```
 
 ### Dependency Injection
@@ -243,7 +357,10 @@ Supports:
 def get_training_db() -> TrainingDatabase:
     """Get training database connection."""
 
-def get_coach_service() -> CoachService:
+def get_workout_repository(db = Depends(get_training_db)) -> WorkoutRepository:
+    """Get workout repository."""
+
+def get_coach_service(repo = Depends(get_workout_repository)) -> CoachService:
     """Get coach service with business logic."""
 
 # Usage in routes
@@ -262,6 +379,10 @@ async def get_readiness(coach_service = Depends(get_coach_service)):
 # Required
 OPENAI_API_KEY=sk-...
 
+# Garmin OAuth
+GARMIN_EMAIL=your-email
+GARMIN_PASSWORD=your-password
+
 # Optional
 API_HOST=0.0.0.0
 API_PORT=8000
@@ -279,43 +400,41 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     openai_api_key: str
+    garmin_email: str | None = None
+    garmin_password: str | None = None
     api_host: str = "0.0.0.0"
     api_port: int = 8000
-    # ... more settings
 
-    class Config:
-        env_file = ".env"
+    model_config = ConfigDict(env_file=".env")
 ```
 
 ---
 
-## Dependencies
+## Testing
 
-### Python Backend
+### Test Structure
 
-```toml
-[project.dependencies]
-fastapi = ">=0.109.0"
-uvicorn = ">=0.27.0"
-pydantic = ">=2.5.0"
-openai = ">=1.10.0"
-langgraph = ">=0.0.25"
-langchain-openai = ">=0.0.5"
-fit-tool = ">=0.9.13"
-rich = ">=13.0"
-python-dotenv = ">=1.0.0"
+```
+tests/
+├── agents/                  # Agent unit tests (mocked LLM)
+├── api/                     # API integration tests
+├── db/                      # Database and repository tests
+├── metrics/                 # Metric calculation tests
+├── services/                # Service layer tests
+└── conftest.py              # Shared fixtures
 ```
 
-### Frontend
+### Running Tests
 
-```json
-{
-  "dependencies": {
-    "next": "16.x",
-    "react": "19.x",
-    "tailwindcss": "4.x"
-  }
-}
+```bash
+# All tests
+pytest tests/ -v
+
+# Specific category
+pytest tests/api/ -v
+
+# With coverage
+pytest tests/ --cov=src/training_analyzer --cov-report=html
 ```
 
 ---
@@ -326,35 +445,7 @@ python-dotenv = ">=1.0.0"
 2. **CORS**: Configurable allowed origins
 3. **Local Data**: All data stays local in SQLite
 4. **No Auth**: Currently designed for single-user local use
-
----
-
-## Development
-
-### Running the Backend
-
-```bash
-cd training-analyzer
-pip install -e ".[dev]"
-export OPENAI_API_KEY="your-key"
-uvicorn training_analyzer.main:app --reload --port 8000
-```
-
-### Running the Frontend
-
-```bash
-cd training-analyzer/frontend
-npm install
-npm run dev
-# Opens at http://localhost:3000
-```
-
-### Running Tests
-
-```bash
-cd training-analyzer
-pytest tests/ -v
-```
+5. **Garmin OAuth**: Tokens stored securely in shared directory
 
 ---
 
@@ -366,5 +457,4 @@ The architecture is designed for extension:
 2. **New Metrics**: Add calculation modules in `metrics/`
 3. **New Export Formats**: Add encoders in `fit/` or new `export/`
 4. **New Data Sources**: Add integrations in `services/`
-
-
+5. **New Repositories**: Add data access patterns in `db/repository.py`

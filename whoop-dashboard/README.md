@@ -1,115 +1,146 @@
-# WHOOP Dashboard Documentation
+# WHOOP Dashboard
 
-Welcome to the WHOOP Dashboard documentation. This folder contains comprehensive guides for understanding, setting up, and using the dashboard.
+WHOOP-style wellness dashboard that transforms Garmin Connect data into actionable health insights. Follows the philosophy: **"Don't show data, tell me what to do."**
 
----
+## Features
+
+- **Recovery Score (0-100%)**: How ready your body is today based on HRV, sleep, and body battery
+- **Strain Score (0-21)**: Logarithmic scale showing daily exertion from activities
+- **Personal Baselines**: Compare to YOUR averages, not population norms
+- **Actionable Insights**: GO / MODERATE / RECOVER decisions with explanations
+- **Causality Engine**: Detects patterns and correlations in YOUR data
+- **Sleep Analysis**: Tonight's personalized sleep target based on strain and debt
+- **Trend Visualization**: 14-day trends with direction indicators
+- **iOS App Ready**: Capacitor integration for native iOS deployment
+
+## Project Structure
+
+```
+whoop-dashboard/
+├── frontend/                       # Next.js 16 + React 19 frontend
+│   ├── src/
+│   │   └── app/
+│   │       ├── api/               # API routes
+│   │       │   └── wellness/
+│   │       │       ├── today/route.ts    # Today's data endpoint
+│   │       │       └── history/route.ts  # Historical data endpoint
+│   │       ├── page.tsx           # Main dashboard page
+│   │       ├── layout.tsx         # Root layout
+│   │       └── globals.css        # Global styles
+│   ├── ios/                       # Capacitor iOS project
+│   │   └── App/                   # Xcode project
+│   ├── capacitor.config.ts        # Capacitor configuration
+│   └── package.json
+├── src/
+│   └── whoop_dashboard/
+│       ├── __init__.py
+│       ├── cli.py                 # Python CLI for data fetching
+│       └── services/              # Data fetching services
+├── tests/                         # Test suite (13 tests)
+│   └── test_recovery.py           # Recovery calculation tests
+├── docs/                          # Documentation
+├── pyproject.toml                 # Python project config
+├── VISION.md                      # Product vision document
+└── wellness.db                    # SQLite database (generated)
+```
 
 ## Quick Start
 
-New to the project? Start here:
-
-1. **[Getting Started](./getting-started.md)** - Installation and setup guide
-2. **[VISION.md](../VISION.md)** - Product philosophy and roadmap
-
----
-
-## Documentation Index
-
-| Document | Description |
-|----------|-------------|
-| **[Getting Started](./getting-started.md)** | Installation, configuration, and basic usage |
-| **[Architecture](./architecture.md)** | Technical architecture, data flow, and project structure |
-| **[API Reference](./api-reference.md)** | REST API endpoints, request/response formats |
-| **[Metrics Explained](./metrics-explained.md)** | Deep dive into recovery, strain, sleep, and HRV calculations |
-
----
-
-## Project Overview
-
-The WHOOP Dashboard transforms Garmin Connect data into actionable health insights, following the philosophy:
-
-> **"Don't show data, tell me what to do."**
-
-### Core Features
-
-- **Recovery Score (0-100%)**: How ready your body is today
-- **Strain Score (0-21)**: How much stress you put on your body
-- **Personal Baselines**: Compared to YOUR averages, not population norms
-- **Actionable Insights**: GO / MODERATE / RECOVER decisions
-- **Causality Engine**: Detects patterns in YOUR data
-
-### Tech Stack
-
-| Component | Technology |
-|-----------|------------|
-| Data Fetching | Python CLI + Garmin Connect API |
-| Storage | SQLite (`wellness.db`) |
-| API Layer | Next.js API Routes |
-| Frontend | React 19 + Tailwind CSS |
-
----
-
-## Architecture Summary
-
-```
-Garmin Connect → Python CLI → SQLite → Next.js API → React Dashboard
-     ↓              ↓           ↓           ↓            ↓
-  Raw data      Fetch &     Store &     Serve &      Display &
-               transform   persist     calculate    visualize
-```
-
----
-
-## Quick Reference
-
-### CLI Commands
+### 1. Install Python CLI
 
 ```bash
-whoop fetch              # Fetch today's data
-whoop fetch --days 7     # Backfill 7 days
-whoop show               # Show today's recovery
-whoop stats              # Database stats
+# Install shared Garmin client
+cd ../shared/garmin_client
+pip install -e .
+
+# Install whoop-dashboard CLI
+cd ../../whoop-dashboard
+pip install -e .
 ```
 
-### Running the Dashboard
+### 2. Fetch Your Data
+
+```bash
+# Authenticate and fetch last 14 days
+whoop fetch --days 14
+
+# View today's recovery
+whoop show
+
+# Database statistics
+whoop stats
+```
+
+### 3. Run the Dashboard
 
 ```bash
 cd frontend
+npm install
 npm run dev
 # Opens at http://localhost:3000
 ```
 
-### API Endpoints
+## CLI Commands
 
-- `GET /api/wellness/today` - Today's data with insights
-- `GET /api/wellness/history?days=14` - Historical data
+```bash
+whoop fetch              # Fetch today's data
+whoop fetch --days 7     # Backfill 7 days
+whoop fetch --date 2024-12-25  # Specific date
+whoop show               # Show today's recovery
+whoop stats              # Database statistics
+```
 
----
+## API Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/wellness/today` | Today's data with recovery, strain, insights |
+| `GET /api/wellness/history?days=14` | Historical data for trends |
 
 ## Recovery Zones
 
 | Zone | Range | Action |
 |------|-------|--------|
-| 🟢 GREEN | 67-100% | Push hard, high intensity OK |
-| 🟡 YELLOW | 34-66% | Moderate effort, technique work |
-| 🔴 RED | 0-33% | Recovery focus, rest |
+| GREEN | 67-100% | Push hard, high intensity OK |
+| YELLOW | 34-66% | Moderate effort, technique work |
+| RED | 0-33% | Recovery focus, rest |
 
----
+## Tech Stack
 
-## Contributing
+- **Frontend**: Next.js 16, React 19, Tailwind CSS 4
+- **iOS**: Capacitor with static export
+- **Data Fetching**: Python CLI with Garmin Connect API
+- **Storage**: SQLite (`wellness.db`)
+- **Database Access**: better-sqlite3
 
-When adding new features:
+## iOS Deployment
 
-1. Update relevant documentation
-2. Add tests for new calculations
-3. Follow existing code patterns
-4. Keep the "actionable insights" philosophy
+The app is ready for iOS deployment using Capacitor:
 
----
+```bash
+cd frontend
 
-## See Also
+# Build static export
+npm run build
 
-- **[VISION.md](../VISION.md)** - Full product vision and roadmap
-- **[pyproject.toml](../pyproject.toml)** - Python dependencies
-- **[frontend/package.json](../frontend/package.json)** - Node.js dependencies
+# Sync to iOS
+npx cap sync ios
 
+# Open in Xcode
+npx cap open ios
+```
+
+## Testing
+
+```bash
+cd whoop-dashboard
+pytest tests/ -v
+```
+
+## Documentation
+
+- [Architecture](docs/architecture.md) - Technical architecture and data flow
+- [API Reference](docs/api-reference.md) - API documentation
+- [Getting Started](docs/getting-started.md) - Setup and usage guide
+- [Metrics Explained](docs/metrics-explained.md) - How metrics are calculated
+- [VISION.md](VISION.md) - Product philosophy and roadmap
