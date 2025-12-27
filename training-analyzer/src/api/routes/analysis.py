@@ -93,7 +93,18 @@ def get_analysis_agent() -> AnalysisAgent:
     """Get the analysis agent singleton."""
     global _analysis_agent
     if _analysis_agent is None:
-        _analysis_agent = AnalysisAgent()
+        import logging
+        logger = logging.getLogger(__name__)
+        try:
+            logger.info("Initializing AnalysisAgent...")
+            _analysis_agent = AnalysisAgent()
+            logger.info("AnalysisAgent initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize AnalysisAgent: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to initialize analysis agent: {str(e)}"
+            )
     return _analysis_agent
 
 
@@ -135,6 +146,10 @@ async def analyze_workout(
     Returns:
         AnalysisResponse with the analysis result
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"[analyze_workout] Starting analysis for workout_id={workout_id}")
+
     try:
         # Check cache first (unless force_refresh)
         force_refresh = request.force_refresh if request else False
@@ -215,7 +230,7 @@ async def analyze_workout(
                             "split_number": s.split_number,
                             "distance_m": s.distance_m,
                             "duration_sec": s.duration_sec,
-                            "pace": s.pace_sec_per_km,
+                            "pace": s.avg_pace_sec_km,
                             "avg_hr": s.avg_hr,
                             "max_hr": s.max_hr,
                             "elevation_gain": s.elevation_gain_m,
@@ -248,9 +263,13 @@ async def analyze_workout(
             cached=False,
         )
 
-    except HTTPException:
+    except HTTPException as http_exc:
+        logger.warning(f"[analyze_workout] HTTPException for workout_id={workout_id}: {http_exc.status_code} - {http_exc.detail}")
         raise
     except Exception as e:
+        logger.error(f"[analyze_workout] Exception for workout_id={workout_id}: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"[analyze_workout] Traceback: {traceback.format_exc()}")
         return AnalysisResponse(
             success=False,
             analysis=None,

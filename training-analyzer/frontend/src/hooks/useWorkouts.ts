@@ -144,11 +144,19 @@ export function useWorkouts(options: UseWorkoutsOptions = {}): UseWorkoutsReturn
       workoutId: string;
       regenerate?: boolean;
     }) => {
-      return analyzeWorkout({
-        workoutId,
-        includeContext: true,
-        regenerate,
-      });
+      console.log('[useWorkouts] Starting analysis for workout:', workoutId);
+      try {
+        const result = await analyzeWorkout({
+          workoutId,
+          includeContext: true,
+          regenerate,
+        });
+        console.log('[useWorkouts] Analysis succeeded for workout:', workoutId);
+        return result;
+      } catch (error) {
+        console.error('[useWorkouts] Analysis failed for workout:', workoutId, error);
+        throw error;
+      }
     },
     onMutate: ({ workoutId }) => {
       setLoadingAnalysisId(workoutId);
@@ -164,6 +172,9 @@ export function useWorkouts(options: UseWorkoutsOptions = {}): UseWorkoutsReturn
         queryKey: workoutKeys.analysis(analysis.workoutId),
       });
     },
+    onError: (error, { workoutId }) => {
+      console.error('[useWorkouts] Mutation error for workout:', workoutId, error);
+    },
     onSettled: () => {
       setLoadingAnalysisId(null);
     },
@@ -171,7 +182,18 @@ export function useWorkouts(options: UseWorkoutsOptions = {}): UseWorkoutsReturn
 
   const handleAnalyzeWorkout = useCallback(
     async (workoutId: string, regenerate = false) => {
-      await analyzeMutation.mutateAsync({ workoutId, regenerate });
+      if (!workoutId) {
+        console.error('[useWorkouts] Cannot analyze: workoutId is empty');
+        return;
+      }
+      console.log('[useWorkouts] handleAnalyzeWorkout called with:', workoutId);
+      try {
+        await analyzeMutation.mutateAsync({ workoutId, regenerate });
+      } catch (error) {
+        console.error('[useWorkouts] Analysis mutation failed:', error);
+        // Re-throw so React Query can handle it
+        throw error;
+      }
     },
     [analyzeMutation]
   );

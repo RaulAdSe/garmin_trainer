@@ -50,10 +50,17 @@ async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let errorData: ApiError;
     try {
-      errorData = await response.json();
+      const text = await response.text();
+      console.error('[API] Error response body:', text);
+      try {
+        errorData = JSON.parse(text);
+      } catch {
+        errorData = { message: text || response.statusText || 'Unknown error' };
+      }
     } catch {
       errorData = { message: response.statusText || 'Unknown error' };
     }
+    console.error('[API] Error details:', response.status, errorData);
     throw new ApiClientError(
       errorData.message,
       response.status,
@@ -205,7 +212,15 @@ export async function getWorkoutAnalysis(workoutId: string): Promise<WorkoutAnal
     if (response.status === 404) {
       return null;
     }
-    return handleResponse<WorkoutAnalysis>(response);
+
+    const wrapper = await handleResponse<AnalysisResponseWrapper>(response);
+
+    // If no cached analysis exists, the backend returns success=false with an error message
+    if (!wrapper.success || !wrapper.analysis) {
+      return null;
+    }
+
+    return wrapper.analysis;
   } catch (error) {
     if (error instanceof ApiClientError && error.status === 404) {
       return null;
@@ -214,9 +229,19 @@ export async function getWorkoutAnalysis(workoutId: string): Promise<WorkoutAnal
   }
 }
 
+// Backend response wrapper for analysis
+interface AnalysisResponseWrapper {
+  success: boolean;
+  analysis: WorkoutAnalysis | null;
+  error?: string;
+  cached: boolean;
+}
+
 export async function analyzeWorkout(
   request: AnalyzeWorkoutRequest
 ): Promise<WorkoutAnalysis> {
+  console.log('[API] analyzeWorkout called for:', request.workoutId);
+
   const response = await fetch(`${API_BASE}/analysis/workout/${request.workoutId}`, {
     method: 'POST',
     headers: {
@@ -227,7 +252,21 @@ export async function analyzeWorkout(
       force_refresh: request.regenerate ?? false,
     }),
   });
-  return handleResponse<WorkoutAnalysis>(response);
+
+  console.log('[API] analyzeWorkout response status:', response.status);
+
+  const wrapper = await handleResponse<AnalysisResponseWrapper>(response);
+
+  if (!wrapper.success || !wrapper.analysis) {
+    console.error('[API] Analysis failed:', wrapper.error);
+    throw new ApiClientError(
+      wrapper.error || 'Analysis failed',
+      response.status,
+      'ANALYSIS_FAILED'
+    );
+  }
+
+  return wrapper.analysis;
 }
 
 // Streaming analysis endpoint
@@ -241,9 +280,9 @@ export function analyzeWorkoutStream(
 
   const fetchStream = async () => {
     try {
-      const response = await fetch(
-        `${API_BASE}/analysis/workout/${request.workoutId}?stream=true`,
-        {
+      const url = `${API_BASE}/analysis/workout/${request.workoutId}?stream=true`;
+
+      const response = await fetch(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -277,7 +316,8 @@ export function analyzeWorkoutStream(
 
         if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
+        const chunk = decoder.decode(value, { stream: true });
+        buffer += chunk;
 
         // Process SSE events
         const lines = buffer.split('\n');
