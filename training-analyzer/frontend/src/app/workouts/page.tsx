@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
 import { useWorkouts } from '@/hooks/useWorkouts';
 import { WorkoutList } from '@/components/workouts/WorkoutList';
 import { GarminSync } from '@/components/garmin/GarminSync';
@@ -8,8 +8,9 @@ import { Button } from '@/components/ui/Button';
 import type { WorkoutListFilters } from '@/lib/types';
 import type { GarminSyncResponse } from '@/lib/api-client';
 
+import { useState } from 'react';
+
 export default function WorkoutsPage() {
-  const [filters, setFilters] = useState<WorkoutListFilters>({});
   const [showGarminSync, setShowGarminSync] = useState(false);
 
   const {
@@ -24,11 +25,11 @@ export default function WorkoutsPage() {
     loadingAnalysisId,
     analyzeWorkout,
     setPage,
+    filters,
     setFilters: updateFilters,
     refetch,
   } = useWorkouts({
     pageSize: 10,
-    filters,
   });
 
   const handleSyncComplete = useCallback((result: GarminSyncResponse) => {
@@ -43,14 +44,13 @@ export default function WorkoutsPage() {
   }, []);
 
   const handleFiltersChange = (newFilters: WorkoutListFilters) => {
-    setFilters(newFilters);
     updateFilters(newFilters);
   };
 
-  const handleLoadMore = () => {
-    if (page < totalPages) {
-      setPage(page + 1);
-    }
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage);
+    // Scroll to top when changing pages
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
@@ -108,21 +108,15 @@ export default function WorkoutsPage() {
             workouts={workouts}
             analyses={analyses}
             isLoading={isLoading}
-            hasMore={page < totalPages}
-            onLoadMore={handleLoadMore}
+            currentPage={page}
+            totalPages={totalPages}
+            totalWorkouts={total}
+            onPageChange={handlePageChange}
             onAnalyze={analyzeWorkout}
             analyzingWorkoutId={loadingAnalysisId}
             filters={filters}
             onFiltersChange={handleFiltersChange}
           />
-        )}
-
-        {/* Pagination info */}
-        {total > 0 && (
-          <div className="mt-6 text-center text-sm text-gray-500">
-            Showing {workouts.length} of {total} workouts
-            {totalPages > 1 && ` (Page ${page} of ${totalPages})`}
-          </div>
         )}
       </div>
     </div>

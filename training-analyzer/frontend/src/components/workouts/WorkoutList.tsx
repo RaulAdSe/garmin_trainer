@@ -9,8 +9,10 @@ interface WorkoutListProps {
   workouts: Workout[];
   analyses?: Map<string, WorkoutAnalysis>;
   isLoading?: boolean;
-  hasMore?: boolean;
-  onLoadMore?: () => void;
+  currentPage?: number;
+  totalPages?: number;
+  totalWorkouts?: number;
+  onPageChange?: (page: number) => void;
   onAnalyze?: (workoutId: string) => void;
   analyzingWorkoutId?: string | null;
   filters?: WorkoutListFilters;
@@ -22,8 +24,10 @@ export function WorkoutList({
   workouts,
   analyses = new Map(),
   isLoading = false,
-  hasMore = false,
-  onLoadMore,
+  currentPage = 1,
+  totalPages = 1,
+  totalWorkouts = 0,
+  onPageChange,
   onAnalyze,
   analyzingWorkoutId,
   filters,
@@ -211,32 +215,102 @@ export function WorkoutList({
         </div>
       )}
 
-      {/* Load more button */}
-      {hasMore && (
-        <div className="flex justify-center pt-4">
+      {/* Pagination */}
+      {totalPages > 1 && onPageChange && (
+        <div className="flex items-center justify-center gap-2 pt-6">
+          {/* Previous button */}
           <button
-            onClick={onLoadMore}
-            disabled={isLoading}
+            onClick={() => onPageChange(currentPage - 1)}
+            disabled={currentPage <= 1 || isLoading}
             className={cn(
-              'px-6 py-2 rounded-md text-sm font-medium transition-colors',
-              isLoading
-                ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-                : 'bg-teal-900/50 text-teal-400 hover:bg-teal-900'
+              'px-3 py-2 rounded-md text-sm font-medium transition-colors',
+              currentPage <= 1 || isLoading
+                ? 'bg-gray-800 text-gray-600 cursor-not-allowed'
+                : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
             )}
           >
-            {isLoading ? (
-              <span className="flex items-center gap-2">
-                <LoadingSpinner />
-                Loading...
-              </span>
-            ) : (
-              'Load More Workouts'
-            )}
+            ← Prev
           </button>
+
+          {/* Page numbers */}
+          <div className="flex items-center gap-1">
+            {generatePageNumbers(currentPage, totalPages).map((pageNum, idx) => (
+              pageNum === '...' ? (
+                <span key={`ellipsis-${idx}`} className="px-2 text-gray-500">...</span>
+              ) : (
+                <button
+                  key={pageNum}
+                  onClick={() => onPageChange(pageNum as number)}
+                  disabled={isLoading}
+                  className={cn(
+                    'w-10 h-10 rounded-md text-sm font-medium transition-colors',
+                    pageNum === currentPage
+                      ? 'bg-teal-600 text-white'
+                      : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                  )}
+                >
+                  {pageNum}
+                </button>
+              )
+            ))}
+          </div>
+
+          {/* Next button */}
+          <button
+            onClick={() => onPageChange(currentPage + 1)}
+            disabled={currentPage >= totalPages || isLoading}
+            className={cn(
+              'px-3 py-2 rounded-md text-sm font-medium transition-colors',
+              currentPage >= totalPages || isLoading
+                ? 'bg-gray-800 text-gray-600 cursor-not-allowed'
+                : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+            )}
+          >
+            Next →
+          </button>
+        </div>
+      )}
+
+      {/* Page info */}
+      {totalWorkouts > 0 && (
+        <div className="text-center text-sm text-gray-500 pt-2">
+          Showing {(currentPage - 1) * 10 + 1}-{Math.min(currentPage * 10, totalWorkouts)} of {totalWorkouts} workouts
         </div>
       )}
     </div>
   );
+}
+
+// Generate page numbers with ellipsis for large page counts
+function generatePageNumbers(current: number, total: number): (number | '...')[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+
+  const pages: (number | '...')[] = [];
+
+  // Always show first page
+  pages.push(1);
+
+  if (current > 3) {
+    pages.push('...');
+  }
+
+  // Show pages around current
+  for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) {
+    pages.push(i);
+  }
+
+  if (current < total - 2) {
+    pages.push('...');
+  }
+
+  // Always show last page
+  if (total > 1) {
+    pages.push(total);
+  }
+
+  return pages;
 }
 
 // Empty state component
