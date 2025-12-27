@@ -116,88 +116,42 @@ function transformActivityToWorkout(activity: ActivityResponse): Workout {
   };
 }
 
+// Backend paginated response type
+interface BackendPaginatedResponse {
+  items: ActivityResponse[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
 // Workout endpoints
 export async function getWorkouts(
   request: WorkoutListRequest = {}
 ): Promise<PaginatedResponse<Workout>> {
   const params = new URLSearchParams();
 
-  // Fetch all workouts from backend, paginate client-side
+  // Server-side pagination
   const page = request.page || 1;
-  const pageSize = request.pageSize || 20;
-  // Request a large limit to get all workouts for client-side pagination
-  params.set('limit', '1000');
-  params.set('offset', '0');
+  const pageSize = request.pageSize || 10;
+  params.set('page', String(page));
+  params.set('pageSize', String(pageSize));
 
   const queryString = params.toString();
   const url = `${API_BASE}/workouts${queryString ? `?${queryString}` : ''}`;
 
   const response = await fetch(url);
+  const data = await handleResponse<BackendPaginatedResponse>(response);
 
-  // Backend returns an array, not a paginated response
-  const activities = await handleResponse<ActivityResponse[]>(response);
-
-  // Transform to Workout type and apply client-side filtering if needed
-  let workouts = activities.map(transformActivityToWorkout);
-
-  // Apply client-side filtering if provided
-  if (request.filters) {
-    const { startDate, endDate, type, minDistance, maxDistance, search } = request.filters;
-
-    if (startDate) {
-      workouts = workouts.filter(w => w.date >= startDate);
-    }
-    if (endDate) {
-      workouts = workouts.filter(w => w.date <= endDate);
-    }
-    if (type) {
-      workouts = workouts.filter(w => w.type === type);
-    }
-    if (minDistance) {
-      workouts = workouts.filter(w => (w.distance ?? 0) >= minDistance);
-    }
-    if (maxDistance) {
-      workouts = workouts.filter(w => (w.distance ?? 0) <= maxDistance);
-    }
-    if (search) {
-      const searchLower = search.toLowerCase();
-      workouts = workouts.filter(w =>
-        w.name.toLowerCase().includes(searchLower) ||
-        w.type.toLowerCase().includes(searchLower)
-      );
-    }
-  }
-
-  // Apply sorting (default to date descending)
-  const sortBy = request.sortBy || 'date';
-  const sortOrder = request.sortOrder || 'desc';
-  workouts.sort((a, b) => {
-    let comparison = 0;
-    if (sortBy === 'date') {
-      comparison = a.date.localeCompare(b.date);
-    } else if (sortBy === 'distance') {
-      comparison = (a.distance ?? 0) - (b.distance ?? 0);
-    } else if (sortBy === 'duration') {
-      comparison = a.duration - b.duration;
-    }
-    return sortOrder === 'desc' ? -comparison : comparison;
-  });
-
-  // Return paginated response format
-  const total = workouts.length;
-  const totalPages = Math.ceil(total / pageSize);
-
-  // Note: Since backend returns all data, pagination is client-side
-  // For large datasets, the backend should implement proper pagination
-  const startIndex = (page - 1) * pageSize;
-  const paginatedItems = workouts.slice(startIndex, startIndex + pageSize);
+  // Transform activities to Workout type
+  const workouts = data.items.map(transformActivityToWorkout);
 
   return {
-    items: paginatedItems,
-    total,
-    page,
-    pageSize,
-    totalPages,
+    items: workouts,
+    total: data.total,
+    page: data.page,
+    pageSize: data.pageSize,
+    totalPages: data.totalPages,
   };
 }
 

@@ -949,18 +949,29 @@ class ActivityResponse(BaseModel):
     source: str = "garmin"
 
 
-@router.get("/", response_model=List[ActivityResponse])
+class PaginatedActivitiesResponse(BaseModel):
+    """Paginated response for activities list."""
+    items: List[ActivityResponse]
+    total: int
+    page: int
+    pageSize: int
+    totalPages: int
+
+
+@router.get("/", response_model=PaginatedActivitiesResponse)
 async def list_workouts(
-    limit: int = 20,
-    offset: int = 0,
+    page: int = 1,
+    pageSize: int = 10,
     training_db = Depends(get_training_db),
 ):
     """
-    List synced activities from Garmin.
+    List synced activities from Garmin with server-side pagination.
 
     Returns activities ordered by date (newest first).
     """
     from datetime import timedelta
+    import math
+
     # Get all activities (use 5 years as practical max)
     end_date = date.today()
     start_date = end_date - timedelta(days=365 * 5)
@@ -969,14 +980,19 @@ async def list_workouts(
         end_date.isoformat()
     )
 
-    # Apply offset and limit for pagination
-    paginated = activities[offset:offset + limit]
-    result = []
+    # Calculate pagination
+    total = len(activities)
+    totalPages = math.ceil(total / pageSize) if total > 0 else 1
+    offset = (page - 1) * pageSize
+
+    # Apply pagination
+    paginated = activities[offset:offset + pageSize]
+    items = []
     for act in paginated:
         duration_sec = int((act.duration_min or 0) * 60)
         distance_m = (act.distance_km or 0) * 1000
 
-        result.append(ActivityResponse(
+        items.append(ActivityResponse(
             id=act.activity_id,
             type=act.activity_type or "other",
             name=act.activity_name or f"{act.activity_type} workout",
@@ -993,7 +1009,13 @@ async def list_workouts(
             source="garmin",
         ))
 
-    return result
+    return PaginatedActivitiesResponse(
+        items=items,
+        total=total,
+        page=page,
+        pageSize=pageSize,
+        totalPages=totalPages,
+    )
 
 
 @router.delete("/{workout_id}")
