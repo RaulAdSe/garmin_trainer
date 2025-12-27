@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, EmailStr
 
 from ..deps import get_training_db
-from ...db.database import TrainingDatabase, ActivityMetrics
+from ...db.database import TrainingDatabase, ActivityMetrics, GarminFitnessData
 
 
 router = APIRouter()
@@ -579,9 +579,522 @@ async def garmin_sync_status():
             "running", "cycling", "swimming", "walking", "strength", "yoga", "hiit"
         ],
         "max_sync_days": 365,
+        "sync_endpoints": {
+            "/sync": "Sync activities (workouts) from Garmin Connect",
+            "/sync-wellness": "Sync wellness data (sleep, HRV, stress, body battery)",
+            "/sync-fitness": "Sync fitness data (VO2max, race predictions, training status)",
+        },
+        "fitness_data_available": [
+            "VO2max (running and cycling)",
+            "Race predictions (5K, 10K, half marathon, marathon)",
+            "Training status (productive, unproductive, peaking, etc.)",
+            "Training readiness score and level",
+            "Acute:Chronic Workload Ratio (ACWR)",
+            "Fitness age",
+        ],
         "notes": [
             "Credentials are only used for the sync request and are not stored",
             "Use HTTPS in production to protect credentials",
             "Rate limits may apply from Garmin's side",
+            "Fitness data is stored historically (one record per day)",
         ],
     }
+
+
+class WellnessDay(BaseModel):
+    """Wellness data for a single day."""
+    date: str
+    resting_heart_rate: Optional[int] = None
+    sleep_hours: Optional[float] = None
+    sleep_score: Optional[int] = None
+    deep_sleep_pct: Optional[float] = None
+    rem_sleep_pct: Optional[float] = None
+    hrv: Optional[int] = None
+    hrv_status: Optional[str] = None
+    body_battery_high: Optional[int] = None
+    body_battery_low: Optional[int] = None
+    body_battery_charged: Optional[int] = None
+    body_battery_drained: Optional[int] = None
+    avg_stress: Optional[int] = None
+    steps: Optional[int] = None
+    steps_goal: Optional[int] = None
+    active_calories: Optional[int] = None
+    intensity_minutes: Optional[int] = None
+
+
+class WellnessHistoryResponse(BaseModel):
+    """Response containing wellness history."""
+    success: bool
+    days: list[WellnessDay]
+    total_days: int
+
+
+@router.get("/wellness-history", response_model=WellnessHistoryResponse)
+async def get_wellness_history(days: int = 14):
+    """
+    Get wellness history from the local database.
+
+    Returns sleep, HRV, stress, and activity data for the requested number of days.
+    """
+    import sqlite3
+    from pathlib import Path
+    from ...config import PROJECT_ROOT
+
+    wellness_db_path = PROJECT_ROOT / "whoop-dashboard" / "wellness.db"
+
+    if not wellness_db_path.exists():
+        return WellnessHistoryResponse(success=False, days=[], total_days=0)
+
+    conn = sqlite3.connect(str(wellness_db_path))
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    # Get combined wellness data
+    cursor.execute('''
+        SELECT
+            dw.date,
+            dw.resting_heart_rate,
+            s.total_sleep_seconds,
+            s.deep_sleep_seconds,
+            s.light_sleep_seconds,
+            s.rem_sleep_seconds,
+            s.sleep_score,
+            h.hrv_last_night_avg,
+            h.hrv_status,
+            st.avg_stress_level,
+            st.body_battery_charged,
+            st.body_battery_drained,
+            st.body_battery_high,
+            st.body_battery_low,
+            a.steps,
+            a.steps_goal,
+            a.active_calories,
+            a.intensity_minutes
+        FROM daily_wellness dw
+        LEFT JOIN sleep_data s ON dw.date = s.date
+        LEFT JOIN hrv_data h ON dw.date = h.date
+        LEFT JOIN stress_data st ON dw.date = st.date
+        LEFT JOIN activity_data a ON dw.date = a.date
+        ORDER BY dw.date DESC
+        LIMIT ?
+    ''', (days,))
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    wellness_days = []
+    for row in rows:
+        total_sleep = row['total_sleep_seconds'] or 0
+        deep_sleep = row['deep_sleep_seconds'] or 0
+        rem_sleep = row['rem_sleep_seconds'] or 0
+
+        wellness_days.append(WellnessDay(
+            date=row['date'],
+            resting_heart_rate=row['resting_heart_rate'],
+            sleep_hours=round(total_sleep / 3600, 2) if total_sleep else None,
+            sleep_score=row['sleep_score'],
+            deep_sleep_pct=round(deep_sleep / total_sleep * 100, 1) if total_sleep > 0 else None,
+            rem_sleep_pct=round(rem_sleep / total_sleep * 100, 1) if total_sleep > 0 else None,
+            hrv=row['hrv_last_night_avg'],
+            hrv_status=row['hrv_status'],
+            body_battery_high=row['body_battery_high'],
+            body_battery_low=row['body_battery_low'],
+            body_battery_charged=row['body_battery_charged'],
+            body_battery_drained=row['body_battery_drained'],
+            avg_stress=row['avg_stress_level'],
+            steps=row['steps'],
+            steps_goal=row['steps_goal'],
+            active_calories=row['active_calories'],
+            intensity_minutes=row['intensity_minutes'],
+        ))
+
+    return WellnessHistoryResponse(
+        success=True,
+        days=wellness_days,
+        total_days=len(wellness_days),
+    )
+
+
+# === Fitness Data Sync (VO2max, Race Predictions, Training Status) ===
+
+
+class SyncedFitnessDay(BaseModel):
+    """Summary of synced fitness data for a day."""
+    date: str
+    vo2max_running: Optional[float] = None
+    vo2max_cycling: Optional[float] = None
+    fitness_age: Optional[int] = None
+    training_status: Optional[str] = None
+    training_readiness_score: Optional[int] = None
+    has_race_predictions: bool = False
+
+
+class FitnessSyncResponse(BaseModel):
+    """Response from fitness data sync operation."""
+    success: bool
+    synced_count: int
+    message: str
+    new_days: int = 0
+    updated_days: int = 0
+    synced_days: list[SyncedFitnessDay] = []
+
+
+class RacePrediction(BaseModel):
+    """Race prediction times."""
+    distance: str
+    time_seconds: Optional[int] = None
+    time_formatted: Optional[str] = None
+
+
+class FitnessDataResponse(BaseModel):
+    """Response containing fitness data for a date."""
+    success: bool
+    date: str
+    vo2max_running: Optional[float] = None
+    vo2max_cycling: Optional[float] = None
+    fitness_age: Optional[int] = None
+    race_predictions: list[RacePrediction] = []
+    training_status: Optional[str] = None
+    training_status_description: Optional[str] = None
+    fitness_trend: Optional[str] = None
+    training_readiness_score: Optional[int] = None
+    training_readiness_level: Optional[str] = None
+    acwr_percent: Optional[float] = None
+    acwr_status: Optional[str] = None
+
+
+def _format_race_time(seconds: Optional[int]) -> Optional[str]:
+    """Format race time in seconds to HH:MM:SS or MM:SS."""
+    if seconds is None:
+        return None
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    secs = seconds % 60
+    if hours > 0:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+    return f"{minutes}:{secs:02d}"
+
+
+@router.post("/sync-fitness", response_model=FitnessSyncResponse)
+async def sync_fitness(
+    request: GarminSyncRequest,
+    training_db: TrainingDatabase = Depends(get_training_db),
+):
+    """
+    Sync fitness data from Garmin Connect.
+
+    Syncs VO2max, race predictions, training status, and training readiness
+    to the training database for historical tracking.
+
+    **Data synced:**
+    - VO2max (running and cycling if available)
+    - Race predictions (5K, 10K, half marathon, marathon)
+    - Training status (productive, unproductive, peaking, recovery, etc.)
+    - Training readiness score and level
+    - Acute:Chronic Workload Ratio (ACWR)
+
+    **Note:** This stores one record per day to track how these metrics
+    change over time.
+    """
+    try:
+        from garminconnect import Garmin, GarminConnectAuthenticationError
+    except ImportError:
+        raise HTTPException(
+            status_code=500,
+            detail="garminconnect library not installed. Run: pip install garminconnect"
+        )
+
+    # Login
+    try:
+        client = Garmin(request.email, request.password)
+        client.login()
+    except GarminConnectAuthenticationError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid Garmin Connect credentials"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to connect to Garmin Connect: {str(e)}"
+        )
+
+    end_date = datetime.now().date()
+    synced_days = []
+    new_days = 0
+    updated_days = 0
+
+    for i in range(request.days):
+        date = (end_date - timedelta(days=i)).isoformat()
+
+        # Check if we already have data for this date
+        existing = training_db.get_garmin_fitness_data(date)
+
+        # Initialize data with defaults
+        fitness_data = GarminFitnessData(date=date)
+
+        # Fetch VO2max and fitness age from max metrics
+        try:
+            max_metrics = client.get_max_metrics(date)
+            if max_metrics:
+                # The API returns a list of metrics, find the most recent
+                if isinstance(max_metrics, list) and len(max_metrics) > 0:
+                    metric = max_metrics[0]
+                elif isinstance(max_metrics, dict):
+                    metric = max_metrics
+                else:
+                    metric = None
+
+                if metric:
+                    # Running VO2max - try precise value first
+                    vo2_precise = metric.get('vo2MaxPreciseValue')
+                    vo2_value = metric.get('vo2MaxValue')
+                    fitness_data.vo2max_running = vo2_precise or vo2_value
+
+                    # Cycling VO2max if available
+                    cycling_vo2 = metric.get('cyclingVo2MaxPreciseValue') or metric.get('cyclingVo2MaxValue')
+                    if cycling_vo2:
+                        fitness_data.vo2max_cycling = cycling_vo2
+
+                    # Fitness age
+                    fitness_data.fitness_age = metric.get('fitnessAge')
+        except Exception as e:
+            print(f"Error fetching max metrics for {date}: {e}")
+
+        # Fetch race predictions
+        try:
+            race_preds = client.get_race_predictions()
+            if race_preds:
+                # Race predictions might be returned as a list or dict
+                if isinstance(race_preds, list) and len(race_preds) > 0:
+                    # Find the prediction for this date or the most recent
+                    pred = None
+                    for p in race_preds:
+                        if p.get('calendarDate') == date:
+                            pred = p
+                            break
+                    if pred is None and len(race_preds) > 0:
+                        # Use the most recent prediction for today only
+                        if i == 0:
+                            pred = race_preds[0]
+                elif isinstance(race_preds, dict):
+                    pred = race_preds
+                else:
+                    pred = None
+
+                if pred:
+                    fitness_data.race_time_5k = pred.get('time5K')
+                    fitness_data.race_time_10k = pred.get('time10K')
+                    fitness_data.race_time_half = pred.get('timeHalfMarathon')
+                    fitness_data.race_time_marathon = pred.get('timeMarathon')
+        except Exception as e:
+            print(f"Error fetching race predictions for {date}: {e}")
+
+        # Fetch training status
+        try:
+            training_status = client.get_training_status(date)
+            if training_status:
+                # Extract training status info
+                most_recent = training_status.get('mostRecentTrainingStatus', {})
+                if most_recent:
+                    fitness_data.training_status = most_recent.get('trainingStatus')
+                    fitness_data.training_status_description = most_recent.get('trainingStatusDescription')
+                    fitness_data.fitness_trend = most_recent.get('fitnessTrend')
+
+                # Extract ACWR from acute training load
+                acute_load = training_status.get('acuteTrainingLoadDTO', {})
+                if acute_load:
+                    fitness_data.acwr_percent = acute_load.get('acwrPercent')
+                    fitness_data.acwr_status = acute_load.get('acwrStatus')
+        except Exception as e:
+            print(f"Error fetching training status for {date}: {e}")
+
+        # Fetch training readiness
+        try:
+            readiness = client.get_training_readiness(date)
+            if readiness:
+                fitness_data.training_readiness_score = readiness.get('score')
+                fitness_data.training_readiness_level = readiness.get('level')
+        except Exception as e:
+            print(f"Error fetching training readiness for {date}: {e}")
+
+        # Only save if we got at least some data
+        has_data = (
+            fitness_data.vo2max_running is not None or
+            fitness_data.training_status is not None or
+            fitness_data.training_readiness_score is not None or
+            fitness_data.race_time_5k is not None
+        )
+
+        if has_data:
+            training_db.save_garmin_fitness_data(fitness_data)
+
+            if existing:
+                updated_days += 1
+            else:
+                new_days += 1
+
+            synced_days.append(SyncedFitnessDay(
+                date=date,
+                vo2max_running=fitness_data.vo2max_running,
+                vo2max_cycling=fitness_data.vo2max_cycling,
+                fitness_age=fitness_data.fitness_age,
+                training_status=fitness_data.training_status,
+                training_readiness_score=fitness_data.training_readiness_score,
+                has_race_predictions=fitness_data.race_time_5k is not None,
+            ))
+
+    total = new_days + updated_days
+    return FitnessSyncResponse(
+        success=True,
+        synced_count=total,
+        message=f"Successfully synced fitness data for {total} days ({new_days} new, {updated_days} updated)",
+        new_days=new_days,
+        updated_days=updated_days,
+        synced_days=synced_days[:30],  # Limit response size
+    )
+
+
+@router.get("/fitness-data/{date}", response_model=FitnessDataResponse)
+async def get_fitness_data(
+    date: str,
+    training_db: TrainingDatabase = Depends(get_training_db),
+):
+    """
+    Get fitness data for a specific date.
+
+    Returns VO2max, race predictions, training status, and readiness for the
+    specified date. If no data exists for that exact date, returns the most
+    recent data available before that date.
+
+    **Parameters:**
+    - date: Date in YYYY-MM-DD format
+    """
+    # First try exact date match
+    fitness_data = training_db.get_garmin_fitness_data(date)
+
+    # If no exact match, get the most recent data before this date
+    if fitness_data is None:
+        fitness_data = training_db.get_garmin_fitness_for_workout(date)
+
+    if fitness_data is None:
+        return FitnessDataResponse(
+            success=False,
+            date=date,
+        )
+
+    # Build race predictions list
+    race_predictions = []
+    if fitness_data.race_time_5k is not None:
+        race_predictions.append(RacePrediction(
+            distance="5K",
+            time_seconds=fitness_data.race_time_5k,
+            time_formatted=_format_race_time(fitness_data.race_time_5k),
+        ))
+    if fitness_data.race_time_10k is not None:
+        race_predictions.append(RacePrediction(
+            distance="10K",
+            time_seconds=fitness_data.race_time_10k,
+            time_formatted=_format_race_time(fitness_data.race_time_10k),
+        ))
+    if fitness_data.race_time_half is not None:
+        race_predictions.append(RacePrediction(
+            distance="Half Marathon",
+            time_seconds=fitness_data.race_time_half,
+            time_formatted=_format_race_time(fitness_data.race_time_half),
+        ))
+    if fitness_data.race_time_marathon is not None:
+        race_predictions.append(RacePrediction(
+            distance="Marathon",
+            time_seconds=fitness_data.race_time_marathon,
+            time_formatted=_format_race_time(fitness_data.race_time_marathon),
+        ))
+
+    return FitnessDataResponse(
+        success=True,
+        date=fitness_data.date,
+        vo2max_running=fitness_data.vo2max_running,
+        vo2max_cycling=fitness_data.vo2max_cycling,
+        fitness_age=fitness_data.fitness_age,
+        race_predictions=race_predictions,
+        training_status=fitness_data.training_status,
+        training_status_description=fitness_data.training_status_description,
+        fitness_trend=fitness_data.fitness_trend,
+        training_readiness_score=fitness_data.training_readiness_score,
+        training_readiness_level=fitness_data.training_readiness_level,
+        acwr_percent=fitness_data.acwr_percent,
+        acwr_status=fitness_data.acwr_status,
+    )
+
+
+@router.get("/fitness-history", response_model=list[FitnessDataResponse])
+async def get_fitness_history(
+    days: int = 30,
+    training_db: TrainingDatabase = Depends(get_training_db),
+):
+    """
+    Get fitness data history.
+
+    Returns historical VO2max, race predictions, and training status for
+    the specified number of days.
+
+    **Parameters:**
+    - days: Number of days of history to return (default: 30, max: 365)
+    """
+    if days > 365:
+        days = 365
+
+    end_date = datetime.now().date()
+    start_date = end_date - timedelta(days=days)
+
+    fitness_records = training_db.get_garmin_fitness_range(
+        start_date.isoformat(),
+        end_date.isoformat()
+    )
+
+    results = []
+    for data in fitness_records:
+        # Build race predictions list
+        race_predictions = []
+        if data.race_time_5k is not None:
+            race_predictions.append(RacePrediction(
+                distance="5K",
+                time_seconds=data.race_time_5k,
+                time_formatted=_format_race_time(data.race_time_5k),
+            ))
+        if data.race_time_10k is not None:
+            race_predictions.append(RacePrediction(
+                distance="10K",
+                time_seconds=data.race_time_10k,
+                time_formatted=_format_race_time(data.race_time_10k),
+            ))
+        if data.race_time_half is not None:
+            race_predictions.append(RacePrediction(
+                distance="Half Marathon",
+                time_seconds=data.race_time_half,
+                time_formatted=_format_race_time(data.race_time_half),
+            ))
+        if data.race_time_marathon is not None:
+            race_predictions.append(RacePrediction(
+                distance="Marathon",
+                time_seconds=data.race_time_marathon,
+                time_formatted=_format_race_time(data.race_time_marathon),
+            ))
+
+        results.append(FitnessDataResponse(
+            success=True,
+            date=data.date,
+            vo2max_running=data.vo2max_running,
+            vo2max_cycling=data.vo2max_cycling,
+            fitness_age=data.fitness_age,
+            race_predictions=race_predictions,
+            training_status=data.training_status,
+            training_status_description=data.training_status_description,
+            fitness_trend=data.fitness_trend,
+            training_readiness_score=data.training_readiness_score,
+            training_readiness_level=data.training_readiness_level,
+            acwr_percent=data.acwr_percent,
+            acwr_status=data.acwr_status,
+        ))
+
+    return results
