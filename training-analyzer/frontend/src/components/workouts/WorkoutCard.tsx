@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import type { Workout, WorkoutAnalysis } from '@/lib/types';
 import {
@@ -14,6 +14,7 @@ import {
   getHRZoneColor,
   getHRZoneLabel,
 } from '@/lib/utils';
+import { WorkoutScoreBadge } from './WorkoutScoreBadge';
 
 interface WorkoutCardProps {
   workout: Workout;
@@ -37,6 +38,30 @@ export function WorkoutCard({
   const toggleExpanded = useCallback(() => {
     setIsExpanded((prev) => !prev);
   }, []);
+
+  // Calculate score for badge (when analysis exists)
+  const overallScore = useMemo(() => {
+    if (!analysis) return null;
+    if (analysis.overallScore) return analysis.overallScore;
+    // Fallback: derive from execution rating
+    const ratingScores: Record<string, number> = {
+      excellent: 92,
+      good: 78,
+      fair: 55,
+      needs_improvement: 35,
+    };
+    return analysis.executionRating ? ratingScores[analysis.executionRating] || 70 : 70;
+  }, [analysis]);
+
+  // Build score breakdown for tooltip
+  const scoreBreakdown = useMemo(() => {
+    if (!analysis) return undefined;
+    return {
+      execution: analysis.executionRating || null,
+      trainingEffect: analysis.trainingEffectScore ?? workout.metrics?.trainingEffect ?? null,
+      load: analysis.loadScore ?? null,
+    };
+  }, [analysis, workout]);
 
   return (
     <article
@@ -124,15 +149,25 @@ export function WorkoutCard({
         {/* Analysis toggle / CTA - responsive */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-gray-800">
           {hasAnalysis ? (
-            <button
-              onClick={toggleExpanded}
-              className="flex items-center gap-1.5 text-xs sm:text-sm text-gray-400 hover:text-gray-200 active:text-gray-100 px-2 py-2 -ml-2 rounded-lg hover:bg-gray-800 transition-colors min-h-[44px] touch-manipulation"
-              aria-expanded={isExpanded}
-              aria-controls={`analysis-${workout.id}`}
-            >
-              <ChevronIcon isOpen={isExpanded} />
-              <span>{isExpanded ? 'Hide' : 'Show'} AI Analysis</span>
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={toggleExpanded}
+                className="flex items-center gap-1.5 text-xs sm:text-sm text-gray-400 hover:text-gray-200 active:text-gray-100 px-2 py-2 -ml-2 rounded-lg hover:bg-gray-800 transition-colors min-h-[44px] touch-manipulation"
+                aria-expanded={isExpanded}
+                aria-controls={`analysis-${workout.id}`}
+              >
+                <ChevronIcon isOpen={isExpanded} />
+                <span>{isExpanded ? 'Hide' : 'Show'} AI Analysis</span>
+              </button>
+              {/* Score badge - always visible */}
+              {overallScore !== null && (
+                <WorkoutScoreBadge
+                  score={overallScore}
+                  breakdown={scoreBreakdown}
+                  size="sm"
+                />
+              )}
+            </div>
           ) : (
             <button
               onClick={onAnalyze}
@@ -248,11 +283,21 @@ function MetricItem({ label, value, unit }: { label: string; value: string; unit
 
 function WorkoutTypeIcon({ type }: { type: string }) {
   const iconMap: Record<string, React.ReactElement> = {
+    // Running variants
     running: (
       <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+        <circle cx="12" cy="4" r="2" strokeWidth={2} />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7l-3 3-2-1-4 4m0 0l2 5m-2-5l-3 1m10-4l3 8m-1-4h3" />
       </svg>
     ),
+    trail_running: (
+      <svg className="w-5 h-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 20l4-4 4 2 4-6 4 4" />
+        <circle cx="14" cy="6" r="2" strokeWidth={2} />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8l-2 2-2-1" />
+      </svg>
+    ),
+    // Cycling
     cycling: (
       <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <circle cx="5" cy="17" r="3" strokeWidth={2} />
@@ -260,6 +305,7 @@ function WorkoutTypeIcon({ type }: { type: string }) {
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 17V9l4-4m-8 8h8" />
       </svg>
     ),
+    // Swimming
     swimming: (
       <svg className="w-5 h-5 text-cyan-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15c2.5 2.5 6 2.5 8.5 0s6-2.5 8.5 0" />
@@ -268,32 +314,145 @@ function WorkoutTypeIcon({ type }: { type: string }) {
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 9v2l-4 2" />
       </svg>
     ),
+    // Walking
+    walking: (
+      <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <circle cx="12" cy="4" r="2" strokeWidth={2} />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10l-2 6-2-2-2 6m4-10v4m2-4l2 2" />
+      </svg>
+    ),
+    // Hiking
+    hiking: (
+      <svg className="w-5 h-5 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 20l4-4 4 2 4-6 4 4" />
+        <circle cx="12" cy="6" r="2" strokeWidth={2} />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m-2 8l2-4 2 4" />
+      </svg>
+    ),
+    // Strength
     strength: (
       <svg className="w-5 h-5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12h4m10 0h4M7 12a2 2 0 104 0 2 2 0 00-4 0zm6 0a2 2 0 104 0 2 2 0 00-4 0z" />
       </svg>
     ),
+    // HIIT
     hiit: (
       <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z" />
       </svg>
     ),
+    // Yoga
     yoga: (
       <svg className="w-5 h-5 text-teal-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2a3 3 0 100 6 3 3 0 000-6zm0 8c-4 0-6 2-6 4v2h12v-2c0-2-2-4-6-4z" />
+        <circle cx="12" cy="4" r="2" strokeWidth={2} />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v4m-4 2h8m-8 0l-2 4m10-4l2 4m-6 0v4" />
       </svg>
     ),
-    walking: (
-      <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4a2 2 0 100 4 2 2 0 000-4zm0 6c-1.5 0-2 1-2 2v4l-2 4m4-8v4l2 4" />
+    // Skiing / Winter Sports
+    skiing: (
+      <svg className="w-5 h-5 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <circle cx="14" cy="4" r="2" strokeWidth={2} />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 18l18-6M10 10l4 4-2 4m-2-8l-4 1" />
+      </svg>
+    ),
+    // Football / Soccer
+    football: (
+      <svg className="w-5 h-5 text-lime-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <circle cx="12" cy="12" r="9" strokeWidth={2} />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v4m0 10v4M3 12h4m10 0h4m-9-5l3 2v4l-3 2-3-2v-4l3-2z" />
+      </svg>
+    ),
+    // Tennis / Racket Sports
+    tennis: (
+      <svg className="w-5 h-5 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <circle cx="15" cy="9" r="6" strokeWidth={2} />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l-6 6m0 0l2-2m-2 2l-2-2" />
+      </svg>
+    ),
+    // Basketball / Team Sports
+    basketball: (
+      <svg className="w-5 h-5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <circle cx="12" cy="12" r="9" strokeWidth={2} />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v18M3 12c0-3 4-5 9-5s9 2 9 5" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12c0 3 4 5 9 5s9-2 9-5" />
+      </svg>
+    ),
+    // Golf
+    golf: (
+      <svg className="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v14m0-14l6 4-6 4m-4 10h8" />
+        <circle cx="12" cy="20" r="1" fill="currentColor" />
+      </svg>
+    ),
+    // Rowing / Paddle Sports
+    rowing: (
+      <svg className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 17h18M6 14l3-6 6 4 3-4" />
+        <ellipse cx="12" cy="17" rx="6" ry="2" strokeWidth={2} />
+      </svg>
+    ),
+    // Surfing
+    surfing: (
+      <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 17c2 2 4 2 6 0s4-2 6 0 4 2 6 0" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12l4-8 4 8H8z" />
+        <circle cx="12" cy="6" r="1" fill="currentColor" />
+      </svg>
+    ),
+    // Elliptical / Cardio Machine
+    elliptical: (
+      <svg className="w-5 h-5 text-pink-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <ellipse cx="12" cy="12" rx="8" ry="4" strokeWidth={2} />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v8m-4-4h8" />
+      </svg>
+    ),
+    // Climbing
+    climbing: (
+      <svg className="w-5 h-5 text-stone-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 20l4-16 4 16" />
+        <circle cx="8" cy="8" r="1" fill="currentColor" />
+        <circle cx="16" cy="12" r="1" fill="currentColor" />
+        <circle cx="10" cy="16" r="1" fill="currentColor" />
+      </svg>
+    ),
+    // Martial Arts
+    martial_arts: (
+      <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <circle cx="12" cy="4" r="2" strokeWidth={2} />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 8l4 2 4-2m-8 4l4 1 4-1m-6 4l2 4m4-4l2 4" />
+      </svg>
+    ),
+    // Skating
+    skating: (
+      <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <circle cx="10" cy="5" r="2" strokeWidth={2} />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 8l-4 4 2 4h4M6 20h12M8 20l2-4" />
+      </svg>
+    ),
+    // Dance
+    dance: (
+      <svg className="w-5 h-5 text-fuchsia-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <circle cx="12" cy="4" r="2" strokeWidth={2} />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 8l3 2 3-2m-6 4l3 1 3-1m-5 4l2 4m4-4l2 4" />
+      </svg>
+    ),
+    // Triathlon
+    triathlon: (
+      <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <circle cx="6" cy="12" r="3" strokeWidth={2} />
+        <circle cx="12" cy="12" r="3" strokeWidth={2} />
+        <circle cx="18" cy="12" r="3" strokeWidth={2} />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 9v-1m6-1v-2m6 3v-1" />
       </svg>
     ),
   };
 
+  // Return the mapped icon or a generic activity icon
   return iconMap[type] || (
-    <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+    <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <circle cx="12" cy="12" r="9" strokeWidth={2} />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l2 2" />
     </svg>
   );
 }

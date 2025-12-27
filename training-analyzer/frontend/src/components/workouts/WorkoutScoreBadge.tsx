@@ -14,9 +14,10 @@ interface WorkoutScoreBadgeProps {
   score: number; // 0-100
   breakdown?: ScoreBreakdown;
   className?: string;
+  size?: 'sm' | 'default';
 }
 
-export function WorkoutScoreBadge({ score, breakdown, className }: WorkoutScoreBadgeProps) {
+export function WorkoutScoreBadge({ score, breakdown, className, size = 'default' }: WorkoutScoreBadgeProps) {
   // Determine color based on score
   const { bgColor, textColor, ringColor, label } = useMemo(() => {
     if (score >= 85) {
@@ -90,11 +91,14 @@ export function WorkoutScoreBadge({ score, breakdown, className }: WorkoutScoreB
     );
   }, [breakdown]);
 
+  const isSmall = size === 'sm';
+
   const badge = (
     <div
       className={cn(
-        'inline-flex items-center gap-2 px-3 py-2 rounded-lg',
+        'inline-flex items-center rounded-lg',
         'ring-1 cursor-default transition-all duration-150',
+        isSmall ? 'gap-1.5 px-2 py-1' : 'gap-2 px-3 py-2',
         bgColor,
         ringColor,
         breakdown && 'cursor-pointer hover:ring-2',
@@ -102,14 +106,14 @@ export function WorkoutScoreBadge({ score, breakdown, className }: WorkoutScoreB
       )}
     >
       {/* Score number */}
-      <span className={cn('text-2xl font-bold tabular-nums', textColor)}>
+      <span className={cn('font-bold tabular-nums', textColor, isSmall ? 'text-base' : 'text-2xl')}>
         {score}
       </span>
 
       {/* Label and max */}
       <div className="flex flex-col">
-        <span className={cn('text-xs font-medium', textColor)}>{label}</span>
-        <span className="text-[10px] text-gray-500">/ 100</span>
+        <span className={cn('font-medium', textColor, isSmall ? 'text-[10px]' : 'text-xs')}>{label}</span>
+        <span className={cn('text-gray-500', isSmall ? 'text-[8px]' : 'text-[10px]')}>/ 100</span>
       </div>
     </div>
   );
@@ -136,8 +140,8 @@ interface ScoreRowProps {
 function ScoreRow({ label, value, sublabel, color }: ScoreRowProps) {
   return (
     <div className="flex items-center justify-between gap-4">
-      <span className="text-gray-300 text-xs">{label}</span>
-      <div className="text-right">
+      <span className="text-gray-300 text-xs whitespace-nowrap">{label}</span>
+      <div className="text-right whitespace-nowrap">
         <span className={cn('text-xs font-medium', color)}>{value}</span>
         {sublabel && (
           <span className="text-[10px] text-gray-500 ml-1">({sublabel})</span>
