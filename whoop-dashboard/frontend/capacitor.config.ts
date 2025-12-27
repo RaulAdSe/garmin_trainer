@@ -10,7 +10,7 @@ const config: CapacitorConfig = {
   },
   plugins: {
     CapacitorHttp: {
-      // Enable native HTTP for all requests (bypasses CORS)
+      // Re-enable native HTTP for CORS bypass
       enabled: true,
     },
     CapacitorSQLite: {

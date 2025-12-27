@@ -1028,21 +1028,9 @@ class GarminService {
 
   // Fetch sleep data
   async fetchSleep(date: string): Promise<SleepData | null> {
-    // Get displayName for user-specific endpoints
-    const displayName = await this.fetchDisplayName();
-    if (!displayName) {
-      console.warn('[Garmin] No displayName available for sleep fetch');
-      // Try without displayName as fallback
-      const data = await this.apiRequest<Record<string, unknown>>(
-        `/wellness-service/wellness/dailySleepData?date=${date}&nonSleepBufferMinutes=60`
-      );
-      console.log(`[Garmin] Sleep API (no displayName) response for ${date}:`, JSON.stringify(data, null, 2));
-      return this.parseSleepData(date, data);
-    }
-
-    // Use dailySleepData with displayName (correct endpoint per python-garminconnect)
+    // Use the simpler dailySleep endpoint (works without displayName)
     const data = await this.apiRequest<Record<string, unknown>>(
-      `/wellness-service/wellness/dailySleepData/${displayName}?date=${date}&nonSleepBufferMinutes=60`
+      `/wellness-service/wellness/dailySleep?date=${date}`
     );
 
     console.log(`[Garmin] Sleep API response for ${date}:`, JSON.stringify(data, null, 2));
