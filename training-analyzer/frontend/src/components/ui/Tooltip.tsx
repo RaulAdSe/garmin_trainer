@@ -141,7 +141,7 @@ export function Tooltip({
         role="tooltip"
         aria-hidden={!isVisible}
       >
-        <div className="bg-gray-700 text-gray-100 text-xs px-2.5 py-1.5 rounded-md shadow-lg max-w-xs whitespace-normal">
+        <div className="bg-gray-700 text-gray-100 text-xs px-2.5 py-1.5 rounded-md shadow-lg whitespace-normal">
           {content}
         </div>
         {/* Arrow */}

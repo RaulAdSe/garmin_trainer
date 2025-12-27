@@ -1,6 +1,31 @@
 "use client";
 
 import { clsx } from "clsx";
+import { InfoTooltip } from "@/components/ui/Tooltip";
+
+// Metric explanations for fitness metrics
+const METRIC_INFO: Record<string, { title: string; description: string }> = {
+  ctl: {
+    title: "Chronic Training Load (Fitness)",
+    description:
+      "42-day exponentially weighted average of your training stress. Higher values indicate greater aerobic fitness and capacity to handle training load. Takes weeks to build, days to lose.",
+  },
+  atl: {
+    title: "Acute Training Load (Fatigue)",
+    description:
+      "7-day exponentially weighted average of your training stress. Represents recent training fatigue. High ATL means you've been training hard recently and may need recovery.",
+  },
+  tsb: {
+    title: "Training Stress Balance (Form)",
+    description:
+      "The difference between fitness (CTL) and fatigue (ATL). Positive values indicate freshness and readiness to perform. Negative values suggest accumulated fatigue. Target +5 to +25 for peak performance.",
+  },
+  acwr: {
+    title: "Acute:Chronic Workload Ratio",
+    description:
+      "Ratio of recent load (ATL) to long-term load (CTL). Optimal range is 0.8-1.3. Below 0.8 = undertrained. Above 1.5 = high injury risk. Use this to guide training progression safely.",
+  },
+};
 
 interface FitnessMetricsProps {
   fitness: {
@@ -34,12 +59,14 @@ export function FitnessMetrics({ fitness }: FitnessMetricsProps) {
           value={fitness.ctl}
           sublabel="Fitness"
           color="text-teal-400"
+          info={METRIC_INFO.ctl}
         />
         <MetricCard
           label="ATL"
           value={fitness.atl}
           sublabel="Fatigue"
           color="text-orange-400"
+          info={METRIC_INFO.atl}
         />
         <MetricCard
           label="TSB"
@@ -47,6 +74,7 @@ export function FitnessMetrics({ fitness }: FitnessMetricsProps) {
           sublabel="Form"
           color={fitness.tsb > 0 ? "text-green-400" : "text-red-400"}
           showSign
+          info={METRIC_INFO.tsb}
         />
         <MetricCard
           label="ACWR"
@@ -54,6 +82,7 @@ export function FitnessMetrics({ fitness }: FitnessMetricsProps) {
           sublabel="Load Ratio"
           color={riskConfig.color}
           decimals={2}
+          info={METRIC_INFO.acwr}
         />
       </div>
 
@@ -88,6 +117,7 @@ function MetricCard({
   color,
   showSign = false,
   decimals = 1,
+  info,
 }: {
   label: string;
   value: number;
@@ -95,11 +125,25 @@ function MetricCard({
   color: string;
   showSign?: boolean;
   decimals?: number;
+  info?: { title: string; description: string };
 }) {
   const displayValue = showSign && value > 0 ? `+${value.toFixed(decimals)}` : value.toFixed(decimals);
 
   return (
-    <div className="bg-gray-800 rounded-lg p-3">
+    <div className="bg-gray-800 rounded-lg p-3 relative">
+      {info && (
+        <div className="absolute top-2 right-2">
+          <InfoTooltip
+            content={
+              <div className="w-[280px]">
+                <div className="font-semibold text-white mb-1">{info.title}</div>
+                <div className="text-gray-300">{info.description}</div>
+              </div>
+            }
+            position="right"
+          />
+        </div>
+      )}
       <div className="text-xs text-gray-500 uppercase tracking-wide">{label}</div>
       <div className={clsx("text-2xl font-bold font-mono", color)}>
         {displayValue}
