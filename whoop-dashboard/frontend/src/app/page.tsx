@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useWellnessHistory, useGarminSync, DayData } from '../services/hooks';
-import { calculateWeekOverWeekTrend, formatTrendDisplay, TrendResult } from '../lib/trends';
+import { calculatePeriodTrend, formatTrendDisplay, TrendResult } from '../lib/trends';
 
 // Info Modal component for displaying metric details
 function InfoModal({
@@ -1133,9 +1133,9 @@ function RecoveryView({
   const recoveryHistory = periodHistory.map(d => calculateRecovery(d)).reverse();
   const maxRecovery = Math.max(...recoveryHistory, 100);
 
-  // Calculate week-over-week trend for recovery
-  const recoveryValues = useMemo(() => periodHistory.map(d => calculateRecovery(d)), [periodHistory]);
-  const recoveryTrend = useMemo(() => calculateWeekOverWeekTrend(recoveryValues), [recoveryValues]);
+  // Calculate period-based trend for recovery (needs full history for comparison)
+  const allRecoveryValues = useMemo(() => history.map(d => calculateRecovery(d)), [history]);
+  const recoveryTrend = useMemo(() => calculatePeriodTrend(allRecoveryValues, trendPeriod), [allRecoveryValues, trendPeriod]);
 
   return (
     <div className="p-4 space-y-6">
@@ -1269,9 +1269,9 @@ function StrainView({
   const isBelowTarget = strain < strainTarget[0];
   const isAboveTarget = strain > strainTarget[1];
 
-  // Calculate week-over-week trend for strain
-  const strainValues = useMemo(() => periodHistory.map(d => calculateStrain(d)), [periodHistory]);
-  const strainTrend = useMemo(() => calculateWeekOverWeekTrend(strainValues), [strainValues]);
+  // Calculate period-based trend for strain (needs full history for comparison)
+  const allStrainValues = useMemo(() => history.map(d => calculateStrain(d)), [history]);
+  const strainTrend = useMemo(() => calculatePeriodTrend(allStrainValues, trendPeriod), [allStrainValues, trendPeriod]);
 
   return (
     <div className="p-4 space-y-6">
@@ -1406,9 +1406,9 @@ function SleepView({
   const sleepHistory = periodHistory.map(d => d.sleep?.total_hours || 0).reverse();
   const maxSleep = Math.max(...sleepHistory, 10);
 
-  // Calculate week-over-week trend for sleep
-  const sleepValues = useMemo(() => periodHistory.map(d => d.sleep?.total_hours || 0), [periodHistory]);
-  const sleepTrend = useMemo(() => calculateWeekOverWeekTrend(sleepValues), [sleepValues]);
+  // Calculate period-based trend for sleep (needs full history for comparison)
+  const allSleepValues = useMemo(() => history.map(d => d.sleep?.total_hours || 0), [history]);
+  const sleepTrend = useMemo(() => calculatePeriodTrend(allSleepValues, trendPeriod), [allSleepValues, trendPeriod]);
 
   // Calculate sleep debt and tonight's target
   const sleepBaseline = selectedDay.baselines?.sleep_7d_avg || 7.5;

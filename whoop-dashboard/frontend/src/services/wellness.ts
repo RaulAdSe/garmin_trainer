@@ -495,6 +495,10 @@ class WellnessService {
   async getHistory(days: number = 14): Promise<Array<{
     date: string;
     sleep_hours: number | null;
+    deep_sleep_pct: number;
+    rem_sleep_pct: number;
+    sleep_score: number | null;
+    sleep_efficiency: number | null;
     hrv: number | null;
     recovery: number;
     strain: number;
@@ -538,9 +542,22 @@ class WellnessService {
         record.activity?.intensity_minutes ?? null
       );
 
+      // Calculate sleep stage percentages
+      const totalSleepSec = record.sleep?.total_sleep_seconds ?? 0;
+      const deepPct = totalSleepSec > 0 && record.sleep?.deep_sleep_seconds
+        ? Math.round(record.sleep.deep_sleep_seconds / totalSleepSec * 1000) / 10
+        : 0;
+      const remPct = totalSleepSec > 0 && record.sleep?.rem_sleep_seconds
+        ? Math.round(record.sleep.rem_sleep_seconds / totalSleepSec * 1000) / 10
+        : 0;
+
       return {
         date: record.date,
         sleep_hours: sleepHours,
+        deep_sleep_pct: deepPct,
+        rem_sleep_pct: remPct,
+        sleep_score: record.sleep?.sleep_score ?? null,
+        sleep_efficiency: record.sleep?.sleep_efficiency ?? null,
         hrv: record.hrv?.hrv_last_night_avg ?? null,
         recovery,
         strain,

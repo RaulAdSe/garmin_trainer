@@ -144,10 +144,10 @@ export function useWellnessHistory(days: number = 14) {
           date: h.date,
           sleep: h.sleep_hours ? {
             total_hours: h.sleep_hours,
-            deep_pct: 0, // Would need raw data for this
-            rem_pct: 0,
-            score: null,
-            efficiency: null,
+            deep_pct: h.deep_sleep_pct,
+            rem_pct: h.rem_sleep_pct,
+            score: h.sleep_score,
+            efficiency: h.sleep_efficiency,
             direction: null,
           } : null,
           hrv: {
