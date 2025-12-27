@@ -2,12 +2,27 @@
 
 export type WorkoutType =
   | 'running'
+  | 'trail_running'
   | 'cycling'
   | 'swimming'
+  | 'walking'
+  | 'hiking'
   | 'strength'
   | 'hiit'
   | 'yoga'
-  | 'walking'
+  | 'skiing'
+  | 'football'
+  | 'tennis'
+  | 'basketball'
+  | 'golf'
+  | 'rowing'
+  | 'surfing'
+  | 'elliptical'
+  | 'climbing'
+  | 'martial_arts'
+  | 'skating'
+  | 'dance'
+  | 'triathlon'
   | 'other';
 
 export type HRZone = 'zone1' | 'zone2' | 'zone3' | 'zone4' | 'zone5';
@@ -69,18 +84,44 @@ export interface WorkoutAnalysisSection {
 }
 
 export interface WorkoutAnalysis {
-  id: string;
+  // Core IDs
   workoutId: string;
+  analysisId?: string;
+
+  // Analysis content
   summary: string;
-  whatWentWell: string[];
-  improvements: string[];
-  trainingContext: string;
-  sections: WorkoutAnalysisSection[];
+  whatWentWell: string[];  // Backend: what_worked_well -> whatWentWell
+  improvements: string[];   // Backend: observations -> improvements
   recommendations?: string[];
+
+  // Training context (backend uses trainingFit)
+  trainingContext?: string; // Frontend compatibility
+  trainingFit?: string;     // Backend field name
+
+  // Additional sections (optional)
+  sections?: WorkoutAnalysisSection[];
+
+  // Ratings and levels
   effortLevel?: 'easy' | 'moderate' | 'hard' | 'very_hard';
+  executionRating?: 'excellent' | 'good' | 'fair' | 'needs_improvement';
+  effortAlignment?: string;
+
+  // Scores (0-100 overall, 0-5 training effect, HRSS load)
+  overallScore?: number;
+  trainingEffectScore?: number;
+  loadScore?: number;
+  recoveryHours?: number;
+
+  // Recovery
   recoveryRecommendation?: string;
-  generatedAt: string;
+
+  // Metadata
+  generatedAt?: string;     // Frontend compatibility
+  createdAt?: string;       // Backend field name
   modelUsed?: string;
+
+  // Legacy support
+  id?: string;
 }
 
 export interface AnalysisStreamChunk {
@@ -567,3 +608,87 @@ export interface FitnessMetricsHistory {
     risk_zone: string;
   }>;
 }
+
+// ============================================
+// Workout Score Types (Analysis v2)
+// ============================================
+
+export type ScoreLevel = 'excellent' | 'good' | 'moderate' | 'fair' | 'poor';
+export type ScoreColor = 'green' | 'yellow' | 'orange' | 'red';
+
+export interface WorkoutScore {
+  name: string;
+  value: number;
+  maxValue: number;
+  label: ScoreLevel;
+  color: ScoreColor;
+  description: string;
+}
+
+export interface WorkoutScores {
+  overallQuality: WorkoutScore;
+  trainingEffect: WorkoutScore;
+  loadManagement: WorkoutScore;
+  recoveryImpact: WorkoutScore;
+}
+
+// Helper function to determine score color based on value and thresholds
+export function getScoreColor(value: number, maxValue: number): ScoreColor {
+  const percentage = (value / maxValue) * 100;
+  if (percentage >= 80) return 'green';
+  if (percentage >= 60) return 'yellow';
+  if (percentage >= 40) return 'orange';
+  return 'red';
+}
+
+// Helper function to determine score label based on value and thresholds
+export function getScoreLabel(value: number, maxValue: number): ScoreLevel {
+  const percentage = (value / maxValue) * 100;
+  if (percentage >= 90) return 'excellent';
+  if (percentage >= 75) return 'good';
+  if (percentage >= 55) return 'moderate';
+  if (percentage >= 35) return 'fair';
+  return 'poor';
+}
+
+// Score color mappings for Tailwind CSS classes
+export const SCORE_COLOR_MAP: Record<ScoreColor, {
+  bg: string;
+  text: string;
+  fill: string;
+  gradient: string;
+}> = {
+  green: {
+    bg: 'bg-green-500',
+    text: 'text-green-400',
+    fill: '#22c55e',
+    gradient: 'from-green-500 to-green-600',
+  },
+  yellow: {
+    bg: 'bg-yellow-500',
+    text: 'text-yellow-400',
+    fill: '#eab308',
+    gradient: 'from-yellow-500 to-yellow-600',
+  },
+  orange: {
+    bg: 'bg-orange-500',
+    text: 'text-orange-400',
+    fill: '#f97316',
+    gradient: 'from-orange-500 to-orange-600',
+  },
+  red: {
+    bg: 'bg-red-500',
+    text: 'text-red-400',
+    fill: '#ef4444',
+    gradient: 'from-red-500 to-red-600',
+  },
+};
+
+// Score label display mappings
+export const SCORE_LABEL_MAP: Record<ScoreLevel, string> = {
+  excellent: 'Excellent',
+  good: 'Good',
+  moderate: 'Moderate',
+  fair: 'Fair',
+  poor: 'Needs Work',
+};

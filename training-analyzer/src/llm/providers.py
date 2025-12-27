@@ -308,15 +308,22 @@ class LLMClient:
             LLMError: On failure
         """
         async def _make_request() -> str:
+            model_name = self._get_model(model)
+            is_gpt5 = "gpt-5" in model_name
+            # GPT-5 models use max_completion_tokens instead of max_tokens
+            token_param = "max_completion_tokens" if is_gpt5 else "max_tokens"
+            # GPT-5 models only support temperature=1
+            temp_param = {} if is_gpt5 else {"temperature": temperature}
+
             response = await asyncio.wait_for(
                 self.client.chat.completions.create(
-                    model=self._get_model(model),
+                    model=model_name,
                     messages=[
                         {"role": "system", "content": system},
                         {"role": "user", "content": user},
                     ],
-                    max_tokens=max_tokens,
-                    temperature=temperature,
+                    **{token_param: max_tokens},
+                    **temp_param,
                 ),
                 timeout=timeout,
             )
@@ -360,22 +367,33 @@ class LLMClient:
         import json
 
         async def _make_request() -> Dict[str, Any]:
+            model_name = self._get_model(model)
+            is_gpt5 = "gpt-5" in model_name
+            # GPT-5 models use max_completion_tokens instead of max_tokens
+            token_param = "max_completion_tokens" if is_gpt5 else "max_tokens"
+            # GPT-5 models only support temperature=1
+            temp_param = {} if is_gpt5 else {"temperature": temperature}
+
             response = await asyncio.wait_for(
                 self.client.chat.completions.create(
-                    model=self._get_model(model),
+                    model=model_name,
                     messages=[
                         {"role": "system", "content": system},
                         {"role": "user", "content": user},
                     ],
-                    max_tokens=max_tokens,
-                    temperature=temperature,
+                    **{token_param: max_tokens},
+                    **temp_param,
                     response_format={"type": "json_object"},
                 ),
                 timeout=timeout,
             )
             content = response.choices[0].message.content
-            if content is None:
-                raise LLMResponseInvalidError(message="Empty response from LLM")
+            finish_reason = response.choices[0].finish_reason
+            if content is None or content.strip() == "":
+                raise LLMResponseInvalidError(
+                    message=f"Empty response from LLM (finish_reason: {finish_reason})",
+                    details={"finish_reason": finish_reason}
+                )
             try:
                 return json.loads(content)
             except json.JSONDecodeError as e:
@@ -423,14 +441,21 @@ class LLMClient:
         chunks_yielded = 0
 
         try:
+            model_name = self._get_model(model)
+            is_gpt5 = "gpt-5" in model_name
+            # GPT-5 models use max_completion_tokens instead of max_tokens
+            token_param = "max_completion_tokens" if is_gpt5 else "max_tokens"
+            # GPT-5 models only support temperature=1
+            temp_param = {} if is_gpt5 else {"temperature": temperature}
+
             stream = await self.client.chat.completions.create(
-                model=self._get_model(model),
+                model=model_name,
                 messages=[
                     {"role": "system", "content": system},
                     {"role": "user", "content": user},
                 ],
-                max_tokens=max_tokens,
-                temperature=temperature,
+                **{token_param: max_tokens},
+                **temp_param,
                 stream=True,
             )
 

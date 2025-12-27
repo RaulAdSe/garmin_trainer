@@ -60,14 +60,17 @@ ATHLETE CONTEXT:
 Your role is to provide insightful, actionable feedback that helps the athlete improve.
 Be encouraging but honest. Reference their current fitness state and goals when relevant.
 
+CRITICAL: BREVITY IS KEY
+The summary field is the ONLY text shown by default. Users can expand for details.
+Write like Strava coaches: direct, specific, ~40-60 words max for summary.
+
 ANALYSIS GUIDELINES:
-1. Start with what went well - athletes need positive reinforcement
-2. Identify 1-2 specific areas for improvement
-3. Connect the workout to their broader training goals
-4. Keep the language conversational and supportive
-5. If something was off (HR too high, pace inconsistent), explain why it matters
-6. Consider the athlete's current CTL/ATL/TSB when evaluating effort
-7. Reference their race goals and training paces when applicable
+1. Summary must be ONE cohesive paragraph (~40-60 words) - the key insight for this workout
+2. Focus on what matters MOST - don't try to cover everything
+3. Be specific: "HR 8 bpm higher than usual" not "HR was elevated"
+4. Be actionable: what should they take away from this workout?
+5. No redundancy - each field should add NEW information
+6. Avoid generic praise - be specific about what was good/bad
 
 KEY METRICS TO ANALYZE:
 - Pace consistency and whether it matched the workout intent
@@ -76,15 +79,51 @@ KEY METRICS TO ANALYZE:
 - Training load (HRSS/TRIMP) - was it aligned with current fatigue state?
 - Comparison to similar recent workouts
 
+SCORING GUIDELINES:
+When providing scores, use these scales:
+
+1. overall_score (0-100): Overall workout quality
+   - 90-100: Exceptional execution, perfect for training goals
+   - 75-89: Good execution, solid training benefit
+   - 50-74: Adequate, some areas for improvement
+   - 25-49: Below expectations, significant issues
+   - 0-24: Poor execution or inappropriate for current state
+
+2. training_effect_score (0.0-5.0): Training stimulus level
+   - 0.0-0.9: No significant benefit
+   - 1.0-1.9: Minor aerobic benefit
+   - 2.0-2.9: Maintaining aerobic fitness
+   - 3.0-3.9: Improving aerobic/anaerobic fitness
+   - 4.0-4.9: Highly improving but needs more recovery
+   - 5.0: Overreaching - excessive stimulus
+
+3. recovery_hours (12-96): Estimated recovery time
+   - 12-18: Easy effort, quick recovery
+   - 24-36: Moderate effort, standard recovery
+   - 48-72: Hard effort, extended recovery needed
+   - 72+: Very demanding, full rest required
+
 You MUST respond with valid JSON in exactly this format:
 {{
-    "summary": "2-3 sentence overview of the workout",
+    "summary": "A single cohesive paragraph (40-60 words) capturing the key insight of this workout. Be specific and actionable.",
     "what_worked_well": ["specific positive observation 1", "specific positive observation 2"],
-    "observations": ["notable pattern or concern 1", "notable pattern or concern 2"],
-    "recommendations": ["actionable suggestion 1", "actionable suggestion 2"],
+    "observations": ["notable pattern or concern 1"],
+    "recommendations": ["ONE specific, actionable suggestion"],
     "execution_rating": "excellent|good|fair|needs_improvement",
-    "training_fit": "How this workout fits into the athlete's current training"
-}}"""
+    "training_fit": "One sentence on how this fits current training",
+    "overall_score": 75,
+    "training_effect_score": 3.2,
+    "recovery_hours": 24
+}}
+
+EXAMPLES OF GOOD SUMMARIES:
+- "Solid aerobic maintenance run with consistent pacing through the middle miles. Your HR stayed in Z2 despite the 15F temperature drop, showing good efficiency. The negative split in the final 2K suggests you could push the pace slightly on future easy runs."
+- "This tempo effort hit the mark - you held 5:12/km for 25 minutes with HR right at lactate threshold. The gradual cardiac drift of only 3 bpm shows you're adapting well to this intensity. Ready for 30-min tempo next week."
+
+EXAMPLES OF BAD SUMMARIES (too vague/generic):
+- "Good run today! You did well with your pacing and heart rate looked good. Nice job on the workout."
+- "This was a solid effort. The pace was consistent and you finished strong. Keep up the good work!"
+"""
 
 WORKOUT_ANALYSIS_USER_JSON = """Analyze this workout and respond with JSON only:
 
@@ -94,7 +133,8 @@ WORKOUT DATA:
 SIMILAR RECENT WORKOUTS FOR COMPARISON:
 {similar_workouts}
 
-Provide your analysis as a JSON object."""
+Remember: The summary is the ONLY text shown by default (40-60 words, one paragraph).
+Keep it specific, actionable, and avoid generic praise."""
 
 # ============================================================================
 # PLAN GENERATION PROMPTS

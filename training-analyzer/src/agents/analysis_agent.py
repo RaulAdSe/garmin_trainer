@@ -21,11 +21,21 @@ from ..models.analysis import (
     AnalysisContext,
     AnalysisStatus,
     AthleteContext,
+    CategorizedInsight,
+    InsightCategory,
+    ScoreCard,
     WorkoutAnalysisResult,
     WorkoutData,
     WorkoutExecutionRating,
     WorkoutInsight,
+    # Score calculation functions
+    calculate_training_effect,
+    calculate_load_score,
+    calculate_recovery_hours,
+    calculate_overall_score,
+    build_default_score_cards,
 )
+from ..analysis.condensation import condense_workout_data
 
 
 # ============================================================================
@@ -38,6 +48,10 @@ class AnalysisState(TypedDict):
     workout_data: Dict[str, Any]
     athlete_context: Dict[str, Any]
     similar_workouts: List[Dict[str, Any]]
+
+    # Optional detailed data for condensation
+    time_series: Optional[Dict[str, Any]]  # {heart_rate, pace_or_speed, elevation, cadence}
+    splits: Optional[List[Dict[str, Any]]]  # Per-km split data
 
     # Processing state
     analysis_id: str
@@ -156,7 +170,28 @@ class AnalysisAgent:
             )
 
             # Create WorkoutData from dict
-            workout = WorkoutData.from_dict(state.get("workout_data", {}))
+            workout_data = state.get("workout_data", {})
+            workout = WorkoutData.from_dict(workout_data)
+
+            # Condense time-series data if available
+            time_series = state.get("time_series")
+            splits = state.get("splits")
+
+            if time_series or splits:
+                # Get HR zones for zone transition detection
+                hr_zones = athlete_ctx.hr_zones
+
+                # Condense the detailed data
+                condensed = condense_workout_data(
+                    time_series=time_series,
+                    splits=splits,
+                    hr_zones=hr_zones,
+                    duration_sec=int((workout_data.get("duration_min") or 0) * 60),
+                    distance_km=workout_data.get("distance_km") or 0.0,
+                )
+
+                # Attach condensed data to workout
+                workout.condensed_data = condensed
 
             # Store formatted context in state
             return {
@@ -203,7 +238,7 @@ class AnalysisAgent:
                 system=system_prompt,
                 user=user_prompt,
                 model=ModelType.SMART,
-                max_tokens=1500,
+                max_tokens=4000,
                 temperature=0.7,
             )
 
@@ -226,13 +261,14 @@ class AnalysisAgent:
         Parse LLM response into structured format.
 
         Since we use JSON mode in _generate_analysis, the parsed_analysis
-        is already available. This method just validates the structure.
+        is already available. This method validates the structure and
+        parses the new score and insight fields.
         """
         try:
             # parsed_analysis is already set by _generate_analysis when using JSON mode
             parsed = state.get("parsed_analysis", {})
 
-            # Ensure all required fields have defaults
+            # Ensure all required fields have defaults (backward compatible)
             validated = {
                 "summary": parsed.get("summary", ""),
                 "what_worked_well": parsed.get("what_worked_well", []),
@@ -241,6 +277,35 @@ class AnalysisAgent:
                 "execution_rating": parsed.get("execution_rating"),
                 "training_fit": parsed.get("training_fit", ""),
             }
+
+            # Parse new score fields from LLM response
+            validated["overall_score"] = parsed.get("overall_score")
+            validated["training_effect_score"] = parsed.get("training_effect_score")
+            validated["recovery_hours"] = parsed.get("recovery_hours")
+
+            # Parse categorized insights
+            raw_insights = parsed.get("categorized_insights", [])
+            categorized_insights = []
+            for insight in raw_insights:
+                if isinstance(insight, dict):
+                    try:
+                        # Map category string to enum
+                        category_str = insight.get("category", "recommendation")
+                        category = InsightCategory(category_str) if category_str in [e.value for e in InsightCategory] else InsightCategory.RECOMMENDATION
+
+                        categorized_insights.append({
+                            "category": category.value,
+                            "icon": insight.get("icon", ""),
+                            "text": insight.get("text", ""),
+                            "detail": insight.get("detail", ""),
+                        })
+                    except (ValueError, KeyError):
+                        continue
+
+            validated["categorized_insights"] = categorized_insights
+
+            # Store score reasoning for potential use
+            validated["score_reasoning"] = parsed.get("score_reasoning", {})
 
             return {
                 **state,
@@ -257,6 +322,7 @@ class AnalysisAgent:
                     "what_worked_well": [],
                     "observations": [],
                     "recommendations": [],
+                    "categorized_insights": [],
                 },
                 "status": "parsed_with_fallback",
             }
@@ -270,9 +336,11 @@ class AnalysisAgent:
 
             # Determine execution rating
             execution_rating = None
+            execution_rating_str = None
             if parsed.get("execution_rating"):
                 try:
                     execution_rating = WorkoutExecutionRating(parsed["execution_rating"])
+                    execution_rating_str = parsed["execution_rating"]
                 except ValueError:
                     pass
 
@@ -287,7 +355,7 @@ class AnalysisAgent:
                 similar_workouts_count=len(state.get("similar_workouts", [])),
             )
 
-            # Build insights from observations
+            # Build insights from observations (legacy format)
             insights = []
             for obs in parsed.get("what_worked_well", []):
                 insights.append(WorkoutInsight(
@@ -304,6 +372,90 @@ class AnalysisAgent:
                     importance="medium",
                 ))
 
+            # ================================================================
+            # Calculate scores with LLM values as primary, fallback to calculated
+            # ================================================================
+
+            # Get athlete physiology for calculations
+            max_hr = ctx.get("max_hr", 185)
+            rest_hr = ctx.get("rest_hr", 55)
+
+            # Calculate training effect (use LLM value if provided, else calculate)
+            llm_training_effect = parsed.get("training_effect_score")
+            if llm_training_effect is not None:
+                training_effect_score = float(llm_training_effect)
+            else:
+                training_effect_score = calculate_training_effect(
+                    duration_min=workout.get("duration_min", 0) or 0,
+                    avg_hr=workout.get("avg_hr"),
+                    max_hr=max_hr,
+                    rest_hr=rest_hr,
+                    zone3_pct=workout.get("zone3_pct", 0) or 0,
+                    zone4_pct=workout.get("zone4_pct", 0) or 0,
+                    zone5_pct=workout.get("zone5_pct", 0) or 0,
+                )
+
+            # Calculate load score from HRSS/TRIMP (always calculated from data)
+            load_score = calculate_load_score(
+                hrss=workout.get("hrss"),
+                trimp=workout.get("trimp"),
+                tss=workout.get("tss"),
+                duration_min=workout.get("duration_min", 0) or 0,
+                avg_hr=workout.get("avg_hr"),
+                max_hr=max_hr,
+            )
+
+            # Calculate recovery hours (use LLM value if provided, else calculate)
+            llm_recovery_hours = parsed.get("recovery_hours")
+            if llm_recovery_hours is not None:
+                recovery_hours = int(llm_recovery_hours)
+            else:
+                recovery_hours = calculate_recovery_hours(
+                    training_effect=training_effect_score,
+                    load_score=load_score,
+                    tsb=ctx.get("tsb"),
+                    execution_rating=execution_rating_str,
+                )
+
+            # Calculate overall score (use LLM value if provided, else calculate)
+            llm_overall_score = parsed.get("overall_score")
+            zone2_pct = workout.get("zone2_pct", 0) or 0
+            zone3_pct = workout.get("zone3_pct", 0) or 0
+            zone_quality = min(1.0, (zone2_pct + zone3_pct) / 80)  # 80% aerobic = 1.0
+
+            if llm_overall_score is not None:
+                overall_score = int(llm_overall_score)
+            else:
+                overall_score = calculate_overall_score(
+                    execution_rating=execution_rating_str,
+                    training_effect=training_effect_score,
+                    load_score=load_score,
+                    zone_distribution_quality=zone_quality,
+                )
+
+            # Build score cards for visualization
+            score_cards = build_default_score_cards(
+                workout_data=workout,
+                training_effect=training_effect_score,
+                load_score=load_score,
+                recovery_hours=recovery_hours,
+                execution_rating=execution_rating_str,
+            )
+
+            # Build categorized insights from LLM response
+            categorized_insights = []
+            for insight_data in parsed.get("categorized_insights", []):
+                try:
+                    category = InsightCategory(insight_data.get("category", "recommendation"))
+                    categorized_insights.append(CategorizedInsight(
+                        category=category,
+                        icon=insight_data.get("icon", ""),
+                        text=insight_data.get("text", ""),
+                        detail=insight_data.get("detail", ""),
+                    ))
+                except (ValueError, KeyError):
+                    continue
+
             result = WorkoutAnalysisResult(
                 workout_id=workout.get("activity_id", "unknown"),
                 analysis_id=state.get("analysis_id", str(uuid.uuid4())),
@@ -313,6 +465,14 @@ class AnalysisAgent:
                 observations=parsed.get("observations", []),
                 recommendations=parsed.get("recommendations", []),
                 insights=insights,
+                # New structured scores
+                overall_score=overall_score,
+                training_effect_score=training_effect_score,
+                load_score=load_score,
+                recovery_hours=recovery_hours,
+                scores=score_cards,
+                categorized_insights=categorized_insights,
+                # Existing fields
                 execution_rating=execution_rating,
                 training_fit=parsed.get("training_fit"),
                 context=analysis_context,
@@ -358,6 +518,8 @@ class AnalysisAgent:
         workout_data: Dict[str, Any],
         athlete_context: Dict[str, Any],
         similar_workouts: Optional[List[Dict[str, Any]]] = None,
+        time_series: Optional[Dict[str, Any]] = None,
+        splits: Optional[List[Dict[str, Any]]] = None,
     ) -> WorkoutAnalysisResult:
         """
         Analyze a workout.
@@ -366,6 +528,10 @@ class AnalysisAgent:
             workout_data: Dictionary with workout metrics
             athlete_context: Dictionary with athlete context (CTL, TSB, goals, etc.)
             similar_workouts: Optional list of similar workouts for comparison
+            time_series: Optional dict with detailed time-series data
+                        {heart_rate: [{timestamp, hr}], pace_or_speed: [...], elevation: [...]}
+            splits: Optional list of per-km split data
+                   [{pace, avg_hr, elevation_gain, ...}]
 
         Returns:
             WorkoutAnalysisResult with the analysis
@@ -375,6 +541,8 @@ class AnalysisAgent:
             "workout_data": workout_data,
             "athlete_context": athlete_context,
             "similar_workouts": similar_workouts or [],
+            "time_series": time_series,
+            "splits": splits,
             "analysis_id": str(uuid.uuid4()),
             "status": "initialized",
             "error": None,

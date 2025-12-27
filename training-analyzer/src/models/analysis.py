@@ -3,9 +3,12 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field
+
+if TYPE_CHECKING:
+    from ..analysis.condensation import CondensedWorkoutData
 
 
 def to_camel(string: str) -> str:
@@ -86,6 +89,55 @@ class WorkoutInsight(BaseModel):
     importance: str = Field(default="medium", description="Importance level: low, medium, high")
 
 
+class ScoreColor(str, Enum):
+    """Color indicators for score cards."""
+    GREEN = "green"
+    YELLOW = "yellow"
+    RED = "red"
+    BLUE = "blue"
+    GRAY = "gray"
+
+
+class ScoreCard(BaseModel):
+    """A score card representing a specific metric with visualization data."""
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+    )
+
+    name: str = Field(..., description="Name of the score (e.g., 'Pace Consistency', 'HR Control')")
+    value: float = Field(..., description="Current score value")
+    max_value: float = Field(default=100.0, description="Maximum possible value for the score")
+    label: str = Field(..., description="Human-readable label (e.g., 'Good', 'Excellent', 'Needs Work')")
+    color: ScoreColor = Field(default=ScoreColor.GRAY, description="Color indicator for the score")
+    description: str = Field(default="", description="Brief explanation of what this score measures")
+    unit: Optional[str] = Field(default=None, description="Unit for the value (e.g., '%', 'bpm', 'hours')")
+
+
+class InsightCategory(str, Enum):
+    """Category types for categorized insights."""
+    PERFORMANCE = "performance"
+    CAUTION = "caution"
+    TREND = "trend"
+    RECOMMENDATION = "recommendation"
+    ACHIEVEMENT = "achievement"
+
+
+class CategorizedInsight(BaseModel):
+    """A categorized insight with icon and detailed explanation."""
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+    )
+
+    category: InsightCategory = Field(..., description="Category of the insight")
+    icon: str = Field(..., description="Emoji icon representing the insight type")
+    text: str = Field(..., description="Short, concise insight text")
+    detail: str = Field(default="", description="Longer explanation for hover/expansion")
+
+
 class AnalysisContext(BaseModel):
     """Context used for the analysis."""
 
@@ -130,6 +182,10 @@ class WorkoutAnalysisResult(BaseModel):
                 ],
                 "executionRating": "good",
                 "trainingFit": "Excellent timing - you're fresh after two easy days",
+                "overallScore": 78,
+                "trainingEffectScore": 3.2,
+                "loadScore": 85,
+                "recoveryHours": 24,
                 "modelUsed": "gpt-5-mini",
             }
         },
@@ -155,10 +211,49 @@ class WorkoutAnalysisResult(BaseModel):
     )
     recommendations: List[str] = Field(default_factory=list, description="Actionable suggestions")
 
-    # Structured insights
+    # Structured insights (legacy)
     insights: List[WorkoutInsight] = Field(default_factory=list, description="Structured insights")
 
-    # Ratings
+    # =========================================================================
+    # NEW: Structured Scores
+    # =========================================================================
+    overall_score: Optional[int] = Field(
+        default=None,
+        ge=0,
+        le=100,
+        description="Overall workout quality score (0-100)"
+    )
+    training_effect_score: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=5.0,
+        description="Training stimulus level (0.0-5.0, like Garmin Training Effect)"
+    )
+    load_score: Optional[int] = Field(
+        default=None,
+        description="Training load contribution (based on HRSS/TRIMP)"
+    )
+    recovery_hours: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="Estimated recovery time needed in hours"
+    )
+
+    # Score cards for detailed metrics visualization
+    scores: List[ScoreCard] = Field(
+        default_factory=list,
+        description="Detailed score cards for various workout metrics"
+    )
+
+    # Categorized insights with icons and details
+    categorized_insights: List[CategorizedInsight] = Field(
+        default_factory=list,
+        description="Categorized insights with icons and detailed explanations"
+    )
+
+    # =========================================================================
+    # Ratings (existing)
+    # =========================================================================
     execution_rating: Optional[WorkoutExecutionRating] = Field(None, description="Overall execution rating")
     effort_alignment: Optional[str] = Field(None, description="How well effort matched target")
 
@@ -412,6 +507,9 @@ class WorkoutData:
     avg_stroke_rate: Optional[float] = None
     css_pace_sec: Optional[int] = None  # Critical Swim Speed pace
 
+    # Condensed time-series data (populated when detailed data is available)
+    condensed_data: Optional[Any] = None  # CondensedWorkoutData
+
     def format_pace(self) -> str:
         """Format pace as min:sec/km."""
         if not self.pace_sec_per_km:
@@ -508,6 +606,14 @@ class WorkoutData:
         if self.css_pace_sec:
             lines.append(f"CSS Pace: {self.format_swim_pace()}")
 
+        # Add condensed time-series analysis if available
+        if self.condensed_data:
+            lines.append("")
+            lines.append("--- DETAILED DYNAMICS ---")
+            condensed_text = self.condensed_data.to_prompt_data()
+            if condensed_text:
+                lines.append(condensed_text)
+
         return "\n".join(line for line in lines if line is not None)
 
     @classmethod
@@ -549,3 +655,374 @@ class WorkoutData:
             avg_stroke_rate=data.get("avg_stroke_rate"),
             css_pace_sec=data.get("css_pace_sec"),
         )
+
+
+# ============================================================================
+# Score Calculation Functions
+# ============================================================================
+
+def calculate_training_effect(
+    duration_min: float,
+    avg_hr: Optional[int],
+    max_hr: int = 185,
+    rest_hr: int = 55,
+    zone3_pct: float = 0.0,
+    zone4_pct: float = 0.0,
+    zone5_pct: float = 0.0,
+) -> float:
+    """
+    Calculate training effect score (0.0-5.0) based on workout intensity and duration.
+
+    This approximates Garmin's Training Effect algorithm:
+    - 0.0-0.9: No benefit
+    - 1.0-1.9: Minor benefit
+    - 2.0-2.9: Maintaining
+    - 3.0-3.9: Improving
+    - 4.0-4.9: Highly improving
+    - 5.0: Overreaching
+
+    Args:
+        duration_min: Workout duration in minutes
+        avg_hr: Average heart rate during workout
+        max_hr: Athlete's max heart rate
+        rest_hr: Athlete's resting heart rate
+        zone3_pct: Percentage of time in zone 3
+        zone4_pct: Percentage of time in zone 4
+        zone5_pct: Percentage of time in zone 5
+
+    Returns:
+        Training effect score between 0.0 and 5.0
+    """
+    if not avg_hr or duration_min < 5:
+        return 0.0
+
+    # Calculate intensity factor (0-1) based on HR reserve
+    hr_reserve = max_hr - rest_hr
+    if hr_reserve <= 0:
+        return 0.0
+
+    intensity = (avg_hr - rest_hr) / hr_reserve
+    intensity = max(0.0, min(1.0, intensity))
+
+    # Weight high-intensity zones more heavily
+    high_intensity_bonus = (zone3_pct * 0.01 + zone4_pct * 0.02 + zone5_pct * 0.03)
+
+    # Duration factor (diminishing returns after 60 min)
+    duration_factor = min(1.5, duration_min / 40)
+
+    # Base training effect calculation
+    training_effect = intensity * duration_factor * 3.0 + high_intensity_bonus
+
+    # Clamp to valid range
+    return round(max(0.0, min(5.0, training_effect)), 1)
+
+
+def calculate_load_score(
+    hrss: Optional[float] = None,
+    trimp: Optional[float] = None,
+    tss: Optional[float] = None,
+    duration_min: float = 0.0,
+    avg_hr: Optional[int] = None,
+    max_hr: int = 185,
+) -> int:
+    """
+    Calculate a normalized load score based on available training load metrics.
+
+    Priority: HRSS > TSS > TRIMP > estimated from HR
+
+    Args:
+        hrss: Heart Rate Stress Score (0-200+ typical)
+        trimp: Training Impulse (0-300+ typical)
+        tss: Training Stress Score for power-based activities
+        duration_min: Workout duration in minutes
+        avg_hr: Average heart rate
+        max_hr: Max heart rate for estimation
+
+    Returns:
+        Normalized load score (0-200+ typical, scaled appropriately)
+    """
+    # Use available metrics in priority order
+    if hrss is not None and hrss > 0:
+        return round(hrss)
+
+    if tss is not None and tss > 0:
+        return round(tss)
+
+    if trimp is not None and trimp > 0:
+        # TRIMP is typically larger scale, normalize
+        return round(trimp * 0.7)
+
+    # Fallback: estimate from duration and HR intensity
+    if duration_min > 0 and avg_hr and max_hr > 0:
+        intensity_pct = (avg_hr / max_hr) * 100
+        estimated_load = duration_min * (intensity_pct / 100) * 1.2
+        return round(estimated_load)
+
+    return 0
+
+
+def calculate_recovery_hours(
+    training_effect: float,
+    load_score: int,
+    tsb: Optional[float] = None,
+    execution_rating: Optional[str] = None,
+) -> int:
+    """
+    Estimate recovery hours needed based on workout intensity and current fitness.
+
+    Args:
+        training_effect: Training effect score (0.0-5.0)
+        load_score: Training load score
+        tsb: Training Stress Balance (fatigue indicator)
+        execution_rating: How well the workout was executed
+
+    Returns:
+        Estimated recovery hours (typically 12-72)
+    """
+    # Base recovery from training effect
+    if training_effect < 1.0:
+        base_hours = 12
+    elif training_effect < 2.0:
+        base_hours = 18
+    elif training_effect < 3.0:
+        base_hours = 24
+    elif training_effect < 4.0:
+        base_hours = 36
+    elif training_effect < 4.5:
+        base_hours = 48
+    else:
+        base_hours = 72
+
+    # Adjust for load score
+    if load_score > 150:
+        base_hours += 12
+    elif load_score > 100:
+        base_hours += 6
+
+    # Adjust for fatigue (negative TSB = more tired = more recovery needed)
+    if tsb is not None:
+        if tsb < -20:
+            base_hours += 12
+        elif tsb < -10:
+            base_hours += 6
+        elif tsb > 10:
+            base_hours -= 6
+
+    # Clamp to reasonable range
+    return max(12, min(96, base_hours))
+
+
+def calculate_overall_score(
+    execution_rating: Optional[str] = None,
+    training_effect: float = 0.0,
+    load_score: int = 0,
+    zone_distribution_quality: float = 0.0,
+) -> int:
+    """
+    Calculate an overall workout quality score (0-100).
+
+    Factors:
+    - Execution rating (40% weight)
+    - Training effect appropriateness (30% weight)
+    - Load score achievement (20% weight)
+    - Zone distribution quality (10% weight)
+
+    Args:
+        execution_rating: 'excellent', 'good', 'fair', 'needs_improvement'
+        training_effect: Training effect score (0.0-5.0)
+        load_score: Training load achieved
+        zone_distribution_quality: 0-1 score for zone distribution
+
+    Returns:
+        Overall score from 0-100
+    """
+    # Execution rating contribution (0-40 points)
+    rating_scores = {
+        "excellent": 40,
+        "good": 32,
+        "fair": 20,
+        "needs_improvement": 10,
+    }
+    execution_score = rating_scores.get(execution_rating, 25)
+
+    # Training effect contribution (0-30 points)
+    # 2.5-4.0 is optimal for most workouts
+    if 2.5 <= training_effect <= 4.0:
+        te_score = 30
+    elif training_effect < 1.0:
+        te_score = 5
+    elif training_effect < 2.0:
+        te_score = 15
+    elif training_effect < 2.5:
+        te_score = 22
+    elif training_effect < 4.5:
+        te_score = 25
+    else:
+        te_score = 20  # Overreaching is not always ideal
+
+    # Load score contribution (0-20 points)
+    # Normalize load score: 50-150 is typical good range
+    if 50 <= load_score <= 150:
+        load_contribution = 20
+    elif load_score < 30:
+        load_contribution = 5
+    elif load_score < 50:
+        load_contribution = 12
+    else:
+        load_contribution = 15  # Very high load
+
+    # Zone distribution contribution (0-10 points)
+    zone_contribution = int(zone_distribution_quality * 10)
+
+    total = execution_score + te_score + load_contribution + zone_contribution
+    return max(0, min(100, total))
+
+
+def get_score_color(value: float, thresholds: Dict[str, float]) -> ScoreColor:
+    """
+    Determine the appropriate color for a score based on thresholds.
+
+    Args:
+        value: The score value
+        thresholds: Dict with 'green', 'yellow' thresholds (red is below yellow)
+
+    Returns:
+        ScoreColor enum value
+    """
+    if value >= thresholds.get("green", 80):
+        return ScoreColor.GREEN
+    elif value >= thresholds.get("yellow", 50):
+        return ScoreColor.YELLOW
+    else:
+        return ScoreColor.RED
+
+
+def get_score_label(value: float, scale: str = "percent") -> str:
+    """
+    Get a human-readable label for a score value.
+
+    Args:
+        value: The score value
+        scale: Type of scale ('percent', 'training_effect', 'custom')
+
+    Returns:
+        Human-readable label
+    """
+    if scale == "percent":
+        if value >= 90:
+            return "Excellent"
+        elif value >= 75:
+            return "Good"
+        elif value >= 50:
+            return "Fair"
+        elif value >= 25:
+            return "Below Average"
+        else:
+            return "Poor"
+    elif scale == "training_effect":
+        if value >= 4.5:
+            return "Overreaching"
+        elif value >= 3.5:
+            return "Highly Improving"
+        elif value >= 2.5:
+            return "Improving"
+        elif value >= 1.5:
+            return "Maintaining"
+        elif value >= 0.5:
+            return "Minor Benefit"
+        else:
+            return "No Benefit"
+    else:
+        return "N/A"
+
+
+def build_default_score_cards(
+    workout_data: Dict[str, Any],
+    training_effect: float,
+    load_score: int,
+    recovery_hours: int,
+    execution_rating: Optional[str] = None,
+) -> List[ScoreCard]:
+    """
+    Build a list of default score cards from workout data.
+
+    Args:
+        workout_data: Dictionary containing workout metrics
+        training_effect: Calculated training effect
+        load_score: Calculated load score
+        recovery_hours: Calculated recovery hours
+        execution_rating: Execution rating string
+
+    Returns:
+        List of ScoreCard objects
+    """
+    cards = []
+
+    # Training Effect card
+    cards.append(ScoreCard(
+        name="Training Effect",
+        value=training_effect,
+        max_value=5.0,
+        label=get_score_label(training_effect, "training_effect"),
+        color=get_score_color(training_effect, {"green": 2.5, "yellow": 1.5}),
+        description="Measures the impact on your aerobic fitness",
+    ))
+
+    # Training Load card
+    load_label = "High" if load_score > 120 else "Moderate" if load_score > 60 else "Low"
+    cards.append(ScoreCard(
+        name="Training Load",
+        value=float(load_score),
+        max_value=200.0,
+        label=load_label,
+        color=get_score_color(load_score, {"green": 50, "yellow": 30}),
+        description="Training stress from this workout (HRSS/TRIMP)",
+    ))
+
+    # Recovery Time card
+    recovery_label = f"{recovery_hours}h"
+    recovery_color = ScoreColor.GREEN if recovery_hours <= 24 else ScoreColor.YELLOW if recovery_hours <= 48 else ScoreColor.RED
+    cards.append(ScoreCard(
+        name="Recovery Time",
+        value=float(recovery_hours),
+        max_value=96.0,
+        label=recovery_label,
+        color=recovery_color,
+        description="Estimated time until full recovery",
+        unit="hours",
+    ))
+
+    # HR Control card (if HR data available)
+    avg_hr = workout_data.get("avg_hr")
+    max_hr_workout = workout_data.get("max_hr")
+    if avg_hr and max_hr_workout:
+        hr_efficiency = min(100, (avg_hr / max_hr_workout) * 100)
+        hr_label = "Steady" if 75 <= hr_efficiency <= 90 else "High" if hr_efficiency > 90 else "Low"
+        cards.append(ScoreCard(
+            name="HR Control",
+            value=round(hr_efficiency, 1),
+            max_value=100.0,
+            label=hr_label,
+            color=ScoreColor.GREEN if 75 <= hr_efficiency <= 90 else ScoreColor.YELLOW,
+            description="Avg HR relative to max HR during workout",
+            unit="%",
+        ))
+
+    # Zone Distribution card (if zone data available)
+    zone2_pct = workout_data.get("zone2_pct", 0) or 0
+    zone3_pct = workout_data.get("zone3_pct", 0) or 0
+    zone4_pct = workout_data.get("zone4_pct", 0) or 0
+    aerobic_pct = zone2_pct + zone3_pct
+    if aerobic_pct > 0:
+        zone_label = "Aerobic" if aerobic_pct > 60 else "Mixed" if aerobic_pct > 30 else "Anaerobic"
+        cards.append(ScoreCard(
+            name="Zone Distribution",
+            value=round(aerobic_pct, 1),
+            max_value=100.0,
+            label=zone_label,
+            color=ScoreColor.GREEN if aerobic_pct > 50 else ScoreColor.YELLOW,
+            description="Time spent in aerobic zones (Z2-Z3)",
+            unit="%",
+        ))
+
+    return cards

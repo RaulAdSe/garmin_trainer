@@ -3,9 +3,7 @@
 import { use, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useWorkout, useWorkoutAnalysis } from '@/hooks/useWorkouts';
-import { useLLMStream } from '@/hooks/useLLMStream';
 import { WorkoutAnalysis, WorkoutAnalysisSkeleton } from '@/components/workouts/WorkoutAnalysis';
-import { StreamingAnalysis } from '@/components/workouts/StreamingAnalysis';
 import { WorkoutCharts } from '@/components/workout-detail/WorkoutCharts';
 import { RouteMap } from '@/components/workout-detail/RouteMap';
 import { SplitsTable } from '@/components/workout-detail/SplitsTable';
@@ -37,18 +35,6 @@ export default function WorkoutDetailPage({ params }: WorkoutDetailPageProps) {
     analyze,
     isAnalyzing,
   } = useWorkoutAnalysis(workoutId);
-
-  const {
-    content: streamContent,
-    isStreaming,
-    isComplete,
-    error: streamError,
-    startStream,
-  } = useLLMStream({
-    onComplete: () => {
-      // Refetch analysis when stream completes
-    },
-  });
 
   // Activity details state (time series, GPS, splits)
   const [activityDetails, setActivityDetails] = useState<ActivityDetailsResponse | null>(null);
@@ -85,7 +71,7 @@ export default function WorkoutDetailPage({ params }: WorkoutDetailPageProps) {
 
   const handleAnalyze = async (regenerate = false) => {
     if (regenerate || !analysis) {
-      startStream(workoutId, regenerate);
+      await analyze(regenerate);
     }
   };
 
@@ -147,18 +133,6 @@ export default function WorkoutDetailPage({ params }: WorkoutDetailPageProps) {
             </div>
           </div>
 
-          {/* Action buttons */}
-          <div className="flex items-center gap-2">
-            {analysis && !isStreaming && (
-              <button
-                onClick={() => handleAnalyze(true)}
-                disabled={isAnalyzing}
-                className="px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200 hover:bg-gray-800 rounded-md transition-colors"
-              >
-                Regenerate Analysis
-              </button>
-            )}
-          </div>
         </div>
       </div>
 
@@ -262,15 +236,25 @@ export default function WorkoutDetailPage({ params }: WorkoutDetailPageProps) {
                   <SparklesIcon className="text-teal-400" />
                   AI Analysis
                 </h2>
+                {/* Regenerate button */}
+                {analysis && !isAnalyzing && (
+                  <button
+                    onClick={() => handleAnalyze(true)}
+                    disabled={isAnalyzing}
+                    className="px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200 hover:bg-gray-800 rounded-md transition-colors"
+                  >
+                    Regenerate
+                  </button>
+                )}
+                {isAnalyzing && (
+                  <span className="text-xs text-teal-400 flex items-center gap-1">
+                    <span className="animate-pulse">Analyzing...</span>
+                  </span>
+                )}
               </div>
 
-              {isStreaming || streamContent ? (
-                <StreamingAnalysis
-                  content={streamContent}
-                  isStreaming={isStreaming}
-                  isComplete={isComplete}
-                  error={streamError}
-                />
+              {isAnalyzing ? (
+                <WorkoutAnalysisSkeleton />
               ) : isLoadingAnalysis ? (
                 <WorkoutAnalysisSkeleton />
               ) : analysis ? (

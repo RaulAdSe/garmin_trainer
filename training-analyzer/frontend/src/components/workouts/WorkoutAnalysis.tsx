@@ -1,195 +1,249 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import type { WorkoutAnalysis as WorkoutAnalysisType, Workout } from '@/lib/types';
-import {
-  cn,
-  getEffortLevelColor,
-  getEffortLevelLabel,
-} from '@/lib/utils';
+import { cn } from '@/lib/utils';
+import { WorkoutScoreBadge } from './WorkoutScoreBadge';
 
 interface WorkoutAnalysisProps {
   analysis: WorkoutAnalysisType;
   workout?: Workout;
   className?: string;
+  isStreaming?: boolean;
 }
 
 export function WorkoutAnalysis({
   analysis,
   workout,
   className,
+  isStreaming = false,
 }: WorkoutAnalysisProps) {
+  const [showMore, setShowMore] = useState(false);
+
+  // Calculate overall score (use backend score or derive from execution rating)
+  const overallScore = useMemo(() => {
+    if (analysis.overallScore) return analysis.overallScore;
+    // Fallback: derive from execution rating
+    const ratingScores: Record<string, number> = {
+      excellent: 92,
+      good: 78,
+      fair: 55,
+      needs_improvement: 35,
+    };
+    return analysis.executionRating ? ratingScores[analysis.executionRating] || 70 : 70;
+  }, [analysis.overallScore, analysis.executionRating]);
+
+  // Build score breakdown for tooltip
+  const scoreBreakdown = useMemo(() => ({
+    execution: analysis.executionRating || null,
+    trainingEffect: analysis.trainingEffectScore ?? workout?.metrics?.trainingEffect ?? null,
+    load: analysis.loadScore ?? null,
+  }), [analysis, workout]);
+
+  // Build the expanded content
+  const hasExpandedContent = useMemo(() => {
+    return (
+      (analysis.whatWentWell && analysis.whatWentWell.length > 0) ||
+      (analysis.improvements && analysis.improvements.length > 0) ||
+      (analysis.recommendations && analysis.recommendations.length > 0) ||
+      analysis.trainingContext ||
+      analysis.trainingFit
+    );
+  }, [analysis]);
+
   return (
     <div className={cn('space-y-4', className)}>
-      {/* Summary Section */}
-      <AnalysisSection title="Summary" icon={<SummaryIcon />}>
-        <p className="text-gray-300 leading-relaxed">{analysis.summary}</p>
+      {/* Score + Duration Row */}
+      <div className="flex flex-wrap items-center gap-3">
+        {/* Primary Score Badge with hover breakdown */}
+        <WorkoutScoreBadge
+          score={overallScore}
+          breakdown={scoreBreakdown}
+        />
 
-        {/* Effort Level Badge */}
-        {analysis.effortLevel && (
-          <div className="mt-3 flex items-center gap-2">
-            <span className="text-sm text-gray-500">Effort Level:</span>
-            <span
-              className="px-2 py-0.5 text-sm font-medium rounded-full text-white"
-              style={{ backgroundColor: getEffortLevelColor(analysis.effortLevel) }}
-            >
-              {getEffortLevelLabel(analysis.effortLevel)}
-            </span>
-          </div>
+        {/* Duration - simple info */}
+        {workout?.duration && (
+          <MetricBadge
+            label="Duration"
+            value={formatDurationShort(workout.duration)}
+            sublabel={workout.distance ? `${(workout.distance / 1000).toFixed(1)} km` : undefined}
+          />
         )}
-      </AnalysisSection>
+      </div>
 
-      {/* What Went Well Section */}
-      {analysis.whatWentWell && analysis.whatWentWell.length > 0 && (
-        <AnalysisSection
-          title="What Went Well"
-          icon={<CheckIcon />}
-          iconColor="text-green-400"
-          bgColor="bg-green-900/20"
-          borderColor="border-green-800"
+      {/* Main Summary - Single Paragraph */}
+      <div className="bg-gray-800/50 rounded-lg border border-gray-700 p-4">
+        <p className="text-gray-200 text-sm leading-relaxed">
+          {analysis.summary}
+          {isStreaming && <span className="inline-block w-2 h-4 ml-1 bg-teal-400 animate-pulse" />}
+        </p>
+      </div>
+
+      {/* Say More Button */}
+      {hasExpandedContent && !isStreaming && (
+        <button
+          onClick={() => setShowMore(!showMore)}
+          className={cn(
+            'flex items-center gap-2 text-sm text-teal-400 hover:text-teal-300',
+            'transition-colors duration-150'
+          )}
         >
-          <ul className="space-y-2">
-            {analysis.whatWentWell.map((item, index) => (
-              <li key={index} className="flex items-start gap-2">
-                <span className="text-green-400 mt-1 flex-shrink-0">
-                  <PlusIcon />
-                </span>
-                <span className="text-gray-300">{item}</span>
-              </li>
-            ))}
-          </ul>
-        </AnalysisSection>
+          <span>{showMore ? 'Show less' : 'Say more'}</span>
+          <ChevronIcon className={cn('w-4 h-4 transition-transform', showMore && 'rotate-180')} />
+        </button>
       )}
 
-      {/* Areas to Improve Section */}
-      {analysis.improvements && analysis.improvements.length > 0 && (
-        <AnalysisSection
-          title="Areas to Improve"
-          icon={<ImprovementIcon />}
-          iconColor="text-amber-400"
-          bgColor="bg-amber-900/20"
-          borderColor="border-amber-800"
-        >
-          <ul className="space-y-2">
-            {analysis.improvements.map((item, index) => (
-              <li key={index} className="flex items-start gap-2">
-                <span className="text-amber-400 mt-1 flex-shrink-0">
-                  <AlertIcon />
-                </span>
-                <span className="text-gray-300">{item}</span>
-              </li>
-            ))}
-          </ul>
-        </AnalysisSection>
-      )}
+      {/* Expanded Content */}
+      {showMore && (
+        <div className="space-y-4 animate-fadeIn">
+          {/* What Worked */}
+          {analysis.whatWentWell && analysis.whatWentWell.length > 0 && (
+            <ExpandedSection title="What Worked" icon="✓" color="green">
+              <ul className="space-y-1.5">
+                {analysis.whatWentWell.map((item, i) => (
+                  <li key={i} className="text-gray-300 text-sm flex items-start gap-2">
+                    <span className="text-green-400 mt-0.5">•</span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </ExpandedSection>
+          )}
 
-      {/* Training Context Section */}
-      {analysis.trainingContext && (
-        <AnalysisSection
-          title="Training Context"
-          icon={<ContextIcon />}
-          iconColor="text-blue-400"
-          bgColor="bg-blue-900/20"
-          borderColor="border-blue-800"
-        >
-          <p className="text-gray-300 leading-relaxed">{analysis.trainingContext}</p>
-        </AnalysisSection>
-      )}
+          {/* Areas to Watch */}
+          {analysis.improvements && analysis.improvements.length > 0 && (
+            <ExpandedSection title="Watch For" icon="!" color="amber">
+              <ul className="space-y-1.5">
+                {analysis.improvements.map((item, i) => (
+                  <li key={i} className="text-gray-300 text-sm flex items-start gap-2">
+                    <span className="text-amber-400 mt-0.5">•</span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </ExpandedSection>
+          )}
 
-      {/* Recommendations Section */}
-      {analysis.recommendations && analysis.recommendations.length > 0 && (
-        <AnalysisSection
-          title="Recommendations"
-          icon={<RecommendationIcon />}
-          iconColor="text-purple-400"
-          bgColor="bg-purple-900/20"
-          borderColor="border-purple-800"
-        >
-          <ul className="space-y-2">
-            {analysis.recommendations.map((item, index) => (
-              <li key={index} className="flex items-start gap-2">
-                <span className="text-purple-400 mt-1 flex-shrink-0">
-                  <ArrowRightIcon />
-                </span>
-                <span className="text-gray-300">{item}</span>
-              </li>
-            ))}
-          </ul>
-        </AnalysisSection>
-      )}
+          {/* Recommendations */}
+          {analysis.recommendations && analysis.recommendations.length > 0 && (
+            <ExpandedSection title="Next Steps" icon="→" color="purple">
+              <ul className="space-y-1.5">
+                {analysis.recommendations.map((item, i) => (
+                  <li key={i} className="text-gray-300 text-sm flex items-start gap-2">
+                    <span className="text-purple-400 mt-0.5">→</span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </ExpandedSection>
+          )}
 
-      {/* Recovery Recommendation */}
-      {analysis.recoveryRecommendation && (
-        <AnalysisSection
-          title="Recovery Recommendation"
-          icon={<RecoveryIcon />}
-          iconColor="text-teal-400"
-          bgColor="bg-teal-900/20"
-          borderColor="border-teal-800"
-        >
-          <p className="text-gray-300 leading-relaxed">{analysis.recoveryRecommendation}</p>
-        </AnalysisSection>
-      )}
-
-      {/* Additional Sections */}
-      {analysis.sections && analysis.sections.length > 0 && (
-        <div className="space-y-4">
-          {analysis.sections.map((section, index) => (
-            <AnalysisSection key={index} title={section.title} icon={<SectionIcon />}>
-              <p className="text-gray-300 leading-relaxed">{section.content}</p>
-            </AnalysisSection>
-          ))}
+          {/* Training Context */}
+          {(analysis.trainingContext || analysis.trainingFit) && (
+            <ExpandedSection title="Training Context" icon="📊" color="blue">
+              <p className="text-gray-300 text-sm">
+                {analysis.trainingContext || analysis.trainingFit}
+              </p>
+            </ExpandedSection>
+          )}
         </div>
       )}
 
-      {/* Metadata */}
-      <div className="flex items-center justify-between text-xs text-gray-500 pt-4 border-t border-gray-800">
-        <span>
-          Generated: {new Date(analysis.generatedAt).toLocaleString()}
-        </span>
-        {analysis.modelUsed && (
-          <span>Model: {analysis.modelUsed}</span>
-        )}
+      {/* Metadata - compact */}
+      <div className="text-xs text-gray-500 pt-2">
+        {new Date(analysis.generatedAt || analysis.createdAt || new Date().toISOString()).toLocaleString()}
+        {analysis.modelUsed && <span className="ml-2">• {analysis.modelUsed}</span>}
       </div>
     </div>
   );
 }
 
-// Analysis Section Component
-interface AnalysisSectionProps {
+// Simple metric badge (for duration, etc.)
+interface MetricBadgeProps {
+  label: string;
+  value: string | number;
+  sublabel?: string;
+}
+
+function MetricBadge({ label, value, sublabel }: MetricBadgeProps) {
+  return (
+    <div className="rounded-lg border border-gray-700 bg-gray-800/50 px-3 py-2">
+      <p className="text-xs text-gray-400 uppercase tracking-wide">{label}</p>
+      <p className="text-lg font-semibold text-gray-100">
+        {value}
+        {sublabel && <span className="text-xs text-gray-500 ml-1 font-normal">{sublabel}</span>}
+      </p>
+    </div>
+  );
+}
+
+// Expanded section wrapper
+interface ExpandedSectionProps {
   title: string;
-  icon: React.ReactNode;
-  iconColor?: string;
-  bgColor?: string;
-  borderColor?: string;
+  icon: string;
+  color: 'green' | 'amber' | 'purple' | 'blue';
   children: React.ReactNode;
 }
 
-function AnalysisSection({
-  title,
-  icon,
-  iconColor = 'text-gray-400',
-  bgColor = 'bg-gray-800',
-  borderColor = 'border-gray-700',
-  children,
-}: AnalysisSectionProps) {
+function ExpandedSection({ title, icon, color, children }: ExpandedSectionProps) {
+  const colorMap = {
+    green: 'border-green-800/30 bg-green-900/10',
+    amber: 'border-amber-800/30 bg-amber-900/10',
+    purple: 'border-purple-800/30 bg-purple-900/10',
+    blue: 'border-blue-800/30 bg-blue-900/10',
+  };
+
+  const headerColorMap = {
+    green: 'text-green-400',
+    amber: 'text-amber-400',
+    purple: 'text-purple-400',
+    blue: 'text-blue-400',
+  };
+
   return (
-    <div className={cn('rounded-lg border p-4', bgColor, borderColor)}>
-      <h4 className="flex items-center gap-2 font-medium text-gray-100 mb-3">
-        <span className={iconColor}>{icon}</span>
-        {title}
+    <div className={cn('rounded-lg border p-3', colorMap[color])}>
+      <h4 className={cn('text-xs font-medium uppercase tracking-wide mb-2', headerColorMap[color])}>
+        <span className="mr-1">{icon}</span> {title}
       </h4>
       {children}
     </div>
   );
 }
 
-// Loading Skeleton
+// Helper functions
+function formatDurationShort(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}m`;
+}
+
+function ChevronIcon({ className }: { className?: string }) {
+  return (
+    <svg className={cn('w-4 h-4', className)} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+    </svg>
+  );
+}
+
+// Simplified skeleton
 export function WorkoutAnalysisSkeleton() {
   return (
     <div className="space-y-4 animate-pulse">
-      {/* Summary skeleton */}
-      <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
-        <div className="h-5 bg-gray-700 rounded w-24 mb-3" />
+      {/* Score badges */}
+      <div className="flex gap-3">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="rounded-lg border border-gray-700 bg-gray-800/50 px-3 py-2">
+            <div className="h-3 bg-gray-700 rounded w-12 mb-1" />
+            <div className="h-5 bg-gray-700 rounded w-16" />
+          </div>
+        ))}
+      </div>
+
+      {/* Summary */}
+      <div className="bg-gray-800/50 rounded-lg border border-gray-700 p-4">
         <div className="space-y-2">
           <div className="h-4 bg-gray-700 rounded w-full" />
           <div className="h-4 bg-gray-700 rounded w-5/6" />
@@ -197,145 +251,9 @@ export function WorkoutAnalysisSkeleton() {
         </div>
       </div>
 
-      {/* What went well skeleton */}
-      <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
-        <div className="h-5 bg-gray-700 rounded w-32 mb-3" />
-        <div className="space-y-2">
-          <div className="h-4 bg-gray-700 rounded w-full" />
-          <div className="h-4 bg-gray-700 rounded w-4/5" />
-        </div>
-      </div>
-
-      {/* Improvements skeleton */}
-      <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
-        <div className="h-5 bg-gray-700 rounded w-36 mb-3" />
-        <div className="space-y-2">
-          <div className="h-4 bg-gray-700 rounded w-full" />
-          <div className="h-4 bg-gray-700 rounded w-3/4" />
-        </div>
-      </div>
+      {/* Say more button */}
+      <div className="h-4 bg-gray-700 rounded w-20" />
     </div>
-  );
-}
-
-// Icon Components
-function SummaryIcon() {
-  return (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-      />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-      />
-    </svg>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-    </svg>
-  );
-}
-
-function ImprovementIcon() {
-  return (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-      />
-    </svg>
-  );
-}
-
-function AlertIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-      />
-    </svg>
-  );
-}
-
-function ContextIcon() {
-  return (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-      />
-    </svg>
-  );
-}
-
-function RecommendationIcon() {
-  return (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-      />
-    </svg>
-  );
-}
-
-function ArrowRightIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-    </svg>
-  );
-}
-
-function RecoveryIcon() {
-  return (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-      />
-    </svg>
-  );
-}
-
-function SectionIcon() {
-  return (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M4 6h16M4 12h16M4 18h7"
-      />
-    </svg>
   );
 }
 

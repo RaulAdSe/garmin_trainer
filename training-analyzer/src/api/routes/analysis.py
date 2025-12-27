@@ -106,6 +106,7 @@ async def analyze_workout(
     workout_id: str,
     request: Optional[AnalysisRequest] = None,
     stream: bool = Query(default=False, description="Stream the response"),
+    include_details: bool = Query(default=True, description="Include detailed time-series analysis (HR dynamics, pace patterns, etc.)"),
     coach_service=Depends(get_coach_service),
     training_db=Depends(get_training_db),
     cache: AnalysisCache = Depends(get_analysis_cache),
@@ -190,11 +191,52 @@ async def analyze_workout(
                 training_db,
             )
 
+        # Fetch detailed time-series data if requested
+        time_series = None
+        splits = None
+
+        if include_details:
+            try:
+                # Import the details fetching function
+                from .workouts import _fetch_garmin_activity_details
+
+                details = await _fetch_garmin_activity_details(workout_id)
+                if details:
+                    # Extract time_series as dict for the agent
+                    time_series = {
+                        "heart_rate": [{"timestamp": p.timestamp, "hr": p.hr} for p in details.time_series.heart_rate],
+                        "pace_or_speed": [{"timestamp": p.timestamp, "value": p.value} for p in details.time_series.pace_or_speed],
+                        "elevation": [{"timestamp": p.timestamp, "elevation": p.elevation} for p in details.time_series.elevation],
+                        "cadence": [{"timestamp": p.timestamp, "cadence": p.cadence} for p in details.time_series.cadence],
+                    }
+                    # Extract splits as list of dicts
+                    splits = [
+                        {
+                            "split_number": s.split_number,
+                            "distance_m": s.distance_m,
+                            "duration_sec": s.duration_sec,
+                            "pace": s.pace_sec_per_km,
+                            "avg_hr": s.avg_hr,
+                            "max_hr": s.max_hr,
+                            "elevation_gain": s.elevation_gain_m,
+                            "elevation_loss": s.elevation_loss_m,
+                        }
+                        for s in details.splits
+                    ]
+            except Exception as detail_error:
+                # Log but don't fail - detailed data is optional enhancement
+                import logging
+                logging.getLogger(__name__).warning(
+                    f"Could not fetch detailed data for {workout_id}: {detail_error}"
+                )
+
         # Use the agent for structured analysis
         analysis = await agent.analyze(
             workout_data=workout_dict,
             athlete_context=athlete_context,
             similar_workouts=similar_workouts,
+            time_series=time_series,
+            splits=splits,
         )
 
         # Cache the result
@@ -225,6 +267,13 @@ async def _stream_analysis(
     training_db,
 ):
     """Stream analysis response from LLM."""
+    from ...models.analysis import (
+        calculate_training_effect,
+        calculate_load_score,
+        calculate_recovery_hours,
+        calculate_overall_score,
+    )
+
     # Build prompts for streaming
     context_prompt = build_athlete_context_prompt(
         fitness_metrics=briefing.get("training_status"),
@@ -252,6 +301,49 @@ async def _stream_analysis(
 
     import json as json_lib
 
+    # Pre-calculate scores from workout data
+    max_hr = athlete_context.get("max_hr", 185)
+    rest_hr = athlete_context.get("rest_hr", 55)
+
+    training_effect = calculate_training_effect(
+        duration_min=workout_dict.get("duration_min", 0) or 0,
+        avg_hr=workout_dict.get("avg_hr"),
+        max_hr=max_hr,
+        rest_hr=rest_hr,
+        zone3_pct=workout_dict.get("zone3_pct", 0) or 0,
+        zone4_pct=workout_dict.get("zone4_pct", 0) or 0,
+        zone5_pct=workout_dict.get("zone5_pct", 0) or 0,
+    )
+
+    load_score = calculate_load_score(
+        hrss=workout_dict.get("hrss"),
+        trimp=workout_dict.get("trimp"),
+        duration_min=workout_dict.get("duration_min", 0) or 0,
+        avg_hr=workout_dict.get("avg_hr"),
+        max_hr=max_hr,
+    )
+
+    recovery_hours = calculate_recovery_hours(
+        training_effect=training_effect,
+        load_score=load_score,
+    )
+
+    # Derive execution rating from training effect
+    if training_effect >= 3.5:
+        execution_rating = "excellent"
+    elif training_effect >= 2.5:
+        execution_rating = "good"
+    elif training_effect >= 1.5:
+        execution_rating = "fair"
+    else:
+        execution_rating = "needs_improvement"
+
+    overall_score = calculate_overall_score(
+        execution_rating=execution_rating,
+        training_effect=training_effect,
+        load_score=load_score,
+    )
+
     async def generate():
         full_content = ""
         async for chunk in llm.stream_completion(
@@ -263,7 +355,7 @@ async def _stream_analysis(
             # Send SSE format that frontend expects
             yield f"data: {json_lib.dumps({'type': 'content', 'content': chunk})}\n\n"
 
-        # Send done event with a simple analysis structure
+        # Send done event with analysis including scores
         analysis = {
             "id": workout_dict.get("activity_id", ""),
             "workoutId": workout_dict.get("activity_id", ""),
@@ -272,8 +364,13 @@ async def _stream_analysis(
             "improvements": [],
             "trainingContext": "",
             "sections": [],
+            "executionRating": execution_rating,
+            "overallScore": overall_score,
+            "trainingEffectScore": training_effect,
+            "loadScore": load_score,
+            "recoveryHours": recovery_hours,
             "generatedAt": datetime.now().isoformat(),
-            "modelUsed": "gpt-4o",
+            "modelUsed": "gpt-5-mini",
         }
         yield f"data: {json_lib.dumps({'type': 'done', 'analysis': analysis})}\n\n"
         yield "data: [DONE]\n\n"
@@ -281,6 +378,11 @@ async def _stream_analysis(
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable proxy buffering
+        },
     )
 
 
