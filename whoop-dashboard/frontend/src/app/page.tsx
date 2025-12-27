@@ -1128,11 +1128,13 @@ function RecoveryView({
   trendPeriod: TrendPeriod;
   onTrendPeriodChange: (period: TrendPeriod) => void;
 }) {
-  const recoveryHistory = history.map(d => calculateRecovery(d)).reverse();
+  // Slice history based on selected trend period for chart display
+  const periodHistory = history.slice(0, trendPeriod);
+  const recoveryHistory = periodHistory.map(d => calculateRecovery(d)).reverse();
   const maxRecovery = Math.max(...recoveryHistory, 100);
 
   // Calculate week-over-week trend for recovery
-  const recoveryValues = useMemo(() => history.map(d => calculateRecovery(d)), [history]);
+  const recoveryValues = useMemo(() => periodHistory.map(d => calculateRecovery(d)), [periodHistory]);
   const recoveryTrend = useMemo(() => calculateWeekOverWeekTrend(recoveryValues), [recoveryValues]);
 
   return (
@@ -1179,7 +1181,7 @@ function RecoveryView({
         </div>
         <div className="h-32 flex items-end gap-0.5 overflow-x-auto">
           {recoveryHistory.map((val, i) => {
-            const day = history[history.length - 1 - i];
+            const day = periodHistory[periodHistory.length - 1 - i];
             const isSelected = day?.date === selectedDay.date;
             // Adjust bar width based on period
             const barWidth = trendPeriod <= 14 ? 'flex-1' : trendPeriod <= 30 ? 'min-w-[8px] flex-shrink-0' : 'min-w-[4px] flex-shrink-0';
@@ -1198,7 +1200,7 @@ function RecoveryView({
           })}
         </div>
         <div className="flex justify-between mt-2 text-[10px] text-gray-600">
-          <span>{history[history.length - 1]?.date.slice(5)}</span>
+          <span>{periodHistory[periodHistory.length - 1]?.date.slice(5)}</span>
           <span>Today</span>
         </div>
       </div>
@@ -1257,7 +1259,9 @@ function StrainView({
   trendPeriod: TrendPeriod;
   onTrendPeriodChange: (period: TrendPeriod) => void;
 }) {
-  const strainHistory = history.map(d => calculateStrain(d)).reverse();
+  // Slice history based on selected trend period for chart display
+  const periodHistory = history.slice(0, trendPeriod);
+  const strainHistory = periodHistory.map(d => calculateStrain(d)).reverse();
   const maxStrain = Math.max(...strainHistory, 21);
   const recovery = calculateRecovery(selectedDay);
   const strainTarget = getStrainTarget(recovery);
@@ -1266,7 +1270,7 @@ function StrainView({
   const isAboveTarget = strain > strainTarget[1];
 
   // Calculate week-over-week trend for strain
-  const strainValues = useMemo(() => history.map(d => calculateStrain(d)), [history]);
+  const strainValues = useMemo(() => periodHistory.map(d => calculateStrain(d)), [periodHistory]);
   const strainTrend = useMemo(() => calculateWeekOverWeekTrend(strainValues), [strainValues]);
 
   return (
@@ -1335,7 +1339,7 @@ function StrainView({
         </div>
         <div className="h-28 flex items-end gap-0.5 overflow-x-auto">
           {strainHistory.map((val, i) => {
-            const day = history[history.length - 1 - i];
+            const day = periodHistory[periodHistory.length - 1 - i];
             const isSelected = day?.date === selectedDay.date;
             // Adjust bar width based on period
             const barWidth = trendPeriod <= 14 ? 'flex-1' : trendPeriod <= 30 ? 'min-w-[8px] flex-shrink-0' : 'min-w-[4px] flex-shrink-0';
@@ -1397,11 +1401,13 @@ function SleepView({
   onTrendPeriodChange: (period: TrendPeriod) => void;
 }) {
   const sleep = selectedDay.sleep;
-  const sleepHistory = history.map(d => d.sleep?.total_hours || 0).reverse();
+  // Slice history based on selected trend period for chart display
+  const periodHistory = history.slice(0, trendPeriod);
+  const sleepHistory = periodHistory.map(d => d.sleep?.total_hours || 0).reverse();
   const maxSleep = Math.max(...sleepHistory, 10);
 
   // Calculate week-over-week trend for sleep
-  const sleepValues = useMemo(() => history.map(d => d.sleep?.total_hours || 0), [history]);
+  const sleepValues = useMemo(() => periodHistory.map(d => d.sleep?.total_hours || 0), [periodHistory]);
   const sleepTrend = useMemo(() => calculateWeekOverWeekTrend(sleepValues), [sleepValues]);
 
   // Calculate sleep debt and tonight's target
@@ -1533,7 +1539,7 @@ function SleepView({
         </div>
         <div className="h-28 flex items-end gap-0.5 overflow-x-auto">
           {sleepHistory.map((val, i) => {
-            const day = history[history.length - 1 - i];
+            const day = periodHistory[periodHistory.length - 1 - i];
             const isSelected = day?.date === selectedDay.date;
             // Adjust bar width based on period
             const barWidth = trendPeriod <= 14 ? 'flex-1' : trendPeriod <= 30 ? 'min-w-[8px] flex-shrink-0' : 'min-w-[4px] flex-shrink-0';
