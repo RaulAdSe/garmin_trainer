@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { GarminSync, GarminSyncResponse } from '@/components/garmin/GarminSync';
+import { Settings } from '@/components/Settings';
 
 export default function SyncPage() {
   const router = useRouter();
@@ -113,6 +114,9 @@ export default function SyncPage() {
             <span className="px-3 py-1.5 bg-red-500/20 text-red-400 text-sm rounded-full">Resting HR</span>
           </div>
         </div>
+
+        {/* Settings Section */}
+        <Settings />
       </main>
     </div>
   );

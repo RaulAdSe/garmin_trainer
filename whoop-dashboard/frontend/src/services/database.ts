@@ -219,6 +219,27 @@ class DatabaseService {
       return null;
     }
   }
+
+  // Get all wellness data for export
+  async getAllWellnessData(): Promise<WellnessRecord[]> {
+    if (!this.initialized) await this.initialize();
+
+    // Return all records sorted by date (newest first)
+    const sortedDates = Object.keys(this.data).sort().reverse();
+    return sortedDates.map(date => this.data[date]);
+  }
+
+  // Export all data as JSON string
+  async exportData(): Promise<string> {
+    const data = await this.getAllWellnessData();
+    const exportPayload = {
+      exportedAt: new Date().toISOString(),
+      version: '1.0',
+      recordCount: data.length,
+      data,
+    };
+    return JSON.stringify(exportPayload, null, 2);
+  }
 }
 
 // Singleton instance
