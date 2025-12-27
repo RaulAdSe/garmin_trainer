@@ -586,8 +586,8 @@ export default function Dashboard() {
   // Overview period state - for weekly summary averages (7, 14, or 30 days)
   const [overviewPeriod, setOverviewPeriod] = useState<OverviewPeriod>(7);
 
-  // Use client-side hook with dynamic period
-  const { history, loading, error: historyError } = useWellnessHistory(trendPeriod);
+  // Use client-side hook - fetch max available data (90 days) for full history access
+  const { history, loading, error: historyError } = useWellnessHistory(90);
   const garminSync = useGarminSync();
   const [view, setView] = useState<'overview' | 'sleep' | 'strain' | 'recovery'>('overview');
   const [activeInfoModal, setActiveInfoModal] = useState<string | null>(null);
@@ -886,9 +886,9 @@ function OverviewView({
         </div>
       </div>
 
-      {/* Day Selector */}
-      <div className="flex gap-1 overflow-x-auto pb-2 -mx-4 px-4">
-        {history.slice(0, 14).map((day) => {
+      {/* Day Selector - shows all loaded days, swipe right for older */}
+      <div className="flex gap-1 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide">
+        {history.map((day) => {
           const dayRecovery = calculateRecovery(day);
           const isSelected = day.date === selectedDay.date;
           return (
