@@ -66,7 +66,7 @@ async function nativePost(
   }
 }
 
-async function nativeGetText(url: string, headers?: Record<string, string>): Promise<{ data: string; status: number }> {
+async function nativeGetText(url: string, headers?: Record<string, string>): Promise<{ data: string; status: number; headers: Record<string, string> }> {
   try {
     if (isNative) {
       const response: HttpResponse = await CapacitorHttp.get({
@@ -74,16 +74,66 @@ async function nativeGetText(url: string, headers?: Record<string, string>): Pro
         headers: headers || {},
         responseType: 'text',
       });
-      return { data: response.data as string, status: response.status };
+      return { data: response.data as string, status: response.status, headers: response.headers };
     } else {
       const response = await fetch(url, { headers, credentials: 'include' });
       const data = await response.text();
-      return { data, status: response.status };
+      const respHeaders: Record<string, string> = {};
+      response.headers.forEach((v, k) => respHeaders[k] = v);
+      return { data, status: response.status, headers: respHeaders };
     }
   } catch (error) {
     console.error('[HTTP] GET text failed:', url, error);
-    return { data: '', status: 0 };
+    return { data: '', status: 0, headers: {} };
   }
+}
+
+// Helper to extract cookies from Set-Cookie header
+function extractCookies(headers: Record<string, string>): string {
+  const setCookie = headers['Set-Cookie'] || headers['set-cookie'] || '';
+  if (!setCookie) return '';
+
+  // Handle multiple cookies (can be array or semicolon-separated)
+  const cookieStrings = Array.isArray(setCookie) ? setCookie : [setCookie];
+  const cookies: string[] = [];
+
+  for (const cookieStr of cookieStrings) {
+    // Split by comma but be careful about expires dates
+    const parts = cookieStr.split(/,(?=\s*[^;]+=[^;]+)/);
+    for (const part of parts) {
+      // Extract just the name=value part (before any ;)
+      const nameValue = part.split(';')[0].trim();
+      if (nameValue && nameValue.includes('=')) {
+        cookies.push(nameValue);
+      }
+    }
+  }
+
+  return cookies.join('; ');
+}
+
+// Helper to merge cookies
+function mergeCookies(existing: string, newCookies: string): string {
+  if (!existing) return newCookies;
+  if (!newCookies) return existing;
+
+  const cookieMap = new Map<string, string>();
+
+  // Parse existing cookies
+  for (const cookie of existing.split('; ')) {
+    const [name, ...valueParts] = cookie.split('=');
+    if (name) cookieMap.set(name.trim(), valueParts.join('='));
+  }
+
+  // Add/update with new cookies
+  for (const cookie of newCookies.split('; ')) {
+    const [name, ...valueParts] = cookie.split('=');
+    if (name) cookieMap.set(name.trim(), valueParts.join('='));
+  }
+
+  return Array.from(cookieMap.entries())
+    .map(([name, value]) => `${name}=${value}`)
+    .join('; ');
 }
 
 // Garmin Connect endpoints
@@ -91,7 +141,8 @@ const GARMIN_SSO_EMBED = 'https://sso.garmin.com/sso/embed';
 const GC_MODERN = 'https://connect.garmin.com/modern';
 const SIGNIN_URL = 'https://sso.garmin.com/sso/signin';
 const OAUTH_URL = 'https://connectapi.garmin.com/oauth-service/oauth';
-const CONNECT_API = 'https://connect.garmin.com';
+// Use connectapi.garmin.com for API calls (NOT connect.garmin.com/modern/proxy/)
+const CONNECT_API = 'https://connectapi.garmin.com';
 
 // OAuth1 consumer credentials (from https://thegarth.s3.amazonaws.com/oauth_consumer.json)
 const OAUTH_CONSUMER_KEY = 'fc3e99d2-118c-44b8-8ae3-03370dde24c0';
@@ -240,6 +291,8 @@ class GarminService {
   // Track if tokens have been loaded from storage
   private tokensLoaded = false;
   private loadingTokens: Promise<void> | null = null;
+  // Cached user display name (required for API calls)
+  private displayName: string | null = null;
 
   constructor() {
     // Don't call loadTokens() here - it's async and can't be awaited in constructor
@@ -344,25 +397,100 @@ class GarminService {
         'redirectAfterAccountCreationUrl': SSO_EMBED,
       });
 
+      // Use iOS User-Agent for real iOS devices
+      const USER_AGENT = 'GCM-iOS-5.7.2.1';
+
+      // Manual cookie jar - extract from Set-Cookie and pass to subsequent requests
+      let cookieJar = '';
+
+      // Helper to extract cookies from response headers
+      const extractCookiesFromResponse = (headers: Record<string, string>): string => {
+        // Check various header name cases
+        const setCookieHeader = headers['Set-Cookie'] || headers['set-cookie'] ||
+                                headers['SET-COOKIE'] || '';
+        console.log('[Garmin] Raw Set-Cookie header:', setCookieHeader ? setCookieHeader.substring(0, 500) : 'empty');
+        if (!setCookieHeader) return '';
+
+        // Parse cookies - can be a single string or multiple values
+        const cookieValues: string[] = [];
+        const cookieStr = String(setCookieHeader);
+
+        // Split on comma but not within cookie values (be careful with Expires dates)
+        // Improved regex: only split on comma followed by a cookie name (word=)
+        const parts = cookieStr.split(/,\s*(?=[A-Za-z_][A-Za-z0-9_]*=)/);
+        for (const part of parts) {
+          const nameValue = part.split(';')[0].trim();
+          if (nameValue.includes('=')) {
+            cookieValues.push(nameValue);
+          }
+        }
+
+        console.log('[Garmin] Extracted cookies:', cookieValues.join(', '));
+        return cookieValues.join('; ');
+      };
+
+      // Helper to merge cookies
+      const addCookies = (newCookies: string) => {
+        if (!newCookies) return;
+        if (!cookieJar) {
+          cookieJar = newCookies;
+        } else {
+          // Merge, overwriting duplicates
+          const existing = new Map(cookieJar.split('; ').map(c => {
+            const [k, ...v] = c.split('=');
+            return [k, v.join('=')] as [string, string];
+          }));
+          for (const cookie of newCookies.split('; ')) {
+            const [k, ...v] = cookie.split('=');
+            existing.set(k, v.join('='));
+          }
+          cookieJar = Array.from(existing.entries()).map(([k, v]) => `${k}=${v}`).join('; ');
+        }
+      };
+
       // Step 1: Set cookies with embed request
-      console.log('[Garmin] Setting cookies...');
-      await nativeGetText(`${SSO_EMBED}?${embedParams.toString()}`, {
-        'User-Agent': 'com.garmin.android.apps.connectmobile',
+      // CapacitorHttp on iOS stores cookies in shared HTTPCookieStorage automatically
+      console.log('[Garmin] Setting cookies (via HTTPCookieStorage)...');
+      const embedResponse = await CapacitorHttp.get({
+        url: `${SSO_EMBED}?${embedParams.toString()}`,
+        headers: {
+          'User-Agent': USER_AGENT,
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+        responseType: 'text',
       });
+      console.log('[Garmin] Embed response status:', embedResponse.status);
+      // Still extract cookies for logging/debugging, but DON'T set Cookie header
+      // URLSession will automatically use cookies from HTTPCookieStorage
+      addCookies(extractCookiesFromResponse(embedResponse.headers));
+      console.log('[Garmin] Cookies received from embed:', cookieJar ? 'yes' : 'no');
 
       // Step 2: Get CSRF token from signin page
+      // DON'T set Cookie header - let URLSession handle cookies automatically
       console.log('[Garmin] Fetching CSRF token...');
       const signinUrl = `${SSO}/signin?${signinParams.toString()}`;
-      const csrfResponse = await nativeGetText(signinUrl, {
-        'User-Agent': 'com.garmin.android.apps.connectmobile',
+      const csrfResponse = await CapacitorHttp.get({
+        url: signinUrl,
+        headers: {
+          'User-Agent': USER_AGENT,
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Referer': `${SSO_EMBED}?${embedParams.toString()}`,
+          // NO Cookie header - let URLSession use HTTPCookieStorage automatically
+        },
+        responseType: 'text',
       });
 
       if (csrfResponse.status !== 200) {
         return { success: false, error: `Failed to load login page (${csrfResponse.status})` };
       }
 
+      addCookies(extractCookiesFromResponse(csrfResponse.headers));
+      console.log('[Garmin] Cookie jar after CSRF:', cookieJar ? 'has cookies' : 'empty');
+
+      const csrfHtml = csrfResponse.data as string;
+
       // Extract CSRF token (exact regex from garth)
-      const csrfMatch = csrfResponse.data.match(/name="_csrf"\s+value="(.+?)"/);
+      const csrfMatch = csrfHtml.match(/name="_csrf"\s+value="(.+?)"/);
       if (!csrfMatch) {
         console.log('[Garmin] CSRF not found in response');
         return { success: false, error: 'Could not find CSRF token' };
@@ -370,29 +498,44 @@ class GarminService {
       const csrf = csrfMatch[1];
       console.log('[Garmin] CSRF token found');
 
-      // Step 3: Submit login credentials
+      // Step 3: Submit login credentials WITH cookies
       console.log('[Garmin] Submitting credentials...');
-      const loginData = new URLSearchParams();
-      loginData.append('username', email);
-      loginData.append('password', password);
-      loginData.append('embed', 'true');
-      loginData.append('_csrf', csrf);
+      console.log('[Garmin] Cookie jar contents:', cookieJar);
 
-      const loginResponse = await nativePost(
-        signinUrl,
-        loginData.toString(),
-        {
-          'User-Agent': 'com.garmin.android.apps.connectmobile',
+      // Manually build URL-encoded form data string with proper encoding
+      const formDataParts = [
+        `username=${encodeURIComponent(email)}`,
+        `password=${encodeURIComponent(password)}`,
+        `embed=true`,
+        `_csrf=${encodeURIComponent(csrf)}`,
+      ];
+      const formDataString = formDataParts.join('&');
+      console.log('[Garmin] Form data (redacted password):', formDataString.replace(/password=[^&]+/, 'password=***'));
+
+      // CapacitorHttp on iOS uses URLSession with shared HTTPCookieStorage
+      // DON'T set Cookie header - let URLSession handle cookies automatically
+      // Setting Cookie header manually can interfere with URLSession's automatic cookie handling
+      console.log('[Garmin] POST login - relying on HTTPCookieStorage for cookies...');
+      console.log('[Garmin] Expected cookies from previous requests:', cookieJar ? 'yes' : 'no');
+
+      const loginResponse = await CapacitorHttp.post({
+        url: signinUrl,
+        headers: {
+          'User-Agent': USER_AGENT,
           'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
           'Referer': signinUrl,
-        }
-      );
+          'Origin': 'https://sso.garmin.com',
+          // NO Cookie header - URLSession will automatically include cookies from HTTPCookieStorage
+        },
+        data: formDataString,
+        responseType: 'text',
+      });
 
       console.log('[Garmin] Login response status:', loginResponse.status);
 
-      const responseText = typeof loginResponse.data === 'string'
-        ? loginResponse.data
-        : JSON.stringify(loginResponse.data);
+      const responseText = loginResponse.data as string;
 
       // Check page title for success (garth checks for "Success" title)
       const titleMatch = responseText.match(/<title>(.+?)<\/title>/);
@@ -450,7 +593,7 @@ class GarminService {
       const oauth1Response = await nativeGetText(
         `${preAuthUrl}?${preAuthQueryString}`,
         {
-          'User-Agent': 'com.garmin.android.apps.connectmobile',
+          'User-Agent': USER_AGENT,
           'Authorization': preAuthHeader,
         }
       );
@@ -495,7 +638,7 @@ class GarminService {
         oauth2Url,
         '',
         {
-          'User-Agent': 'com.garmin.android.apps.connectmobile',
+          'User-Agent': USER_AGENT,
           'Authorization': oauth2Header,
           'Content-Type': 'application/x-www-form-urlencoded',
         }
@@ -516,8 +659,22 @@ class GarminService {
         scope?: string;
       };
 
+      console.log('[Garmin] OAuth2 response data:', JSON.stringify(oauth2Data, null, 2));
+      console.log('[Garmin] OAuth2 scopes:', oauth2Data.scope);
+
       if (!oauth2Data.access_token) {
         return { success: false, error: 'No access token received' };
+      }
+
+      // Decode JWT to see claims
+      try {
+        const tokenParts = oauth2Data.access_token.split('.');
+        if (tokenParts.length === 3) {
+          const payload = JSON.parse(atob(tokenParts[1]));
+          console.log('[Garmin] JWT payload:', JSON.stringify(payload, null, 2));
+        }
+      } catch (e) {
+        console.log('[Garmin] Could not decode JWT');
       }
 
       this.oauth2Token = {
@@ -787,11 +944,20 @@ class GarminService {
       // Ensure we have a valid token before making the request
       const accessToken = await this.ensureValidToken();
 
-      const response = await nativeGet(`${CONNECT_API}${endpoint}`, {
+      // Use connectapi.garmin.com directly (like garth library does)
+      const apiUrl = `${CONNECT_API}${endpoint}`;
+      console.log(`[Garmin] API Request: ${apiUrl}`);
+      console.log(`[Garmin] Token present: ${!!accessToken}, length: ${accessToken?.length || 0}`);
+
+      const response = await nativeGet(apiUrl, {
         'Authorization': `Bearer ${accessToken}`,
         'User-Agent': 'com.garmin.android.apps.connectmobile',
         'Accept': 'application/json',
+        'DI-Units': 'metric',
+        'NK': 'NT',
       });
+
+      console.log(`[Garmin] Response status: ${response.status}`);
 
       if (response.status === 401) {
         // Token expired unexpectedly, force refresh and retry once
@@ -803,10 +969,12 @@ class GarminService {
 
         // Retry with new token
         const newToken = await this.ensureValidToken();
-        const retryResponse = await nativeGet(`${CONNECT_API}${endpoint}`, {
+        const retryResponse = await nativeGet(apiUrl, {
           'Authorization': `Bearer ${newToken}`,
           'User-Agent': 'com.garmin.android.apps.connectmobile',
           'Accept': 'application/json',
+          'DI-Units': 'metric',
+          'NK': 'NT',
         });
 
         if (retryResponse.status !== 200) {
@@ -860,10 +1028,30 @@ class GarminService {
 
   // Fetch sleep data
   async fetchSleep(date: string): Promise<SleepData | null> {
+    // Get displayName for user-specific endpoints
+    const displayName = await this.fetchDisplayName();
+    if (!displayName) {
+      console.warn('[Garmin] No displayName available for sleep fetch');
+      // Try without displayName as fallback
+      const data = await this.apiRequest<Record<string, unknown>>(
+        `/wellness-service/wellness/dailySleepData?date=${date}&nonSleepBufferMinutes=60`
+      );
+      console.log(`[Garmin] Sleep API (no displayName) response for ${date}:`, JSON.stringify(data, null, 2));
+      return this.parseSleepData(date, data);
+    }
+
+    // Use dailySleepData with displayName (correct endpoint per python-garminconnect)
     const data = await this.apiRequest<Record<string, unknown>>(
-      `/wellness-service/wellness/dailySleep?date=${date}`
+      `/wellness-service/wellness/dailySleepData/${displayName}?date=${date}&nonSleepBufferMinutes=60`
     );
 
+    console.log(`[Garmin] Sleep API response for ${date}:`, JSON.stringify(data, null, 2));
+
+    return this.parseSleepData(date, data);
+  }
+
+  // Helper to parse sleep data response
+  private parseSleepData(date: string, data: Record<string, unknown> | null): SleepData | null {
     if (!data) return null;
 
     const deep = (data.deepSleepSeconds as number) || 0;
@@ -874,7 +1062,7 @@ class GarminService {
     const totalInBed = total + awake;
     const efficiency = totalInBed > 0 ? (total / totalInBed) * 100 : 0;
 
-    return {
+    const result = {
       date,
       sleep_start: data.sleepStartTimestampLocal as string || null,
       sleep_end: data.sleepEndTimestampLocal as string || null,
@@ -888,6 +1076,8 @@ class GarminService {
       avg_spo2: data.avgOxygenSaturation as number || null,
       avg_respiration: data.avgSleepRespirationValue as number || null,
     };
+    console.log(`[Garmin] Sleep parsed result for ${date}:`, JSON.stringify(result, null, 2));
+    return result;
   }
 
   // Fetch HRV data
@@ -895,6 +1085,8 @@ class GarminService {
     const data = await this.apiRequest<Record<string, unknown>>(
       `/hrv-service/hrv/${date}`
     );
+
+    console.log(`[Garmin] HRV API response for ${date}:`, JSON.stringify(data, null, 2));
 
     if (!data) return null;
 
@@ -926,6 +1118,9 @@ class GarminService {
     );
     const bbData = bbResult && bbResult.length > 0 ? bbResult[0] : null;
 
+    console.log(`[Garmin] Stress API response for ${date}:`, JSON.stringify(stressData, null, 2));
+    console.log(`[Garmin] BodyBattery API response for ${date}:`, JSON.stringify(bbData, null, 2));
+
     if (!stressData && !bbData) return null;
 
     return {
@@ -945,16 +1140,30 @@ class GarminService {
 
   // Fetch activity data
   async fetchActivity(date: string): Promise<ActivityData | null> {
+    // Get displayName for user-specific endpoints
+    const displayName = await this.fetchDisplayName();
+
     // Fetch steps
     const stepsData = await this.apiRequest<Array<Record<string, unknown>>>(
       `/usersummary-service/stats/steps/daily/${date}/${date}`
     );
     const daySteps = stepsData && stepsData.length > 0 ? stepsData[0] : null;
 
-    // Fetch daily summary
-    const summaryData = await this.apiRequest<Record<string, unknown>>(
-      `/usersummary-service/usersummary/daily/${date}`
-    );
+    // Fetch daily summary (requires displayName)
+    let summaryData: Record<string, unknown> | null = null;
+    if (displayName) {
+      summaryData = await this.apiRequest<Record<string, unknown>>(
+        `/usersummary-service/usersummary/daily/${displayName}?calendarDate=${date}`
+      );
+    } else {
+      // Fallback without displayName
+      summaryData = await this.apiRequest<Record<string, unknown>>(
+        `/usersummary-service/usersummary/daily?calendarDate=${date}`
+      );
+    }
+
+    console.log(`[Garmin] Steps API response for ${date}:`, JSON.stringify(daySteps, null, 2));
+    console.log(`[Garmin] Summary API response for ${date}:`, JSON.stringify(summaryData, null, 2));
 
     let steps = (daySteps?.totalSteps as number) || 0;
     let stepsGoal = (daySteps?.stepGoal as number) || 10000;
@@ -990,13 +1199,94 @@ class GarminService {
 
   // Fetch resting heart rate
   async fetchRestingHeartRate(date: string): Promise<number | null> {
-    const data = await this.apiRequest<Record<string, unknown>>(
-      `/wellness-service/wellness/dailyHeartRate?date=${date}`
-    );
+    // Get displayName for user-specific endpoints
+    const displayName = await this.fetchDisplayName();
+
+    let data: Record<string, unknown> | null = null;
+    if (displayName) {
+      data = await this.apiRequest<Record<string, unknown>>(
+        `/wellness-service/wellness/dailyHeartRate/${displayName}?date=${date}`
+      );
+    } else {
+      // Fallback without displayName
+      data = await this.apiRequest<Record<string, unknown>>(
+        `/wellness-service/wellness/dailyHeartRate?date=${date}`
+      );
+    }
+
+    console.log(`[Garmin] HeartRate API response for ${date}:`, JSON.stringify(data, null, 2));
 
     if (!data) return null;
     const rhr = data.restingHeartRate as number;
     return rhr && rhr > 0 ? rhr : null;
+  }
+
+  // Fetch user's display name (required for API calls)
+  async fetchDisplayName(): Promise<string | null> {
+    if (this.displayName) {
+      return this.displayName;
+    }
+
+    console.log('[Garmin] Fetching user display name...');
+
+    // Try social profile first
+    const socialProfile = await this.apiRequest<{ displayName?: string; userName?: string }>(
+      '/userprofile-service/socialProfile'
+    );
+
+    if (socialProfile?.displayName) {
+      this.displayName = socialProfile.displayName;
+      console.log('[Garmin] Got displayName from socialProfile:', this.displayName);
+      return this.displayName;
+    }
+
+    // Fallback to personal profile
+    const personalProfile = await this.apiRequest<{ displayName?: string; userName?: string }>(
+      '/userprofile-service/userprofile/personal'
+    );
+
+    if (personalProfile?.displayName) {
+      this.displayName = personalProfile.displayName;
+      console.log('[Garmin] Got displayName from personal profile:', this.displayName);
+      return this.displayName;
+    }
+
+    // Try to extract from JWT token
+    if (this.oauth2Token?.access_token) {
+      try {
+        const tokenParts = this.oauth2Token.access_token.split('.');
+        if (tokenParts.length === 3) {
+          const payload = JSON.parse(atob(tokenParts[1]));
+          if (payload.sub) {
+            this.displayName = payload.sub;
+            console.log('[Garmin] Using sub from JWT as displayName:', this.displayName);
+            return this.displayName;
+          }
+        }
+      } catch (e) {
+        console.log('[Garmin] Could not extract displayName from JWT');
+      }
+    }
+
+    console.warn('[Garmin] Could not get displayName');
+    return null;
+  }
+
+  // Debug: fetch user profile to verify API access
+  async debugFetchProfile(): Promise<void> {
+    console.log('[Garmin] DEBUG: Fetching user profile...');
+
+    // Try different endpoints to see what works
+    const endpoints = [
+      '/userprofile-service/socialProfile',
+      '/userprofile-service/userprofile/personal',
+      '/device-service/deviceservice/device-info/all',
+    ];
+
+    for (const endpoint of endpoints) {
+      const data = await this.apiRequest<Record<string, unknown>>(endpoint);
+      console.log(`[Garmin] DEBUG ${endpoint}:`, JSON.stringify(data, null, 2));
+    }
   }
 
   // Fetch all wellness data for a date
@@ -1034,10 +1324,35 @@ class GarminService {
         return { success: false, daysProcessed: 0, error: 'Not authenticated' };
       }
 
+      // DEBUG: Decode and log the cached JWT to see what scopes/claims it has
+      if (this.oauth2Token?.access_token) {
+        console.log('[Garmin] DEBUG: Analyzing cached token...');
+        try {
+          const tokenParts = this.oauth2Token.access_token.split('.');
+          if (tokenParts.length === 3) {
+            const header = JSON.parse(atob(tokenParts[0]));
+            const payload = JSON.parse(atob(tokenParts[1]));
+            console.log('[Garmin] JWT Header:', JSON.stringify(header, null, 2));
+            console.log('[Garmin] JWT Payload:', JSON.stringify(payload, null, 2));
+            console.log('[Garmin] JWT scopes:', payload.scope || payload.scp || 'NO SCOPES FOUND');
+          }
+        } catch (e) {
+          console.log('[Garmin] Could not decode cached JWT:', e);
+        }
+      }
+
       // Initialize database
       await db.initialize();
 
+      // DEBUG: Test API access first
+      await this.debugFetchProfile();
+
+      // Fetch and cache displayName before making API calls
+      const displayName = await this.fetchDisplayName();
+      console.log('[Garmin] Using displayName for API calls:', displayName);
+
       const today = new Date();
+      console.log('[Garmin] DEBUG: Today date object:', today.toISOString());
       let processed = 0;
 
       for (let i = 0; i < days; i++) {
