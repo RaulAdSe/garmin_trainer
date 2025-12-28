@@ -32,6 +32,26 @@ from .power import (
     calculate_power_to_weight,
     calculate_work,
 )
+from .swim import (
+    # Core swim calculations
+    calculate_swolf,
+    calculate_stroke_rate,
+    calculate_pace_per_100m,
+    calculate_css,
+    calculate_swim_tss,
+    calculate_swim_zones,
+    calculate_stroke_efficiency,
+    calculate_swim_efficiency_index,
+    # Aliases and utilities
+    estimate_swim_tss,
+    get_swim_zones,
+    get_swim_zone_for_pace,
+    format_swim_pace,
+    # Analysis functions
+    analyze_stroke_efficiency,
+    analyze_swim_session,
+    estimate_css_from_race_times,
+)
 
 __all__ = [
     # Load calculations
@@ -64,4 +84,20 @@ __all__ = [
     "calculate_efficiency_factor",
     "calculate_power_to_weight",
     "calculate_work",
+    # Swim metrics
+    "calculate_swolf",
+    "calculate_stroke_rate",
+    "calculate_pace_per_100m",
+    "calculate_css",
+    "calculate_swim_tss",
+    "calculate_swim_zones",
+    "calculate_stroke_efficiency",
+    "calculate_swim_efficiency_index",
+    "estimate_swim_tss",
+    "get_swim_zones",
+    "get_swim_zone_for_pace",
+    "format_swim_pace",
+    "analyze_stroke_efficiency",
+    "analyze_swim_session",
+    "estimate_css_from_race_times",
 ]

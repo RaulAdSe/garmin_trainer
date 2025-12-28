@@ -92,12 +92,54 @@ CREATE TABLE IF NOT EXISTS swim_metrics (
     avg_swolf REAL,
     avg_stroke_rate REAL,
     css_pace_sec INTEGER,
+    swim_pace_per_100m INTEGER,
+    stroke_type TEXT,
+    distance_per_stroke REAL,
+    efficiency_index REAL,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (activity_id) REFERENCES activity_metrics(activity_id)
 );
 
 -- Create index for swim metrics
 CREATE INDEX IF NOT EXISTS idx_swim_metrics_activity ON swim_metrics(activity_id);
+
+-- =============================================================================
+-- Phase 2: Multi-sport Extensions - Swim Profile Table
+-- =============================================================================
+
+-- Swimmer profile for CSS and preferences (one per athlete)
+CREATE TABLE IF NOT EXISTS swim_profile (
+    athlete_id TEXT PRIMARY KEY DEFAULT 'default',
+    -- Critical Swim Speed (threshold pace in sec/100m)
+    css_pace INTEGER,
+    css_pace_formatted TEXT,
+    -- CSS test times for recalculation
+    css_test_400m_sec REAL,
+    css_test_200m_sec REAL,
+    css_test_date TEXT,
+    -- Pool preferences
+    preferred_pool_length INTEGER DEFAULT 25,
+    preferred_stroke TEXT DEFAULT 'freestyle',
+    -- Swim-specific fitness metrics
+    swim_ctl REAL DEFAULT 0.0,
+    swim_atl REAL DEFAULT 0.0,
+    -- Efficiency metrics by stroke (average SWOLF)
+    freestyle_swolf REAL,
+    backstroke_swolf REAL,
+    breaststroke_swolf REAL,
+    butterfly_swolf REAL,
+    -- Zone paces (sec/100m)
+    zone1_recovery_pace INTEGER,
+    zone2_aerobic_pace INTEGER,
+    zone3_threshold_pace INTEGER,
+    zone4_vo2max_pace INTEGER,
+    zone5_sprint_pace INTEGER,
+    -- Metadata
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create index for swim profile
+CREATE INDEX IF NOT EXISTS idx_swim_profile_athlete ON swim_profile(athlete_id);
 
 -- Race goals table for tracking target races
 CREATE TABLE IF NOT EXISTS race_goals (
