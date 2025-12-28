@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';
-import Link from 'next/link';
+import { Link } from '@/i18n/navigation';
 import type { Workout, WorkoutAnalysis } from '@/lib/types';
 import {
   cn,

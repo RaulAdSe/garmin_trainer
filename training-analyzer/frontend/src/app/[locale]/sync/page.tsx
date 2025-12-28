@@ -1,10 +1,12 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
+import { useRouter } from '@/i18n/navigation';
 import { GarminSync } from '@/components/garmin/GarminSync';
 import { GarminSyncResponse } from '@/lib/api-client';
 
 export default function SyncPage() {
+  const t = useTranslations('sync');
   const router = useRouter();
 
   const handleSyncComplete = (result: GarminSyncResponse) => {
@@ -21,10 +23,10 @@ export default function SyncPage() {
       {/* Header */}
       <div className="animate-fadeIn">
         <h1 className="text-xl sm:text-2xl font-bold text-gray-100">
-          Sync Activities
+          {t('title')}
         </h1>
         <p className="text-sm sm:text-base text-gray-400 mt-1">
-          Connect to Garmin to import your activities
+          {t('subtitle')}
         </p>
       </div>
 
@@ -39,7 +41,7 @@ export default function SyncPage() {
       {/* Help Section */}
       <div className="max-w-lg bg-gray-900 rounded-lg border border-gray-800 p-6 animate-slideUp" style={{ animationDelay: '0.1s' }}>
         <h2 className="text-lg font-semibold text-gray-100 mb-4">
-          How it works
+          {t('howItWorks')}
         </h2>
         <ul className="space-y-3 text-sm text-gray-400">
           <li className="flex items-start gap-3">
@@ -47,7 +49,7 @@ export default function SyncPage() {
               1
             </span>
             <span>
-              Enter your Garmin Connect credentials. Your password is only used for this sync request and is not stored.
+              {t('howItWorksDesc')}
             </span>
           </li>
           <li className="flex items-start gap-3">
@@ -55,7 +57,7 @@ export default function SyncPage() {
               2
             </span>
             <span>
-              Select how many days of activities you want to import. More days means longer sync time.
+              {t('selectDays')}
             </span>
           </li>
           <li className="flex items-start gap-3">
@@ -63,7 +65,7 @@ export default function SyncPage() {
               3
             </span>
             <span>
-              Activities are downloaded and stored locally. You can then analyze them with AI-powered insights.
+              {t('activitiesStored')}
             </span>
           </li>
         </ul>
@@ -72,15 +74,15 @@ export default function SyncPage() {
       {/* Supported Features */}
       <div className="max-w-lg bg-gray-900 rounded-lg border border-gray-800 p-6 animate-slideUp" style={{ animationDelay: '0.2s' }}>
         <h2 className="text-lg font-semibold text-gray-100 mb-4">
-          Supported Activity Types
+          {t('supportedTypes')}
         </h2>
         <div className="flex flex-wrap gap-2">
-          {['Running', 'Cycling', 'Swimming', 'Walking', 'Hiking', 'Strength Training'].map((type) => (
+          {(['activityRunning', 'activityCycling', 'activitySwimming', 'activityWalking', 'activityHiking', 'activityStrength'] as const).map((typeKey) => (
             <span
-              key={type}
+              key={typeKey}
               className="px-3 py-1.5 bg-gray-800 text-gray-300 text-sm rounded-full"
             >
-              {type}
+              {t(typeKey)}
             </span>
           ))}
         </div>

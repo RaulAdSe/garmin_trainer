@@ -881,4 +881,67 @@ export async function getExplainedSession(
   return handleResponse<SessionExplanation>(response);
 }
 
+// ============================================
+// Chat endpoints
+// ============================================
+
+export interface ChatMessageRequest {
+  message: string;
+  conversation_id?: string;
+  language?: string;  // Language code (en, es)
+}
+
+export interface ChatMessageResponse {
+  response: string;
+  data_sources: string[];
+  intent: string;
+  conversation_id: string;
+}
+
+export interface ChatSuggestionsResponse {
+  questions: string[];
+}
+
+// Send a chat message
+export async function sendChatMessage(
+  request: ChatMessageRequest
+): Promise<ChatMessageResponse> {
+  const response = await fetch(`${API_BASE}/chat`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      message: request.message,
+      conversation_id: request.conversation_id,
+      language: request.language || 'en',
+    }),
+  });
+  return handleResponse<ChatMessageResponse>(response);
+}
+
+// Get chat suggestions
+export async function getChatSuggestions(): Promise<ChatSuggestionsResponse> {
+  const response = await fetch(`${API_BASE}/chat/suggestions`);
+  return handleResponse<ChatSuggestionsResponse>(response);
+}
+
+// Start a new conversation
+export async function startNewConversation(): Promise<{ conversation_id: string }> {
+  const response = await fetch(`${API_BASE}/chat/new`, {
+    method: 'POST',
+  });
+  return handleResponse<{ conversation_id: string }>(response);
+}
+
+// Clear conversation history
+export async function clearConversation(
+  conversationId: string
+): Promise<{ cleared: boolean }> {
+  const response = await fetch(`${API_BASE}/chat/history/${conversationId}`, {
+    method: 'DELETE',
+  });
+  return handleResponse<{ cleared: boolean }>(response);
+}
+
 export { ApiClientError };
