@@ -1,6 +1,10 @@
 """Build athlete context for LLM prompt injection."""
 
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..metrics.power import PowerZones, CyclingAthleteContext
+    from ..models.workouts import SwimZones, SwimAthleteContext
 
 
 def _format_time(seconds: int) -> str:
@@ -27,6 +31,15 @@ def _classify_activity_level(steps: Optional[int]) -> str:
         return "HIGH - very active"
 
 
+def _format_swim_pace(pace_sec: int) -> str:
+    """Format swim pace in seconds to mm:ss/100m format."""
+    if not pace_sec:
+        return "N/A"
+    minutes = pace_sec // 60
+    seconds = pace_sec % 60
+    return f"{minutes}:{seconds:02d}/100m"
+
+
 def build_athlete_context_prompt(
     fitness_metrics: Optional[Dict[str, Any]] = None,
     profile: Optional[Any] = None,
@@ -38,6 +51,10 @@ def build_athlete_context_prompt(
     training_status: Optional[str] = None,
     daily_activity: Optional[Dict[str, Any]] = None,
     prev_day_activity: Optional[Dict[str, Any]] = None,
+    cycling_context: Optional["CyclingAthleteContext"] = None,
+    power_zones: Optional["PowerZones"] = None,
+    swim_context: Optional["SwimAthleteContext"] = None,
+    swim_zones: Optional["SwimZones"] = None,
 ) -> str:
     """
     Build a formatted athlete context string for LLM prompt injection.
@@ -56,6 +73,10 @@ def build_athlete_context_prompt(
         training_status: Current training status (productive, unproductive, etc.)
         daily_activity: Daily activity averages (steps, active_minutes)
         prev_day_activity: Previous day activity data (steps, active_minutes, date)
+        cycling_context: CyclingAthleteContext with FTP, power zones, and cycling metrics
+        power_zones: PowerZones dataclass with 7-zone Coggan model
+        swim_context: SwimAthleteContext with CSS, swim zones, and swim metrics
+        swim_zones: SwimZones dataclass with 5-zone CSS-based model
 
     Returns:
         Formatted context string
@@ -228,6 +249,92 @@ def build_athlete_context_prompt(
                 parts.append(f"    - {a_date}: {a_type} {a_dist:.1f}km in {a_dur:.0f}min")
         parts.append("")
 
+    # Cycling-specific context (when FTP/power zones are available)
+    if cycling_context is not None:
+        parts.append("CYCLING METRICS:")
+        parts.append(f"  FTP: {cycling_context.ftp}W")
+        if cycling_context.power_to_weight:
+            parts.append(f"  Power-to-Weight: {cycling_context.power_to_weight} W/kg")
+        if cycling_context.power_zones:
+            parts.append(f"  Cycling CTL: {cycling_context.cycling_ctl:.1f}")
+            parts.append(f"  Cycling ATL: {cycling_context.cycling_atl:.1f}")
+            parts.append(f"  Cycling TSB: {cycling_context.cycling_tsb:.1f}")
+        if cycling_context.typical_efficiency_factor:
+            parts.append(f"  Efficiency Factor: {cycling_context.typical_efficiency_factor:.2f}")
+        parts.append("")
+        parts.append("POWER ZONES (Coggan):")
+        if cycling_context.power_zones:
+            zone_names = ["Active Recovery", "Endurance", "Tempo", "Threshold", "VO2max", "Anaerobic", "Neuromuscular"]
+            for i in range(1, 8):
+                min_w, max_w = cycling_context.power_zones.get_zone(i)
+                parts.append(f"  Z{i} ({zone_names[i-1]}): {min_w}-{max_w}W")
+        parts.append("")
+
+    elif power_zones is not None:
+        # If only power_zones provided (without full cycling context)
+        parts.append("POWER ZONES (Coggan):")
+        parts.append(f"  FTP: {power_zones.ftp}W")
+        zone_names = ["Active Recovery", "Endurance", "Tempo", "Threshold", "VO2max", "Anaerobic", "Neuromuscular"]
+        for i in range(1, 8):
+            min_w, max_w = power_zones.get_zone(i)
+            parts.append(f"  Z{i} ({zone_names[i-1]}): {min_w}-{max_w}W")
+        parts.append("")
+
+    # Swimming-specific context (when CSS/swim zones are available)
+    if swim_context is not None:
+        parts.append("SWIM METRICS:")
+        parts.append(f"  CSS (Critical Swim Speed): {_format_swim_pace(swim_context.css_pace)}")
+        if swim_context.preferred_pool_length:
+            parts.append(f"  Preferred Pool: {swim_context.preferred_pool_length}m")
+        if swim_context.preferred_stroke:
+            stroke = swim_context.preferred_stroke
+            if hasattr(stroke, 'value'):
+                stroke = stroke.value
+            parts.append(f"  Preferred Stroke: {stroke.title()}")
+        parts.append(f"  Swim CTL: {swim_context.swim_ctl:.1f}")
+        parts.append(f"  Swim ATL: {swim_context.swim_atl:.1f}")
+
+        # SWOLF by stroke if available
+        swolf_data = []
+        if swim_context.freestyle_swolf:
+            swolf_data.append(f"Free: {swim_context.freestyle_swolf}")
+        if swim_context.backstroke_swolf:
+            swolf_data.append(f"Back: {swim_context.backstroke_swolf}")
+        if swim_context.breaststroke_swolf:
+            swolf_data.append(f"Breast: {swim_context.breaststroke_swolf}")
+        if swim_context.butterfly_swolf:
+            swolf_data.append(f"Fly: {swim_context.butterfly_swolf}")
+        if swolf_data:
+            parts.append(f"  SWOLF by Stroke: {', '.join(swolf_data)}")
+        parts.append("")
+
+        # Swim zones from context
+        parts.append("SWIM ZONES (CSS-based):")
+        zone_paces = swim_context.get_swim_zones()
+        zone_names = [
+            ("Zone 1 (Recovery)", "zone1_recovery"),
+            ("Zone 2 (Aerobic)", "zone2_aerobic"),
+            ("Zone 3 (Threshold)", "zone3_threshold"),
+            ("Zone 4 (VO2max)", "zone4_vo2max"),
+            ("Zone 5 (Sprint)", "zone5_sprint"),
+        ]
+        for name, key in zone_names:
+            if key in zone_paces:
+                fast, slow = zone_paces[key]
+                parts.append(f"  {name}: {_format_swim_pace(fast)} - {_format_swim_pace(slow)}")
+        parts.append("")
+
+    elif swim_zones is not None:
+        # If only swim_zones provided (without full swim context)
+        parts.append("SWIM ZONES (CSS-based):")
+        parts.append(f"  CSS: {_format_swim_pace(swim_zones.css_pace)}")
+        parts.append(f"  Zone 1 (Recovery): {_format_swim_pace(swim_zones.zone1_recovery[0])} - {_format_swim_pace(swim_zones.zone1_recovery[1])}")
+        parts.append(f"  Zone 2 (Aerobic): {_format_swim_pace(swim_zones.zone2_aerobic[0])} - {_format_swim_pace(swim_zones.zone2_aerobic[1])}")
+        parts.append(f"  Zone 3 (Threshold): {_format_swim_pace(swim_zones.zone3_threshold[0])} - {_format_swim_pace(swim_zones.zone3_threshold[1])}")
+        parts.append(f"  Zone 4 (VO2max): {_format_swim_pace(swim_zones.zone4_vo2max[0])} - {_format_swim_pace(swim_zones.zone4_vo2max[1])}")
+        parts.append(f"  Zone 5 (Sprint): {_format_swim_pace(swim_zones.zone5_sprint[0])} - {_format_swim_pace(swim_zones.zone5_sprint[1])}")
+        parts.append("")
+
     return "\n".join(parts)
 
 
@@ -262,6 +369,23 @@ def format_workout_for_prompt(workout: Dict[str, Any]) -> str:
         parts.append(f"Training Load (HRSS): {workout.get('hrss'):.1f}")
     if workout.get('trimp'):
         parts.append(f"TRIMP: {workout.get('trimp'):.1f}")
+
+    # Power metrics (cycling/running with power)
+    if workout.get('avg_power'):
+        parts.append(f"Avg Power: {workout.get('avg_power')}W")
+    if workout.get('max_power'):
+        parts.append(f"Max Power: {workout.get('max_power')}W")
+    if workout.get('normalized_power'):
+        parts.append(f"Normalized Power: {workout.get('normalized_power')}W")
+    if workout.get('tss') or workout.get('power_tss'):
+        tss = workout.get('tss') or workout.get('power_tss')
+        parts.append(f"TSS: {tss:.1f}")
+    if workout.get('intensity_factor'):
+        parts.append(f"Intensity Factor: {workout.get('intensity_factor'):.2f}")
+    if workout.get('variability_index'):
+        parts.append(f"Variability Index: {workout.get('variability_index'):.2f}")
+    if workout.get('cycling_cadence'):
+        parts.append(f"Avg Cadence: {workout.get('cycling_cadence')} rpm")
 
     # Zone distribution if available
     zones = []

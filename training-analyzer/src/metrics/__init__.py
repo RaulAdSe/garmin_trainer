@@ -13,6 +13,10 @@ from .zones import (
     get_zone_for_hr,
 )
 from .power import (
+    # Power zone dataclasses
+    PowerZones,
+    CyclingAthleteContext,
+    # Power calculations
     calculate_normalized_power,
     calculate_intensity_factor,
     calculate_tss,
@@ -42,6 +46,9 @@ __all__ = [
     "calculate_hr_zones_karvonen",
     "calculate_hr_zones_lthr",
     "get_zone_for_hr",
+    # Power zone dataclasses
+    "PowerZones",
+    "CyclingAthleteContext",
     # Power metrics (cycling)
     "calculate_normalized_power",
     "calculate_intensity_factor",

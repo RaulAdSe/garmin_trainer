@@ -1,9 +1,14 @@
 """Tests for cycling power metrics calculations."""
 
 import pytest
+from datetime import datetime
 from typing import List
 
 from training_analyzer.metrics.power import (
+    # Dataclasses
+    PowerZones,
+    CyclingAthleteContext,
+    # Functions
     calculate_normalized_power,
     calculate_intensity_factor,
     calculate_tss,
@@ -586,3 +591,239 @@ class TestIntegrationScenarios:
 
         # Both methods should give similar results (within 5%)
         assert abs(ftp_20min - ftp_ramp) / ftp_20min < 0.05
+
+
+class TestPowerZonesDataclass:
+    """Tests for PowerZones dataclass."""
+
+    def test_power_zones_auto_calculation(self):
+        """Test that zones are auto-calculated from FTP."""
+        zones = PowerZones(ftp=250)
+
+        # Zone 4 should be around FTP (90-105%)
+        assert zones.zone4 == (225, 262)
+        # Zone 1 should be <55% FTP
+        assert zones.zone1 == (0, 137)
+
+    def test_power_zones_get_zone(self):
+        """Test get_zone method."""
+        zones = PowerZones(ftp=250)
+
+        assert zones.get_zone(1) == zones.zone1
+        assert zones.get_zone(4) == zones.zone4
+        assert zones.get_zone(7) == zones.zone7
+        assert zones.get_zone(0) == (0, 0)  # Invalid zone
+        assert zones.get_zone(8) == (0, 0)  # Invalid zone
+
+    def test_power_zones_get_zone_for_power(self):
+        """Test get_zone_for_power method."""
+        zones = PowerZones(ftp=250)
+
+        # Test various power values
+        assert zones.get_zone_for_power(100) == 1   # Zone 1
+        assert zones.get_zone_for_power(160) == 2   # Zone 2
+        assert zones.get_zone_for_power(200) == 3   # Zone 3
+        assert zones.get_zone_for_power(240) == 4   # Zone 4
+        assert zones.get_zone_for_power(280) == 5   # Zone 5
+        assert zones.get_zone_for_power(320) == 6   # Zone 6
+        assert zones.get_zone_for_power(400) == 7   # Zone 7
+        assert zones.get_zone_for_power(-10) == 0   # Negative
+
+    def test_power_zones_to_dict(self):
+        """Test serialization to dict."""
+        zones = PowerZones(ftp=250)
+        d = zones.to_dict()
+
+        assert d["ftp"] == 250
+        assert "zones" in d
+        assert "zone1" in d["zones"]
+        assert d["zones"]["zone1"]["name"] == "Active Recovery"
+        assert d["zones"]["zone4"]["name"] == "Threshold"
+        assert "updated_at" in d
+
+    def test_power_zones_from_dict(self):
+        """Test deserialization from dict."""
+        original = PowerZones(ftp=250)
+        d = original.to_dict()
+        restored = PowerZones.from_dict(d)
+
+        assert restored.ftp == 250
+        # Note: from_dict may not preserve exact zone values due to dict structure
+        # but the FTP should be preserved
+
+    def test_power_zones_format_zones(self):
+        """Test zone formatting for prompts."""
+        zones = PowerZones(ftp=250)
+        formatted = zones.format_zones()
+
+        assert "Z1 (Active Recovery)" in formatted
+        assert "Z4 (Threshold)" in formatted
+        assert "Z7 (Neuromuscular)" in formatted
+        assert "W" in formatted
+
+    def test_power_zones_zero_ftp(self):
+        """Test handling of zero FTP."""
+        zones = PowerZones(ftp=0)
+
+        # All zones should be (0, 0)
+        for i in range(1, 8):
+            assert zones.get_zone(i) == (0, 0)
+
+
+class TestCyclingAthleteContext:
+    """Tests for CyclingAthleteContext dataclass."""
+
+    def test_cycling_context_defaults(self):
+        """Test default values."""
+        ctx = CyclingAthleteContext()
+
+        assert ctx.ftp == 200
+        assert ctx.cycling_ctl == 30.0
+        assert ctx.cycling_atl == 30.0
+        assert ctx.cycling_tsb == 0.0
+        assert ctx.power_zones is not None
+        assert ctx.power_zones.ftp == 200
+
+    def test_cycling_context_custom_ftp(self):
+        """Test custom FTP initialization."""
+        ctx = CyclingAthleteContext(ftp=280)
+
+        assert ctx.ftp == 280
+        assert ctx.power_zones.ftp == 280
+        # Zone 4 should be around 280W
+        assert ctx.power_zones.zone4 == (252, 294)
+
+    def test_cycling_context_with_weight(self):
+        """Test power-to-weight calculation."""
+        ctx = CyclingAthleteContext(ftp=280, weight_kg=70)
+
+        assert ctx.weight_kg == 70
+        assert ctx.power_to_weight == 4.0  # 280 / 70 = 4.0
+
+    def test_cycling_context_update_ftp(self):
+        """Test FTP update method."""
+        ctx = CyclingAthleteContext(ftp=200, weight_kg=70)
+        old_zones = ctx.power_zones
+
+        ctx.update_ftp(280)
+
+        assert ctx.ftp == 280
+        assert ctx.power_zones.ftp == 280
+        assert ctx.power_zones != old_zones
+        assert ctx.ftp_test_date is not None
+        assert ctx.power_to_weight == 4.0
+
+    def test_cycling_context_get_target_power_range(self):
+        """Test get_target_power_range method."""
+        ctx = CyclingAthleteContext(ftp=250)
+
+        # Zone 4 (threshold)
+        z4_range = ctx.get_target_power_range(4)
+        assert z4_range == (225, 262)
+
+        # Zone 2 (endurance)
+        z2_range = ctx.get_target_power_range(2)
+        assert z2_range == (137, 187)
+
+    def test_cycling_context_to_dict(self):
+        """Test serialization to dict."""
+        ctx = CyclingAthleteContext(
+            ftp=280,
+            weight_kg=70,
+            cycling_ctl=50.0,
+            cycling_atl=60.0,
+            cycling_tsb=-10.0,
+        )
+        d = ctx.to_dict()
+
+        assert d["ftp"] == 280
+        assert d["weight_kg"] == 70
+        assert d["power_to_weight"] == 4.0
+        assert d["cycling_ctl"] == 50.0
+        assert d["cycling_atl"] == 60.0
+        assert d["cycling_tsb"] == -10.0
+        assert "power_zones" in d
+
+    def test_cycling_context_from_dict(self):
+        """Test deserialization from dict."""
+        original = CyclingAthleteContext(
+            ftp=280,
+            weight_kg=70,
+            cycling_ctl=50.0,
+        )
+        d = original.to_dict()
+        restored = CyclingAthleteContext.from_dict(d)
+
+        assert restored.ftp == 280
+        assert restored.weight_kg == 70
+        assert restored.cycling_ctl == 50.0
+
+    def test_cycling_context_to_prompt_context(self):
+        """Test prompt context generation."""
+        ctx = CyclingAthleteContext(
+            ftp=280,
+            weight_kg=70,
+            cycling_ctl=50.0,
+            cycling_atl=60.0,
+            cycling_tsb=-10.0,
+            typical_efficiency_factor=1.45,
+        )
+        prompt = ctx.to_prompt_context()
+
+        assert "FTP: 280W" in prompt
+        assert "Power-to-Weight: 4.0 W/kg" in prompt
+        assert "Cycling CTL: 50.0" in prompt
+        assert "Efficiency Factor: 1.45" in prompt
+
+
+class TestEdgeCases:
+    """Tests for edge cases in power calculations."""
+
+    def test_np_with_all_zeros(self):
+        """NP with all zero power samples."""
+        np = calculate_normalized_power([0] * 100)
+        assert np == 0.0
+
+    def test_np_with_negative_values(self):
+        """NP with negative power values (should handle gracefully)."""
+        # Mix of positive and negative
+        samples = [200] * 50 + [-10] * 50
+        np = calculate_normalized_power(samples)
+        # Should still calculate, though negative values are unusual
+        assert np >= 0
+
+    def test_tss_short_ride(self):
+        """TSS for a very short ride."""
+        # 5 minutes at FTP
+        tss = calculate_tss_simple(300, 250.0, 250)
+        # Should be ~8.3 TSS
+        assert 8 < tss < 9
+
+    def test_vi_very_steady(self):
+        """VI for perfectly steady effort."""
+        vi = calculate_variability_index(200.0, 200.0)
+        assert vi == 1.0
+
+    def test_vi_extreme_variability(self):
+        """VI for extremely variable effort."""
+        vi = calculate_variability_index(300.0, 150.0)
+        assert vi == 2.0
+
+    def test_power_zones_negative_ftp(self):
+        """Power zones with negative FTP should return zeros."""
+        zones = calculate_power_zones(-100)
+        for zone in range(1, 8):
+            assert zones[zone] == (0, 0)
+
+    def test_efficiency_factor_high_power(self):
+        """Efficiency factor with very high power."""
+        ef = calculate_efficiency_factor(350.0, 140)
+        assert ef == 2.5
+
+    def test_work_variable_power(self):
+        """Work calculation with variable power."""
+        # 1800 samples: half at 200W, half at 100W
+        samples = [200] * 900 + [100] * 900
+        work = calculate_work(samples, sample_rate_hz=1)
+        # Total: (200*900 + 100*900) / 1000 = 270 kJ
+        assert work == 270
