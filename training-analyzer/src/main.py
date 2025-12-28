@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
-from .api.routes import athlete, analysis, plans, workouts, export, garmin, chat
+from .api.routes import athlete, analysis, plans, workouts, export, garmin, chat, explain
 from .api.exception_handlers import register_exception_handlers
 
 
@@ -51,6 +51,7 @@ app.include_router(workouts.router, prefix="/api/v1/workouts", tags=["workouts"]
 app.include_router(export.router, prefix="/api/v1/export", tags=["export"])
 app.include_router(garmin.router, prefix="/api/v1/garmin", tags=["garmin"])
 app.include_router(chat.router, prefix="/api/v1/chat", tags=["chat"])
+app.include_router(explain.router, prefix="/api/v1/explain", tags=["explain"])
 
 
 @app.get("/")
