@@ -2,8 +2,12 @@
 
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
-import { useWellnessHistory, useGarminSync, DayData } from '../services/hooks';
+import { useWellnessHistory, useGarminSync, DayData, formatLastSync } from '../services/hooks';
 import { calculatePeriodTrend, formatTrendDisplay, TrendResult } from '../lib/trends';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { OfflineBanner } from '@/components/OfflineBanner';
+import { ErrorBanner } from '@/components/ErrorBanner';
+import { handleError, AppError } from '@/lib/errors';
 
 // Info Modal component for displaying metric details
 function InfoModal({
@@ -593,6 +597,10 @@ export default function Dashboard() {
   const [activeInfoModal, setActiveInfoModal] = useState<string | null>(null);
   const [syncDays, setSyncDays] = useState(14);
 
+  // Phase 3: Network status and error handling
+  const { isOnline } = useNetworkStatus();
+  const [syncError, setSyncError] = useState<AppError | null>(null);
+
   // Derive selected day from history - defaults to first day (today)
   // Use state only for user-driven day selection
   const [userSelectedDay, setUserSelectedDay] = useState<string | null>(null);
@@ -659,6 +667,18 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-black text-white">
+      {/* Offline Banner - shown when not connected */}
+      {!isOnline && <OfflineBanner />}
+
+      {/* Error Banner - shown when there's a sync error */}
+      {syncError && (
+        <ErrorBanner
+          error={syncError}
+          onDismiss={() => setSyncError(null)}
+          className="px-4 pt-2"
+        />
+      )}
+
       {/* Top Navigation */}
       <nav className="flex items-center justify-between px-4 py-3 border-b border-gray-900">
         <div className="flex items-center gap-2">
@@ -671,6 +691,7 @@ export default function Dashboard() {
           <Link
             href="/sync"
             className="flex items-center gap-1.5 text-gray-400 hover:text-teal-400 transition-colors text-sm"
+            title={garminSync.lastSync ? `Last synced: ${formatLastSync(garminSync.lastSync)}` : 'Sync with Garmin'}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -718,6 +739,8 @@ export default function Dashboard() {
             garminSync={garminSync}
             syncDays={syncDays}
             onSyncDaysChange={setSyncDays}
+            isOnline={isOnline}
+            onSyncError={setSyncError}
           />
         )}
         {view === 'recovery' && (
@@ -772,6 +795,7 @@ interface GarminSyncState {
   syncing: boolean;
   progress: { current: number; total: number } | null;
   error: string | null;
+  lastSync: Date | null;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
   sync: (days: number) => Promise<boolean>;
@@ -793,6 +817,8 @@ function OverviewView({
   garminSync,
   syncDays,
   onSyncDaysChange,
+  isOnline,
+  onSyncError,
 }: {
   selectedDay: DayData;
   history: DayData[];
@@ -809,6 +835,8 @@ function OverviewView({
   garminSync: GarminSyncState;
   syncDays: number;
   onSyncDaysChange: (days: number) => void;
+  isOnline: boolean;
+  onSyncError: (error: AppError | null) => void;
 }) {
   const strainTarget = getStrainTarget(recovery);
   const [showLogin, setShowLogin] = useState(false);
@@ -829,13 +857,27 @@ function OverviewView({
   };
 
   const handleSync = async () => {
+    // Check if online before attempting sync
+    if (!isOnline) {
+      onSyncError(handleError(new Error('No internet connection. Please connect to sync.')));
+      return;
+    }
+
     if (!garminSync.isAuthenticated) {
       setShowLogin(true);
       return;
     }
-    await garminSync.sync(syncDays);
-    // Reload page to show new data
-    window.location.reload();
+
+    // Clear any previous sync errors
+    onSyncError(null);
+
+    const success = await garminSync.sync(syncDays);
+    if (!success && garminSync.error) {
+      onSyncError(handleError(new Error(garminSync.error)));
+    } else if (success) {
+      // Reload page to show new data
+      window.location.reload();
+    }
   };
 
   return (
@@ -1099,7 +1141,11 @@ function OverviewView({
             )}
             {garminSync.isAuthenticated && (
               <div className="text-gray-500 text-xs text-center">
-                Connected to Garmin Connect
+                {garminSync.lastSync ? (
+                  <>Last synced: {formatLastSync(garminSync.lastSync)}</>
+                ) : (
+                  <>Connected to Garmin Connect</>
+                )}
               </div>
             )}
           </div>

@@ -7,6 +7,7 @@ import { Preferences } from '@capacitor/preferences';
 
 // Storage keys
 const WELLNESS_DATA_KEY = 'wellness_data';
+const LAST_SYNC_KEY = 'last_sync_timestamp';
 
 // Data retention - keep only last N days to limit storage growth
 const DATA_RETENTION_DAYS = 90;
@@ -104,32 +105,42 @@ class DatabaseService {
   }
 
   private async save(): Promise<void> {
-    await Preferences.set({
-      key: WELLNESS_DATA_KEY,
-      value: JSON.stringify(this.data),
-    });
+    try {
+      await Preferences.set({
+        key: WELLNESS_DATA_KEY,
+        value: JSON.stringify(this.data),
+      });
+    } catch (error) {
+      console.error('[Database] Failed to save data:', error);
+      // Don't rethrow - allow sync to continue even if storage fails
+    }
   }
 
   // Save wellness data for a date
   async saveWellness(record: WellnessRecord): Promise<void> {
-    if (!this.initialized) await this.initialize();
+    try {
+      if (!this.initialized) await this.initialize();
 
-    const existing = this.data[record.date] || { date: record.date };
+      const existing = this.data[record.date] || { date: record.date };
 
-    // Merge new data with existing
-    this.data[record.date] = {
-      date: record.date,
-      wellness: record.wellness || existing.wellness || null,
-      sleep: record.sleep || existing.sleep || null,
-      hrv: record.hrv || existing.hrv || null,
-      stress: record.stress || existing.stress || null,
-      activity: record.activity || existing.activity || null,
-    };
+      // Merge new data with existing
+      this.data[record.date] = {
+        date: record.date,
+        wellness: record.wellness || existing.wellness || null,
+        sleep: record.sleep || existing.sleep || null,
+        hrv: record.hrv || existing.hrv || null,
+        stress: record.stress || existing.stress || null,
+        activity: record.activity || existing.activity || null,
+      };
 
-    await this.save();
+      await this.save();
 
-    // Auto-prune old data to keep storage bounded
-    await this.pruneOldData();
+      // Auto-prune old data to keep storage bounded
+      await this.pruneOldData();
+    } catch (error) {
+      console.error('[Database] Failed to save wellness record:', error);
+      // Don't rethrow - allow sync to continue
+    }
   }
 
   // Get wellness data for a specific date
@@ -195,6 +206,49 @@ class DatabaseService {
   // Get current retention setting
   getRetentionDays(): number {
     return DATA_RETENTION_DAYS;
+  }
+
+  // Set last sync timestamp
+  async setLastSync(timestamp: Date): Promise<void> {
+    await Preferences.set({
+      key: LAST_SYNC_KEY,
+      value: timestamp.toISOString(),
+    });
+  }
+
+  // Get last sync timestamp
+  async getLastSync(): Promise<Date | null> {
+    try {
+      const { value } = await Preferences.get({ key: LAST_SYNC_KEY });
+      if (value) {
+        return new Date(value);
+      }
+      return null;
+    } catch (error) {
+      console.error('Failed to get last sync timestamp:', error);
+      return null;
+    }
+  }
+
+  // Get all wellness data for export
+  async getAllWellnessData(): Promise<WellnessRecord[]> {
+    if (!this.initialized) await this.initialize();
+
+    // Return all records sorted by date (newest first)
+    const sortedDates = Object.keys(this.data).sort().reverse();
+    return sortedDates.map(date => this.data[date]);
+  }
+
+  // Export all data as JSON string
+  async exportData(): Promise<string> {
+    const data = await this.getAllWellnessData();
+    const exportPayload = {
+      exportedAt: new Date().toISOString(),
+      version: '1.0',
+      recordCount: data.length,
+      data,
+    };
+    return JSON.stringify(exportPayload, null, 2);
   }
 }
 

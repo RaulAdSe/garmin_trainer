@@ -220,14 +220,26 @@ export function useGarminSync() {
   const [syncing, setSyncing] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lastSync, setLastSync] = useState<Date | null>(null);
 
-  // Check auth status on mount
+  // Check auth status and load last sync on mount
   useEffect(() => {
     async function checkAuth() {
       const auth = await garmin.isAuthenticated();
       setIsAuthenticated(auth);
     }
+    async function loadLastSync() {
+      const timestamp = await db.getLastSync();
+      setLastSync(timestamp);
+    }
     checkAuth();
+    loadLastSync();
+  }, []);
+
+  const updateLastSync = useCallback(async () => {
+    const now = new Date();
+    await db.setLastSync(now);
+    setLastSync(now);
   }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
@@ -268,6 +280,9 @@ export function useGarminSync() {
         return false;
       }
 
+      // Update last sync timestamp on successful sync
+      await updateLastSync();
+
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sync failed');
@@ -283,6 +298,7 @@ export function useGarminSync() {
     syncing,
     progress,
     error,
+    lastSync,
     login,
     logout,
     sync,
@@ -298,4 +314,68 @@ export async function hasLocalData(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// Helper function to format last sync timestamp
+export function formatLastSync(date: Date | null): string {
+  if (!date) {
+    return 'Never synced';
+  }
+
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMinutes = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffMinutes < 1) {
+    return 'Just now';
+  }
+
+  if (diffMinutes < 60) {
+    return `${diffMinutes} minute${diffMinutes === 1 ? '' : 's'} ago`;
+  }
+
+  if (diffHours < 24) {
+    return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
+  }
+
+  // Check if it was yesterday
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (
+    date.getDate() === yesterday.getDate() &&
+    date.getMonth() === yesterday.getMonth() &&
+    date.getFullYear() === yesterday.getFullYear()
+  ) {
+    return 'Yesterday';
+  }
+
+  // Format as date for older entries
+  return date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+  });
+}
+
+// Hook to track last sync timestamp
+export function useLastSync() {
+  const [lastSync, setLastSync] = useState<Date | null>(null);
+
+  useEffect(() => {
+    async function loadLastSync() {
+      const timestamp = await db.getLastSync();
+      setLastSync(timestamp);
+    }
+    loadLastSync();
+  }, []);
+
+  const updateLastSync = useCallback(async () => {
+    const now = new Date();
+    await db.setLastSync(now);
+    setLastSync(now);
+  }, []);
+
+  return { lastSync, updateLastSync };
 }

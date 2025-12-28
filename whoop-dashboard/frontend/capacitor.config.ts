@@ -10,13 +10,20 @@ const config: CapacitorConfig = {
   },
   plugins: {
     CapacitorHttp: {
-      // Enable native HTTP for all requests (bypasses CORS)
+      // Re-enable native HTTP for CORS bypass
       enabled: true,
     },
     CapacitorSQLite: {
       iosDatabaseLocation: 'Library/CapacitorDatabase',
     },
   },
+  // Exclude SecureStorage from native plugins - it's not properly linked via SPM
+  // and causes crashes. Using Preferences fallback instead.
+  includePlugins: [
+    '@capacitor/browser',
+    '@capacitor/network',
+    '@capacitor/preferences',
+  ],
 };
 
 export default config;

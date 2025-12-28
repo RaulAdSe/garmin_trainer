@@ -153,19 +153,22 @@ Sleep quality and debt tracking:
 
 ---
 
-## iOS Deployment
+## iOS Native App
 
-The app can be deployed to iOS devices using Capacitor:
+The iOS app runs standalone with on-device Garmin authentication - no backend required.
 
-### Build for iOS
+### Quick Setup
 
 ```bash
 cd frontend
 
+# Install dependencies
+npm install
+
 # Build static export
 npm run build
 
-# Sync to iOS project
+# Sync to iOS
 npx cap sync ios
 
 # Open in Xcode
@@ -175,9 +178,25 @@ npx cap open ios
 ### Run on Device
 
 1. Open the iOS project in Xcode
-2. Select your development team
-3. Connect your iOS device
+2. Select your Team (Apple ID) in Signing & Capabilities
+3. Connect your iPhone via USB
 4. Build and run (Cmd+R)
+5. On first run, trust the developer certificate:
+   - iPhone Settings → General → VPN & Device Management
+
+### App Features
+
+- **On-device login**: Enter Garmin credentials directly in the app
+- **Offline support**: Works without internet after initial sync
+- **Secure storage**: Passwords stored in iOS Keychain
+- **Auto-refresh**: Tokens refresh automatically
+
+### Limitations (Free Apple Account)
+
+- App expires after **7 days** and needs reinstall via Xcode
+- For permanent install, requires Apple Developer Program ($99/year)
+
+See [ios-deployment.md](./ios-deployment.md) for complete guide.
 
 ---
 
