@@ -6,11 +6,22 @@ Determines what type of workout to do based on:
 - Training load status (ACWR)
 - Recent workout patterns
 - Periodization phase
+
+This module also provides full explainability for transparency.
 """
 
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from enum import Enum
+
+from ..models.explanations import (
+    ImpactType,
+    DataSourceType,
+    DataSource,
+    ExplanationFactor,
+    ExplainedRecommendation,
+    ExplainedWorkoutRecommendation,
+)
 
 
 class WorkoutType(Enum):
@@ -476,3 +487,405 @@ def get_workout_description(workout_type: WorkoutType) -> dict:
         "purpose": "General fitness",
         "guidelines": [],
     })
+
+
+def recommend_explained_workout(
+    readiness_score: float,
+    acwr: float,
+    tsb: float,
+    days_since_hard: int,
+    days_since_long: int,
+    weekly_load_so_far: float,
+    target_weekly_load: float,
+    is_race_week: bool = False,
+    preferred_hard_days: Optional[List[int]] = None,
+    day_of_week: Optional[int] = None,
+) -> ExplainedWorkoutRecommendation:
+    """
+    Generate workout recommendation with full explainability.
+
+    This extends recommend_workout to provide complete transparency
+    into the decision-making process, showing the exact logic path
+    and how each factor influenced the recommendation.
+
+    Args:
+        readiness_score: Overall readiness (0-100)
+        acwr: Acute:Chronic Workload Ratio
+        tsb: Training Stress Balance
+        days_since_hard: Days since last hard workout
+        days_since_long: Days since last long workout
+        weekly_load_so_far: Accumulated load this week
+        target_weekly_load: Target weekly load
+        is_race_week: Whether this is a race/taper week
+        preferred_hard_days: Preferred days for hard workouts
+        day_of_week: Current day of week (0=Monday)
+
+    Returns:
+        ExplainedWorkoutRecommendation with full decision tree
+    """
+    # Get the base recommendation
+    rec = recommend_workout(
+        readiness_score=readiness_score,
+        acwr=acwr,
+        tsb=tsb,
+        days_since_hard=days_since_hard,
+        days_since_long=days_since_long,
+        weekly_load_so_far=weekly_load_so_far,
+        target_weekly_load=target_weekly_load,
+        is_race_week=is_race_week,
+        preferred_hard_days=preferred_hard_days,
+        day_of_week=day_of_week,
+    )
+
+    # Build the decision tree (logic path)
+    decision_tree: List[str] = []
+    factors: List[ExplanationFactor] = []
+    data_points: Dict[str, Any] = {
+        "readiness_score": readiness_score,
+        "acwr": acwr,
+        "tsb": tsb,
+        "days_since_hard": days_since_hard,
+        "days_since_long": days_since_long,
+        "weekly_load_so_far": weekly_load_so_far,
+        "target_weekly_load": target_weekly_load,
+        "is_race_week": is_race_week,
+        "day_of_week": day_of_week,
+    }
+
+    # Track influence scores
+    readiness_influence = 0.0
+    load_influence = 0.0
+    pattern_influence = 0.0
+
+    # Evaluate each decision rule and build the tree
+    decision_tree.append(f"Input: Readiness={readiness_score:.0f}, ACWR={acwr:.2f}, TSB={tsb:+.1f}")
+    decision_tree.append(f"       Days since hard={days_since_hard}, Days since long={days_since_long}")
+
+    # Rule 1: Low readiness check
+    if readiness_score < 40:
+        decision_tree.append(f"RULE 1: Readiness ({readiness_score:.0f}) < 40 -> Recovery/Rest required")
+        readiness_influence = 1.0
+        factors.append(_create_readiness_factor(readiness_score, True))
+    else:
+        decision_tree.append(f"RULE 1: Readiness ({readiness_score:.0f}) >= 40 -> Training possible")
+
+    # Rule 2: High ACWR check
+    if acwr > 1.3:
+        if acwr > 1.5:
+            decision_tree.append(f"RULE 2: ACWR ({acwr:.2f}) > 1.5 -> DANGER ZONE, rest required")
+        else:
+            decision_tree.append(f"RULE 2: ACWR ({acwr:.2f}) > 1.3 -> Elevated risk, easy day")
+        load_influence = 0.8
+        factors.append(_create_acwr_factor(acwr))
+    else:
+        decision_tree.append(f"RULE 2: ACWR ({acwr:.2f}) <= 1.3 -> Load manageable")
+
+    # Rule 3: Hard/easy pattern
+    if days_since_hard == 0 and readiness_score >= 40 and acwr <= 1.3:
+        decision_tree.append(f"RULE 3: Hard workout yesterday -> Easy day (hard/easy pattern)")
+        pattern_influence = 0.7
+        factors.append(_create_pattern_factor(days_since_hard, True))
+    elif days_since_hard >= 1:
+        decision_tree.append(f"RULE 3: {days_since_hard} days since hard -> Pattern allows intensity")
+
+    # Rule 4: Race week check
+    if is_race_week:
+        decision_tree.append(f"RULE 4: Race week -> Taper mode, reduced volume")
+
+    # Rule 5: Undertrained check
+    if acwr < 0.8 and readiness_score > 70:
+        decision_tree.append(f"RULE 5: Undertrained (ACWR={acwr:.2f}) + High readiness -> Push harder")
+        load_influence = max(load_influence, 0.5)
+        factors.append(_create_undertrained_factor(acwr, readiness_score))
+
+    # Rule 6: Quality work eligibility
+    if readiness_score >= 80 and days_since_hard >= 2 and acwr <= 1.3:
+        if days_since_long >= 6:
+            decision_tree.append(f"RULE 6: High readiness + recovered + due for long -> Long run")
+        else:
+            decision_tree.append(f"RULE 6: High readiness + recovered -> Quality session possible")
+
+    # Add TSB factor
+    factors.append(_create_tsb_factor(tsb))
+
+    # Add recovery days factor
+    factors.append(_create_recovery_factor(days_since_hard))
+
+    # Final decision
+    decision_tree.append(f"")
+    decision_tree.append(f"DECISION: {rec.workout_type.value.upper()}")
+    decision_tree.append(f"REASON: {rec.reason}")
+
+    # Calculate key driver
+    key_driver = None
+    if readiness_influence > load_influence and readiness_influence > pattern_influence:
+        key_driver = "Readiness Score"
+    elif load_influence > pattern_influence:
+        key_driver = "Training Load (ACWR)"
+    elif pattern_influence > 0:
+        key_driver = "Hard/Easy Pattern"
+    else:
+        key_driver = "Fitness Balance (TSB)"
+
+    # Build alternatives list
+    alternatives = rec.alternatives if rec.alternatives else []
+    if not alternatives:
+        if rec.workout_type.intensity_level >= 3:
+            alternatives = ["Easy run", "Cross-training"]
+        else:
+            alternatives = ["Complete rest", "Light stretching"]
+
+    # Build the explained recommendation
+    explained_rec = ExplainedRecommendation(
+        recommendation=f"{rec.workout_type.value.title()} - {rec.intensity_description}",
+        confidence=rec.confidence,
+        confidence_explanation=_get_workout_confidence_explanation(rec.confidence, len(factors)),
+        factors=factors,
+        data_points=data_points,
+        calculation_summary="\n".join(decision_tree),
+        alternatives_considered=alternatives,
+        key_driver=key_driver,
+    )
+
+    return ExplainedWorkoutRecommendation(
+        workout_type=rec.workout_type.value,
+        duration_min=rec.duration_min,
+        intensity_description=rec.intensity_description,
+        hr_zone_target=rec.hr_zone_target,
+        recommendation=explained_rec,
+        decision_tree=decision_tree,
+        readiness_influence=readiness_influence,
+        load_influence=load_influence,
+        pattern_influence=pattern_influence,
+    )
+
+
+def _create_readiness_factor(score: float, is_limiting: bool) -> ExplanationFactor:
+    """Create readiness explanation factor."""
+    if score >= 80:
+        impact = ImpactType.POSITIVE
+        explanation = f"High readiness ({score:.0f}/100) enables quality training."
+    elif score >= 60:
+        impact = ImpactType.NEUTRAL
+        explanation = f"Moderate readiness ({score:.0f}/100) allows normal training."
+    elif score >= 40:
+        impact = ImpactType.NEUTRAL
+        explanation = f"Below optimal readiness ({score:.0f}/100) - caution advised."
+    else:
+        impact = ImpactType.NEGATIVE
+        explanation = f"Low readiness ({score:.0f}/100) indicates recovery is needed."
+
+    return ExplanationFactor(
+        name="Readiness Score",
+        value=score,
+        display_value=f"{score:.0f}/100",
+        impact=impact,
+        weight=0.35,
+        contribution_points=score * 0.35 if not is_limiting else -20,
+        explanation=explanation,
+        threshold="Green zone: >= 67, Yellow: 34-66, Red: < 34",
+        baseline=70,
+        data_sources=[
+            DataSource(
+                source_type=DataSourceType.CALCULATED_TSB,
+                source_name="Combined Readiness Assessment",
+                confidence=0.90,
+            )
+        ],
+    )
+
+
+def _create_acwr_factor(acwr: float) -> ExplanationFactor:
+    """Create ACWR explanation factor."""
+    if 0.8 <= acwr <= 1.3:
+        impact = ImpactType.POSITIVE
+        explanation = f"Optimal training load ratio ({acwr:.2f}) - in the sweet spot for adaptation."
+    elif acwr < 0.8:
+        impact = ImpactType.NEUTRAL
+        explanation = f"Undertrained ({acwr:.2f}) - you can safely increase training load."
+    elif acwr <= 1.5:
+        impact = ImpactType.NEGATIVE
+        explanation = f"Elevated load ratio ({acwr:.2f}) - injury risk is increasing, reduce load."
+    else:
+        impact = ImpactType.NEGATIVE
+        explanation = f"Danger zone ({acwr:.2f}) - high injury risk, rest recommended."
+
+    # Score contribution: 1.0 is optimal (100 points), deviations reduce
+    if 0.8 <= acwr <= 1.3:
+        score = 100 - abs(acwr - 1.0) * 50
+    elif acwr < 0.8:
+        score = 60
+    else:
+        score = max(0, 60 - (acwr - 1.3) * 100)
+
+    return ExplanationFactor(
+        name="Training Load Ratio (ACWR)",
+        value=acwr,
+        display_value=f"{acwr:.2f}",
+        impact=impact,
+        weight=0.30,
+        contribution_points=score * 0.30,
+        explanation=explanation,
+        threshold="Optimal: 0.8-1.3, Caution: 1.3-1.5, Danger: >1.5",
+        baseline=1.0,
+        data_sources=[
+            DataSource(
+                source_type=DataSourceType.CALCULATED_ACWR,
+                source_name="Acute:Chronic Workload Ratio",
+                confidence=0.90,
+            )
+        ],
+    )
+
+
+def _create_tsb_factor(tsb: float) -> ExplanationFactor:
+    """Create TSB explanation factor."""
+    if tsb > 20:
+        impact = ImpactType.POSITIVE
+        explanation = f"Very fresh (TSB: {tsb:+.1f}) - well-rested and ready for intensity."
+    elif tsb > 0:
+        impact = ImpactType.POSITIVE
+        explanation = f"Fresh (TSB: {tsb:+.1f}) - positive form, good for quality work."
+    elif tsb > -10:
+        impact = ImpactType.NEUTRAL
+        explanation = f"Neutral (TSB: {tsb:+.1f}) - balanced fitness and fatigue."
+    elif tsb > -25:
+        impact = ImpactType.NEGATIVE
+        explanation = f"Fatigued (TSB: {tsb:+.1f}) - accumulated training stress."
+    else:
+        impact = ImpactType.NEGATIVE
+        explanation = f"Very fatigued (TSB: {tsb:+.1f}) - recovery strongly needed."
+
+    # Score: TSB of 10 = 80, TSB of -20 = 40
+    score = max(0, min(100, 70 + tsb * 1.5))
+
+    return ExplanationFactor(
+        name="Form (TSB)",
+        value=tsb,
+        display_value=f"{tsb:+.1f}",
+        impact=impact,
+        weight=0.20,
+        contribution_points=score * 0.20,
+        explanation=explanation,
+        threshold="Fresh: >0, Neutral: -10 to 0, Fatigued: <-10",
+        baseline=10,
+        data_sources=[
+            DataSource(
+                source_type=DataSourceType.CALCULATED_TSB,
+                source_name="Training Stress Balance",
+                confidence=0.90,
+            )
+        ],
+    )
+
+
+def _create_pattern_factor(days_since_hard: int, forces_easy: bool) -> ExplanationFactor:
+    """Create hard/easy pattern explanation factor."""
+    if days_since_hard == 0:
+        impact = ImpactType.NEGATIVE if forces_easy else ImpactType.NEUTRAL
+        explanation = "Hard workout was yesterday - following hard/easy principle for recovery."
+        score = 30
+    elif days_since_hard == 1:
+        impact = ImpactType.NEUTRAL
+        explanation = "One day since hard effort - partial recovery, moderate intensity OK."
+        score = 60
+    elif days_since_hard >= 2:
+        impact = ImpactType.POSITIVE
+        explanation = f"{days_since_hard} days since hard workout - fully recovered for intensity."
+        score = 90
+    else:
+        impact = ImpactType.NEUTRAL
+        explanation = "Recovery pattern analyzed."
+        score = 70
+
+    return ExplanationFactor(
+        name="Hard/Easy Pattern",
+        value=days_since_hard,
+        display_value=f"{days_since_hard} days",
+        impact=impact,
+        weight=0.15,
+        contribution_points=score * 0.15,
+        explanation=explanation,
+        threshold="Allow 48+ hours between hard sessions",
+        baseline=2,
+        data_sources=[
+            DataSource(
+                source_type=DataSourceType.ACTIVITY_HISTORY,
+                source_name="Recent Workouts",
+                confidence=1.0,
+            )
+        ],
+    )
+
+
+def _create_recovery_factor(days_since_hard: int) -> ExplanationFactor:
+    """Create recovery days factor."""
+    if days_since_hard >= 3:
+        impact = ImpactType.POSITIVE
+        explanation = f"{days_since_hard} full days of recovery - primed for hard effort."
+        score = 95
+    elif days_since_hard == 2:
+        impact = ImpactType.POSITIVE
+        explanation = "Two days recovery - good window for quality training."
+        score = 85
+    elif days_since_hard == 1:
+        impact = ImpactType.NEUTRAL
+        explanation = "One day recovery - suitable for moderate efforts."
+        score = 60
+    else:
+        impact = ImpactType.NEGATIVE
+        explanation = "Hard workout yesterday - body still adapting."
+        score = 30
+
+    return ExplanationFactor(
+        name="Recovery Days",
+        value=days_since_hard,
+        display_value=f"{days_since_hard} days since hard",
+        impact=impact,
+        weight=0.10,
+        contribution_points=score * 0.10,
+        explanation=explanation,
+        threshold="Optimal: 2+ days between hard sessions",
+        baseline=2,
+        data_sources=[
+            DataSource(
+                source_type=DataSourceType.ACTIVITY_HISTORY,
+                source_name="Workout History",
+                confidence=1.0,
+            )
+        ],
+    )
+
+
+def _create_undertrained_factor(acwr: float, readiness: float) -> ExplanationFactor:
+    """Create undertrained opportunity factor."""
+    return ExplanationFactor(
+        name="Training Opportunity",
+        value={"acwr": acwr, "readiness": readiness},
+        display_value=f"Undertrained with high readiness",
+        impact=ImpactType.POSITIVE,
+        weight=0.10,
+        contribution_points=15,
+        explanation=f"Low ACWR ({acwr:.2f}) combined with high readiness ({readiness:.0f}) indicates opportunity to build fitness.",
+        threshold="ACWR < 0.8 with readiness > 70",
+        baseline=None,
+        data_sources=[
+            DataSource(
+                source_type=DataSourceType.CALCULATED_ACWR,
+                source_name="Training Load Analysis",
+                confidence=0.85,
+            )
+        ],
+    )
+
+
+def _get_workout_confidence_explanation(confidence: float, num_factors: int) -> str:
+    """Explain the workout recommendation confidence."""
+    if confidence >= 0.9:
+        return "High confidence - clear decision based on multiple aligned factors."
+    elif confidence >= 0.8:
+        return "Good confidence - recommendation supported by key metrics."
+    elif confidence >= 0.7:
+        return "Moderate confidence - some factors point in different directions."
+    else:
+        return "Lower confidence - limited data or conflicting signals."

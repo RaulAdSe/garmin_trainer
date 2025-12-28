@@ -1,6 +1,7 @@
 'use client';
 
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
+import { useRouter } from '@/i18n/navigation';
 import { useCallback, Suspense } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { WorkoutDesigner } from '@/components/design/WorkoutDesigner';

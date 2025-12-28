@@ -66,8 +66,22 @@ from .workouts import (
     StructuredWorkout,
     WorkoutDesignRequest,
     # Swim-specific models
+    SwimZones,
     SwimWorkoutInterval,
     SwimAthleteContext,
+)
+
+from .explanations import (
+    # Enums
+    ImpactType,
+    DataSourceType,
+    # Core dataclasses
+    DataSource,
+    ExplanationFactor,
+    ExplainedRecommendation,
+    ExplainedReadiness,
+    ExplainedWorkoutRecommendation,
+    ExplainedSessionRationale,
 )
 
 __all__ = [
@@ -126,6 +140,16 @@ __all__ = [
     "StructuredWorkout",
     "WorkoutDesignRequest",
     # Swim-specific models
+    "SwimZones",
     "SwimWorkoutInterval",
     "SwimAthleteContext",
+    # Explanation models
+    "ImpactType",
+    "DataSourceType",
+    "DataSource",
+    "ExplanationFactor",
+    "ExplainedRecommendation",
+    "ExplainedReadiness",
+    "ExplainedWorkoutRecommendation",
+    "ExplainedSessionRationale",
 ]

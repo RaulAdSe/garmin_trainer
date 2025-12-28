@@ -834,4 +834,114 @@ export async function getActivityDetails(
   return handleResponse<ActivityDetailsResponse>(response);
 }
 
+// ============================================
+// Explainability endpoints
+// ============================================
+
+import type {
+  ExplainedReadiness,
+  ExplainedWorkout,
+  SessionExplanation,
+} from './types';
+
+// Get explained readiness breakdown
+export async function getExplainedReadiness(
+  targetDate?: string
+): Promise<ExplainedReadiness> {
+  const params = new URLSearchParams();
+  if (targetDate) params.set('target_date', targetDate);
+
+  const queryString = params.toString();
+  const url = `${API_BASE}/explain/readiness${queryString ? `?${queryString}` : ''}`;
+
+  const response = await fetch(url);
+  return handleResponse<ExplainedReadiness>(response);
+}
+
+// Get explained workout recommendation
+export async function getExplainedWorkoutRecommendation(
+  targetDate?: string
+): Promise<ExplainedWorkout> {
+  const params = new URLSearchParams();
+  if (targetDate) params.set('target_date', targetDate);
+
+  const queryString = params.toString();
+  const url = `${API_BASE}/explain/workout-recommendation${queryString ? `?${queryString}` : ''}`;
+
+  const response = await fetch(url);
+  return handleResponse<ExplainedWorkout>(response);
+}
+
+// Get explained plan session
+export async function getExplainedSession(
+  sessionId: string
+): Promise<SessionExplanation> {
+  const url = `${API_BASE}/explain/plan-session/${sessionId}`;
+  const response = await fetch(url);
+  return handleResponse<SessionExplanation>(response);
+}
+
+// ============================================
+// Chat endpoints
+// ============================================
+
+export interface ChatMessageRequest {
+  message: string;
+  conversation_id?: string;
+  language?: string;  // Language code (en, es)
+}
+
+export interface ChatMessageResponse {
+  response: string;
+  data_sources: string[];
+  intent: string;
+  conversation_id: string;
+}
+
+export interface ChatSuggestionsResponse {
+  questions: string[];
+}
+
+// Send a chat message
+export async function sendChatMessage(
+  request: ChatMessageRequest
+): Promise<ChatMessageResponse> {
+  const response = await fetch(`${API_BASE}/chat`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      message: request.message,
+      conversation_id: request.conversation_id,
+      language: request.language || 'en',
+    }),
+  });
+  return handleResponse<ChatMessageResponse>(response);
+}
+
+// Get chat suggestions
+export async function getChatSuggestions(): Promise<ChatSuggestionsResponse> {
+  const response = await fetch(`${API_BASE}/chat/suggestions`);
+  return handleResponse<ChatSuggestionsResponse>(response);
+}
+
+// Start a new conversation
+export async function startNewConversation(): Promise<{ conversation_id: string }> {
+  const response = await fetch(`${API_BASE}/chat/new`, {
+    method: 'POST',
+  });
+  return handleResponse<{ conversation_id: string }>(response);
+}
+
+// Clear conversation history
+export async function clearConversation(
+  conversationId: string
+): Promise<{ cleared: boolean }> {
+  const response = await fetch(`${API_BASE}/chat/history/${conversationId}`, {
+    method: 'DELETE',
+  });
+  return handleResponse<{ cleared: boolean }>(response);
+}
+
 export { ApiClientError };

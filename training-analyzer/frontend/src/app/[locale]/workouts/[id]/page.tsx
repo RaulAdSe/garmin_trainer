@@ -1,7 +1,7 @@
 'use client';
 
 import { use, useState, useEffect } from 'react';
-import Link from 'next/link';
+import { Link } from '@/i18n/navigation';
 import { useWorkout, useWorkoutAnalysis } from '@/hooks/useWorkouts';
 import { WorkoutAnalysis, WorkoutAnalysisSkeleton } from '@/components/workouts/WorkoutAnalysis';
 import { WorkoutCharts } from '@/components/workout-detail/WorkoutCharts';

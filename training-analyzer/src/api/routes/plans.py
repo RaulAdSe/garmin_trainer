@@ -754,3 +754,314 @@ def _generate_csv(plan_data: Dict[str, Any]) -> str:
             lines.append(",".join(line))
 
     return "\n".join(lines)
+
+
+# ============================================================================
+# Deviation Detection and Auto-Adaptation Endpoints
+# ============================================================================
+
+import logging
+logger = logging.getLogger(__name__)
+
+
+@router.post("/{plan_id}/check-deviation", response_model=Dict[str, Any])
+async def check_deviation(
+    plan_id: str,
+    request: Optional[Dict[str, Any]] = None,
+    coach_service=Depends(get_coach_service),
+    plan_repo: PlanRepository = Depends(get_plan_repository),
+):
+    """
+    Check for deviations between recent workouts and the planned sessions.
+
+    Analyzes completed workouts and compares them against planned sessions
+    to detect:
+    - Workouts that were harder than planned
+    - Workouts that were easier than planned
+    - Skipped sessions
+    - Extra workouts not in the plan
+
+    Args:
+        plan_id: The plan ID to check
+        request: Optional parameters (workout_id, days_back)
+
+    Returns:
+        Deviation analysis with detected deviations and summary
+    """
+    from ...services.deviation_detection import (
+        get_deviation_service,
+        WorkoutData,
+    )
+    from ...models.deviation import CheckDeviationRequest
+
+    plan = plan_repo.get(plan_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail=f"Plan {plan_id} not found")
+
+    # Parse request
+    days_back = 7
+    if request:
+        days_back = request.get("days_back", 7)
+
+    # Get recent workouts
+    try:
+        activities = coach_service.get_recent_activities(days=days_back)
+        workouts = [
+            WorkoutData.from_activity_dict(a)
+            for a in activities
+            if a.get("activity_type", "").lower() in ("running", "run")
+        ]
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch recent activities: {str(e)}"
+        )
+
+    # Detect deviations
+    deviation_service = get_deviation_service()
+    deviations = deviation_service.detect_all_deviations(
+        plan=plan,
+        workouts=workouts,
+        days_back=days_back,
+    )
+
+    # Get summary
+    summary = deviation_service.get_deviation_summary(deviations)
+
+    return {
+        "plan_id": plan_id,
+        "deviations": [d.to_dict() for d in deviations],
+        "has_significant_deviation": summary["has_significant"],
+        "total_deviations": summary["total"],
+        "summary": summary["summary_text"],
+        "by_type": summary["by_type"],
+        "checked_days": days_back,
+    }
+
+
+@router.post("/{plan_id}/auto-adapt", response_model=Dict[str, Any])
+async def auto_adapt_plan(
+    plan_id: str,
+    request: Optional[Dict[str, Any]] = None,
+    coach_service=Depends(get_coach_service),
+    training_db=Depends(get_training_db),
+    plan_repo: PlanRepository = Depends(get_plan_repository),
+):
+    """
+    Automatically adapt the plan based on detected deviations.
+
+    When a user completes a workout that deviates from the plan, this endpoint:
+    - Detects the deviation
+    - Generates AI-powered adaptation suggestions
+    - Optionally applies the adaptations immediately
+
+    Adaptation logic:
+    - If workout was harder -> suggest recovery in next session
+    - If workout was skipped -> redistribute load or extend plan
+    - If workout was easier -> maintain or slightly increase next session
+
+    Args:
+        plan_id: The plan ID to adapt
+        request: Optional parameters (apply_immediately, weeks_to_adapt, include_explanation)
+
+    Returns:
+        Adaptation suggestions or confirmation of applied changes
+    """
+    from ...services.deviation_detection import (
+        get_deviation_service,
+        WorkoutData,
+    )
+    from ...agents.adaptation_agent import get_adaptation_agent
+    from ...models.deviation import AutoAdaptRequest, DeviationType
+
+    plan = plan_repo.get(plan_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail=f"Plan {plan_id} not found")
+
+    # Parse request
+    apply_immediately = False
+    weeks_to_adapt = None
+    include_explanation = True
+
+    if request:
+        apply_immediately = request.get("apply_immediately", False)
+        weeks_to_adapt = request.get("weeks_to_adapt")
+        include_explanation = request.get("include_explanation", True)
+
+    # Get recent workouts and detect deviations
+    try:
+        activities = coach_service.get_recent_activities(days=7)
+        workouts = [
+            WorkoutData.from_activity_dict(a)
+            for a in activities
+            if a.get("activity_type", "").lower() in ("running", "run")
+        ]
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch recent activities: {str(e)}"
+        )
+
+    deviation_service = get_deviation_service()
+    deviations = deviation_service.detect_all_deviations(
+        plan=plan,
+        workouts=workouts,
+        days_back=7,
+    )
+
+    # Filter to significant deviations
+    significant_deviations = [d for d in deviations if d.is_significant]
+
+    if not significant_deviations:
+        return {
+            "plan_id": plan_id,
+            "success": True,
+            "suggestions": [],
+            "applied": False,
+            "explanation": "No significant deviations detected. Your training is on track!",
+            "affected_weeks": [],
+            "expected_load_change_pct": 0.0,
+            "message": "No adaptations needed.",
+        }
+
+    # Get athlete context for adaptation
+    athlete_context = {}
+    try:
+        briefing = coach_service.get_daily_briefing(date.today())
+        training_status = briefing.get("training_status", {})
+        athlete_context = {
+            "current_ctl": training_status.get("ctl", 30),
+            "current_atl": training_status.get("atl", 30),
+            "tsb": training_status.get("tsb", 0),
+            "readiness": briefing.get("readiness", {}).get("score", 70),
+        }
+    except Exception:
+        pass
+
+    # Generate adaptation suggestions
+    adaptation_agent = get_adaptation_agent()
+    suggestions = []
+
+    for deviation in significant_deviations[:3]:  # Limit to top 3 deviations
+        try:
+            suggestion = await adaptation_agent.suggest_adaptation(
+                plan=plan,
+                deviation=deviation,
+                athlete_context=athlete_context,
+            )
+            suggestions.append(suggestion)
+        except Exception as e:
+            logger.warning(f"Failed to generate adaptation for deviation: {e}")
+
+    if not suggestions:
+        return {
+            "plan_id": plan_id,
+            "success": False,
+            "suggestions": [],
+            "applied": False,
+            "explanation": "Unable to generate adaptation suggestions.",
+            "affected_weeks": [],
+            "expected_load_change_pct": 0.0,
+            "message": "Failed to generate adaptations. Please try again.",
+        }
+
+    # If apply_immediately, apply the first suggestion
+    applied = False
+    if apply_immediately and suggestions:
+        try:
+            applied = await _apply_adaptation(plan, suggestions[0], plan_repo)
+        except Exception as e:
+            logger.error(f"Failed to apply adaptation: {e}")
+
+    # Build response
+    all_affected_weeks = []
+    for s in suggestions:
+        all_affected_weeks.extend(s.affected_weeks)
+    all_affected_weeks = sorted(set(all_affected_weeks))
+
+    avg_load_change = sum(s.expected_load_change_pct for s in suggestions) / len(suggestions)
+
+    # Get main explanation
+    main_explanation = suggestions[0].explanation if suggestions else ""
+
+    return {
+        "plan_id": plan_id,
+        "success": True,
+        "suggestions": [s.to_dict() for s in suggestions],
+        "applied": applied,
+        "explanation": main_explanation if include_explanation else None,
+        "affected_weeks": all_affected_weeks,
+        "expected_load_change_pct": round(avg_load_change, 1),
+        "message": (
+            "Adaptations applied successfully."
+            if applied
+            else f"Generated {len(suggestions)} adaptation suggestion(s). Set apply_immediately=true to apply."
+        ),
+    }
+
+
+async def _apply_adaptation(
+    plan: TrainingPlan,
+    suggestion,  # AdaptationSuggestion
+    plan_repo: PlanRepository,
+) -> bool:
+    """
+    Apply an adaptation suggestion to the plan.
+
+    Args:
+        plan: The training plan
+        suggestion: The adaptation suggestion to apply
+        plan_repo: The plan repository
+
+    Returns:
+        True if successfully applied
+    """
+    from ...models.deviation import AdaptationAction
+
+    for adjustment in suggestion.session_adjustments:
+        # Find the session to adjust
+        for week in plan.weeks:
+            if week.week_number not in suggestion.affected_weeks:
+                continue
+
+            for i, session in enumerate(week.sessions):
+                if session.day_of_week == adjustment.day_of_week:
+                    # Apply the adjustment
+                    session.target_duration_min = adjustment.suggested_duration_min
+                    session.target_load = adjustment.suggested_load
+
+                    # Update workout type if changed
+                    if adjustment.suggested_type != adjustment.original_type:
+                        from ...models.plans import WorkoutType
+                        try:
+                            session.workout_type = WorkoutType(adjustment.suggested_type)
+                        except ValueError:
+                            pass
+
+                    # Add note about adaptation
+                    if session.notes:
+                        session.notes += f" [Adapted: {adjustment.rationale}]"
+                    else:
+                        session.notes = f"[Adapted: {adjustment.rationale}]"
+
+                    break
+
+    # Record the adaptation in history
+    plan.adaptation_history.append({
+        "timestamp": datetime.now().isoformat(),
+        "reason": suggestion.explanation,
+        "changes": {
+            "actions": [a.value for a in suggestion.actions],
+            "load_change_pct": suggestion.expected_load_change_pct,
+        },
+        "weeks_affected": suggestion.affected_weeks,
+        "triggered_by": "auto_adapt",
+    })
+    plan.updated_at = datetime.now()
+
+    # Save the updated plan
+    plan_repo.save(plan)
+    suggestion.applied = True
+    suggestion.applied_at = datetime.now()
+
+    return True

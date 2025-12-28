@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { useWorkouts } from '@/hooks/useWorkouts';
 import { WorkoutList } from '@/components/workouts/WorkoutList';
 import { GarminSync } from '@/components/garmin/GarminSync';
@@ -8,9 +9,8 @@ import { Button } from '@/components/ui/Button';
 import type { WorkoutListFilters } from '@/lib/types';
 import type { GarminSyncResponse } from '@/lib/api-client';
 
-import { useState } from 'react';
-
 export default function WorkoutsPage() {
+  const t = useTranslations('workouts');
   const [showGarminSync, setShowGarminSync] = useState(false);
 
   const {
@@ -58,9 +58,9 @@ export default function WorkoutsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-100">Workouts</h1>
+          <h1 className="text-2xl font-bold text-gray-100">{t('title')}</h1>
           <p className="mt-1 text-sm text-gray-400">
-            View and analyze your training history
+            {t('subtitle')}
           </p>
         </div>
 
@@ -68,9 +68,9 @@ export default function WorkoutsPage() {
           {/* Stats summary */}
           {total > 0 && (
             <div className="hidden sm:flex items-center gap-6">
-              <StatCard label="Total Workouts" value={total.toString()} />
+              <StatCard label={t('totalWorkouts')} value={total.toString()} />
               <StatCard
-                label="This Week"
+                label={t('thisWeek')}
                 value={getThisWeekCount(workouts).toString()}
               />
             </div>
@@ -82,7 +82,7 @@ export default function WorkoutsPage() {
             onClick={() => setShowGarminSync(true)}
             leftIcon={<SyncIcon className="w-4 h-4" />}
           >
-            Sync Garmin
+            {t('syncGarmin')}
           </Button>
         </div>
       </div>
@@ -102,7 +102,11 @@ export default function WorkoutsPage() {
       {/* Main content */}
       <div>
         {isError ? (
-          <ErrorMessage message={error?.message || 'Failed to load workouts'} />
+          <ErrorMessage
+            title={t('errorLoading')}
+            message={error?.message || 'Failed to load workouts'}
+            retryLabel={t('tryAgain')}
+          />
         ) : (
           <WorkoutList
             workouts={workouts}
@@ -133,7 +137,7 @@ function StatCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ErrorMessage({ message }: { message: string }) {
+function ErrorMessage({ title, message, retryLabel }: { title: string; message: string; retryLabel: string }) {
   return (
     <div className="bg-red-900/20 border border-red-800 rounded-lg p-6 text-center">
       <div className="inline-flex items-center justify-center w-12 h-12 bg-red-900/50 rounded-full mb-4">
@@ -152,14 +156,14 @@ function ErrorMessage({ message }: { message: string }) {
         </svg>
       </div>
       <h3 className="text-lg font-medium text-red-300 mb-1">
-        Error Loading Workouts
+        {title}
       </h3>
       <p className="text-sm text-red-400">{message}</p>
       <button
         onClick={() => window.location.reload()}
         className="mt-4 px-4 py-2 bg-red-900/50 text-red-300 rounded-md text-sm hover:bg-red-900 transition-colors"
       >
-        Try Again
+        {retryLabel}
       </button>
     </div>
   );

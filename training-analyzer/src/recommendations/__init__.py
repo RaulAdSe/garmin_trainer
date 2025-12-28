@@ -7,11 +7,13 @@ from .readiness import (
     calculate_hrv_score,
     calculate_sleep_score,
     calculate_training_load_score,
+    calculate_explained_readiness,
 )
 from .workout import (
     WorkoutType,
     WorkoutRecommendation,
     recommend_workout,
+    recommend_explained_workout,
 )
 from .explain import (
     explain_readiness,
@@ -26,9 +28,11 @@ __all__ = [
     "calculate_hrv_score",
     "calculate_sleep_score",
     "calculate_training_load_score",
+    "calculate_explained_readiness",
     "WorkoutType",
     "WorkoutRecommendation",
     "recommend_workout",
+    "recommend_explained_workout",
     "explain_readiness",
     "explain_workout",
     "generate_daily_narrative",

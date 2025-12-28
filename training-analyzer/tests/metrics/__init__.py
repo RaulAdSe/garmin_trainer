@@ -1,1 +1,1 @@
-"""Tests for training metrics."""
+"""Tests for metrics calculations."""

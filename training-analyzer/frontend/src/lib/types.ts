@@ -692,3 +692,74 @@ export const SCORE_LABEL_MAP: Record<ScoreLevel, string> = {
   fair: 'Fair',
   poor: 'Needs Work',
 };
+
+// ============================================
+// Explainability Types (Transparency Layer)
+// ============================================
+
+export type ImpactType = 'positive' | 'negative' | 'neutral';
+
+export interface DataSource {
+  source_type: string;
+  source_name: string;
+  last_updated?: string;
+  confidence: number;
+}
+
+export interface ExplanationFactor {
+  name: string;
+  value: unknown;
+  display_value: string;
+  impact: ImpactType;
+  weight: number;
+  contribution_points: number;
+  explanation: string;
+  threshold?: string;
+  baseline?: unknown;
+  data_sources: DataSource[];
+}
+
+export interface ExplainedRecommendation {
+  recommendation: string;
+  confidence: number;
+  confidence_explanation: string;
+  factors: ExplanationFactor[];
+  data_points: Record<string, unknown>;
+  calculation_summary: string;
+  alternatives_considered: string[];
+  key_driver?: string;
+}
+
+export interface ExplainedReadiness {
+  date: string;
+  overall_score: number;
+  zone: string;
+  recommendation: ExplainedRecommendation;
+  factor_breakdown: ExplanationFactor[];
+  score_calculation: string;
+  comparison_to_baseline?: string;
+  trend?: string;
+}
+
+export interface ExplainedWorkout {
+  workout_type: string;
+  duration_min: number;
+  intensity_description: string;
+  hr_zone_target?: string;
+  recommendation: ExplainedRecommendation;
+  decision_tree: string[];
+  readiness_influence: number;
+  load_influence: number;
+  pattern_influence: number;
+}
+
+export interface SessionExplanation {
+  session_id: string;
+  session_name: string;
+  session_type: string;
+  scheduled_date: string;
+  rationale: ExplainedRecommendation;
+  periodization_context: string;
+  weekly_context: string;
+  progression_note?: string;
+}

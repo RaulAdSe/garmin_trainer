@@ -579,9 +579,13 @@ class WorkoutData:
     avg_power: Optional[int] = None
     max_power: Optional[int] = None
     normalized_power: Optional[int] = None
-    tss: Optional[float] = None  # Training Stress Score (power-based)
+    power_tss: Optional[float] = None  # Training Stress Score (power-based)
+    tss: Optional[float] = None  # Alias for power_tss (backward compatibility)
     intensity_factor: Optional[float] = None
     variability_index: Optional[float] = None
+
+    # Cycling-specific cadence (RPM)
+    cycling_cadence: Optional[int] = None
 
     # Speed metrics
     avg_speed_kmh: Optional[float] = None
@@ -678,6 +682,8 @@ class WorkoutData:
 
         if self.cadence:
             lines.append(f"Avg Cadence: {self.cadence} spm")
+        if self.cycling_cadence:
+            lines.append(f"Avg Cycling Cadence: {self.cycling_cadence} rpm")
         if self.elevation_gain:
             lines.append(f"Elevation Gain: {self.elevation_gain:.0f} m")
         if self.elevation_gain_m:
@@ -733,9 +739,11 @@ class WorkoutData:
             avg_power=data.get("avg_power"),
             max_power=data.get("max_power"),
             normalized_power=data.get("normalized_power"),
-            tss=data.get("tss"),
+            power_tss=data.get("power_tss"),
+            tss=data.get("tss") or data.get("power_tss"),
             intensity_factor=data.get("intensity_factor"),
             variability_index=data.get("variability_index"),
+            cycling_cadence=data.get("cycling_cadence"),
             avg_speed_kmh=data.get("avg_speed_kmh"),
             elevation_gain_m=data.get("elevation_gain_m"),
             pool_length_m=data.get("pool_length_m"),

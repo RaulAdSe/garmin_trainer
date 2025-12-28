@@ -1,14 +1,15 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useAthleteContext } from "@/hooks/useAthleteContext";
 import { ReadinessGauge } from "@/components/athlete/ReadinessGauge";
 import { FitnessMetrics } from "@/components/athlete/FitnessMetrics";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
-import { LoadingCenter } from "@/components/ui/LoadingSpinner";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { SkeletonMetricGrid, SkeletonCard } from "@/components/ui/Skeleton";
+import { SkeletonCard } from "@/components/ui/Skeleton";
 
 export default function Dashboard() {
+  const t = useTranslations("dashboard");
   const { data: context, isLoading, error, refetch } = useAthleteContext();
 
   if (isLoading) {
@@ -51,10 +52,10 @@ export default function Dashboard() {
       {/* Header */}
       <div className="animate-fadeIn">
         <h1 className="text-xl sm:text-2xl font-bold text-gray-100">
-          Training Dashboard
+          {t("title")}
         </h1>
         <p className="text-sm sm:text-base text-gray-400 mt-1">
-          Your AI-powered training companion
+          {t("subtitle")}
         </p>
       </div>
 
@@ -63,7 +64,7 @@ export default function Dashboard() {
         {/* Readiness Card */}
         <Card className="lg:col-span-2 animate-slideUp">
           <CardHeader>
-            <CardTitle>Today&apos;s Readiness</CardTitle>
+            <CardTitle>{t("readinessCard")}</CardTitle>
           </CardHeader>
           {context && (
             <ReadinessGauge
@@ -77,7 +78,7 @@ export default function Dashboard() {
         {/* Quick Stats */}
         <Card className="animate-slideUp" style={{ animationDelay: "0.1s" }}>
           <CardHeader>
-            <CardTitle>Fitness Status</CardTitle>
+            <CardTitle>{t("fitnessCard")}</CardTitle>
           </CardHeader>
           {context && <FitnessMetrics fitness={context.fitness} />}
         </Card>
@@ -87,7 +88,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         <Card className="animate-slideUp" style={{ animationDelay: "0.2s" }}>
           <CardHeader>
-            <CardTitle>Training Paces</CardTitle>
+            <CardTitle>{t("trainingPaces")}</CardTitle>
           </CardHeader>
           {context?.training_paces && context.training_paces.length > 0 ? (
             <div className="space-y-1 sm:space-y-2">
@@ -113,7 +114,7 @@ export default function Dashboard() {
           ) : (
             <div className="text-center py-8">
               <p className="text-gray-500 text-sm">
-                Set a race goal to see training paces
+                {t("setRaceGoal")}
               </p>
             </div>
           )}
@@ -121,7 +122,7 @@ export default function Dashboard() {
 
         <Card className="animate-slideUp" style={{ animationDelay: "0.3s" }}>
           <CardHeader>
-            <CardTitle>HR Zones</CardTitle>
+            <CardTitle>{t("hrZones")}</CardTitle>
           </CardHeader>
           {context?.hr_zones && (
             <div className="space-y-1 sm:space-y-2">
@@ -154,7 +155,7 @@ export default function Dashboard() {
       {context?.race_goals && context.race_goals.length > 0 && (
         <Card className="animate-slideUp" style={{ animationDelay: "0.4s" }}>
           <CardHeader>
-            <CardTitle>Race Goals</CardTitle>
+            <CardTitle>{t("raceGoals")}</CardTitle>
           </CardHeader>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {context.race_goals.map((goal, i) => (
@@ -173,11 +174,11 @@ export default function Dashboard() {
                 </div>
                 <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-gray-700 text-xs sm:text-sm space-y-1">
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Race date:</span>
+                    <span className="text-gray-500">{t("raceDate")}</span>
                     <span className="text-gray-300">{goal.race_date}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Weeks left:</span>
+                    <span className="text-gray-500">{t("weeksLeft")}</span>
                     <span className="text-yellow-400 font-medium">{goal.weeks_remaining}</span>
                   </div>
                 </div>

@@ -5,11 +5,22 @@ Combines multiple factors into a 0-100 readiness score:
 - Recovery data (HRV, sleep, Body Battery) from wellness
 - Training load balance (TSB, ACWR)
 - Recent training pattern
+
+This module also provides full explainability for transparency.
 """
 
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List
 from datetime import date, datetime
+
+from ..models.explanations import (
+    ImpactType,
+    DataSourceType,
+    DataSource,
+    ExplanationFactor,
+    ExplainedRecommendation,
+    ExplainedReadiness,
+)
 
 
 @dataclass
@@ -585,3 +596,546 @@ def _calculate_days_since_hard(activities: list, target_date: date) -> int:
 
     days_since = (target_date - last_hard_date).days
     return max(0, days_since)
+
+
+def _get_impact_type(score: float, threshold_good: float = 70, threshold_bad: float = 50) -> ImpactType:
+    """Determine impact type based on score thresholds."""
+    if score >= threshold_good:
+        return ImpactType.POSITIVE
+    elif score < threshold_bad:
+        return ImpactType.NEGATIVE
+    return ImpactType.NEUTRAL
+
+
+def _format_percentage_change(current: float, baseline: float) -> str:
+    """Format a percentage change with sign."""
+    if baseline == 0:
+        return "N/A"
+    pct = ((current - baseline) / baseline) * 100
+    sign = "+" if pct >= 0 else ""
+    return f"{sign}{pct:.1f}%"
+
+
+def calculate_explained_readiness(
+    wellness_data: Optional[Dict[str, Any]],
+    fitness_metrics: Optional[Dict[str, Any]],
+    recent_activities: list,
+    weights: Optional[Dict[str, float]] = None,
+    target_date: Optional[date] = None,
+) -> ExplainedReadiness:
+    """
+    Calculate readiness with full explainability.
+
+    This extends calculate_readiness to provide complete transparency
+    into the calculation, showing exactly what data was used, how each
+    factor contributed, and the mathematical reasoning.
+
+    Args:
+        wellness_data: Today's wellness (HRV, sleep, Body Battery, stress)
+        fitness_metrics: Current CTL/ATL/TSB/ACWR
+        recent_activities: Last 7 days of activities
+        weights: Optional custom weights for factors
+        target_date: Date for assessment (defaults to today)
+
+    Returns:
+        ExplainedReadiness with full factor breakdown
+    """
+    if weights is None:
+        weights = DEFAULT_WEIGHTS.copy()
+
+    if target_date is None:
+        target_date = date.today()
+
+    # First, calculate the standard readiness
+    result = calculate_readiness(
+        wellness_data=wellness_data,
+        fitness_metrics=fitness_metrics,
+        recent_activities=recent_activities,
+        weights=weights,
+        target_date=target_date,
+    )
+
+    # Now build the detailed factor breakdown
+    factor_breakdown: List[ExplanationFactor] = []
+    calculation_steps: List[str] = []
+    data_points: Dict[str, Any] = {}
+    total_weight = 0.0
+    weighted_sum = 0.0
+
+    # HRV Factor
+    if result.factors.hrv_score is not None:
+        hrv_data = wellness_data.get("hrv", {}) if wellness_data else {}
+        hrv_last = hrv_data.get("hrv_last_night_avg")
+        hrv_weekly = hrv_data.get("hrv_weekly_avg")
+
+        impact = _get_impact_type(result.factors.hrv_score)
+        weight = weights.get('hrv', 0.25)
+        contribution = result.factors.hrv_score * weight
+
+        # Determine display value
+        if hrv_last and hrv_weekly and hrv_weekly > 0:
+            ratio = hrv_last / hrv_weekly
+            if ratio >= 1.0:
+                display = f"{((ratio - 1) * 100):.0f}% above baseline"
+            else:
+                display = f"{((1 - ratio) * 100):.0f}% below baseline"
+        else:
+            display = f"{result.factors.hrv_score:.0f}/100"
+
+        explanation = _get_hrv_explanation(result.factors.hrv_score, hrv_data)
+
+        factor_breakdown.append(ExplanationFactor(
+            name="HRV Score",
+            value=result.factors.hrv_score,
+            display_value=display,
+            impact=impact,
+            weight=weight,
+            contribution_points=contribution,
+            explanation=explanation,
+            threshold="Target: > 75 (at or above baseline)",
+            baseline=hrv_weekly,
+            data_sources=[
+                DataSource(
+                    source_type=DataSourceType.GARMIN_HRV,
+                    source_name="Garmin HRV",
+                    last_updated=target_date.isoformat(),
+                    confidence=0.95,
+                )
+            ],
+        ))
+
+        data_points["hrv"] = {
+            "last_night": hrv_last,
+            "weekly_avg": hrv_weekly,
+            "score": result.factors.hrv_score,
+            "status": hrv_data.get("hrv_status"),
+        }
+        calculation_steps.append(
+            f"HRV: {result.factors.hrv_score:.1f} x {weight:.2f} = {contribution:.1f}"
+        )
+        total_weight += weight
+        weighted_sum += contribution
+
+    # Sleep Factor
+    if result.factors.sleep_score is not None:
+        sleep_data = wellness_data.get("sleep", {}) if wellness_data else {}
+        total_hours = sleep_data.get("total_sleep_hours", 0)
+        deep_pct = sleep_data.get("deep_sleep_pct")
+
+        impact = _get_impact_type(result.factors.sleep_score)
+        weight = weights.get('sleep', 0.20)
+        contribution = result.factors.sleep_score * weight
+
+        if total_hours:
+            display = f"{total_hours:.1f} hours ({result.factors.sleep_score:.0f}/100)"
+        else:
+            display = f"{result.factors.sleep_score:.0f}/100"
+
+        explanation = _get_sleep_explanation(result.factors.sleep_score, sleep_data)
+
+        factor_breakdown.append(ExplanationFactor(
+            name="Sleep Quality",
+            value=result.factors.sleep_score,
+            display_value=display,
+            impact=impact,
+            weight=weight,
+            contribution_points=contribution,
+            explanation=explanation,
+            threshold="Target: 8+ hours with 20%+ deep sleep",
+            baseline=8.0,  # Target hours
+            data_sources=[
+                DataSource(
+                    source_type=DataSourceType.GARMIN_SLEEP,
+                    source_name="Garmin Sleep Tracking",
+                    last_updated=target_date.isoformat(),
+                    confidence=0.90,
+                )
+            ],
+        ))
+
+        data_points["sleep"] = {
+            "total_hours": total_hours,
+            "deep_sleep_pct": deep_pct,
+            "score": result.factors.sleep_score,
+        }
+        calculation_steps.append(
+            f"Sleep: {result.factors.sleep_score:.1f} x {weight:.2f} = {contribution:.1f}"
+        )
+        total_weight += weight
+        weighted_sum += contribution
+
+    # Body Battery Factor
+    if result.factors.body_battery is not None:
+        impact = _get_impact_type(result.factors.body_battery, 75, 40)
+        weight = weights.get('body_battery', 0.15)
+        contribution = result.factors.body_battery * weight
+
+        explanation = _get_body_battery_explanation(result.factors.body_battery)
+
+        factor_breakdown.append(ExplanationFactor(
+            name="Body Battery",
+            value=result.factors.body_battery,
+            display_value=f"{result.factors.body_battery:.0f}%",
+            impact=impact,
+            weight=weight,
+            contribution_points=contribution,
+            explanation=explanation,
+            threshold="Target: > 75%",
+            baseline=75,
+            data_sources=[
+                DataSource(
+                    source_type=DataSourceType.GARMIN_BODY_BATTERY,
+                    source_name="Garmin Body Battery",
+                    last_updated=target_date.isoformat(),
+                    confidence=0.85,
+                )
+            ],
+        ))
+
+        data_points["body_battery"] = result.factors.body_battery
+        calculation_steps.append(
+            f"Body Battery: {result.factors.body_battery:.1f} x {weight:.2f} = {contribution:.1f}"
+        )
+        total_weight += weight
+        weighted_sum += contribution
+
+    # Stress Factor
+    if result.factors.stress_score is not None:
+        impact = _get_impact_type(result.factors.stress_score)
+        weight = weights.get('stress', 0.10)
+        contribution = result.factors.stress_score * weight
+
+        stress_data = wellness_data.get("stress", {}) if wellness_data else {}
+        avg_stress = stress_data.get("avg_stress_level", 0)
+
+        explanation = _get_stress_explanation(result.factors.stress_score, avg_stress)
+
+        factor_breakdown.append(ExplanationFactor(
+            name="Stress Level",
+            value=result.factors.stress_score,
+            display_value=f"{100 - result.factors.stress_score:.0f} avg stress" if avg_stress else f"{result.factors.stress_score:.0f}/100",
+            impact=impact,
+            weight=weight,
+            contribution_points=contribution,
+            explanation=explanation,
+            threshold="Target: < 40 average stress (inverted to score)",
+            baseline=40,
+            data_sources=[
+                DataSource(
+                    source_type=DataSourceType.GARMIN_STRESS,
+                    source_name="Garmin Stress Tracking",
+                    last_updated=target_date.isoformat(),
+                    confidence=0.80,
+                )
+            ],
+        ))
+
+        data_points["stress"] = {
+            "avg_level": avg_stress,
+            "score": result.factors.stress_score,
+        }
+        calculation_steps.append(
+            f"Stress: {result.factors.stress_score:.1f} x {weight:.2f} = {contribution:.1f}"
+        )
+        total_weight += weight
+        weighted_sum += contribution
+
+    # Training Load Factor
+    if result.factors.training_load_score is not None:
+        impact = _get_impact_type(result.factors.training_load_score)
+        weight = weights.get('training_load', 0.20)
+        contribution = result.factors.training_load_score * weight
+
+        tsb = fitness_metrics.get("tsb") if fitness_metrics else None
+        acwr = fitness_metrics.get("acwr") if fitness_metrics else None
+
+        explanation = _get_training_load_explanation(
+            result.factors.training_load_score, tsb, acwr
+        )
+
+        display_parts = []
+        if tsb is not None:
+            display_parts.append(f"TSB: {tsb:+.1f}")
+        if acwr is not None:
+            display_parts.append(f"ACWR: {acwr:.2f}")
+        display = ", ".join(display_parts) if display_parts else f"{result.factors.training_load_score:.0f}/100"
+
+        factor_breakdown.append(ExplanationFactor(
+            name="Training Load Balance",
+            value=result.factors.training_load_score,
+            display_value=display,
+            impact=impact,
+            weight=weight,
+            contribution_points=contribution,
+            explanation=explanation,
+            threshold="Optimal: TSB 0-20, ACWR 0.8-1.3",
+            baseline={"tsb_target": 10, "acwr_target": 1.0},
+            data_sources=[
+                DataSource(
+                    source_type=DataSourceType.CALCULATED_TSB,
+                    source_name="Training Stress Balance",
+                    confidence=0.90,
+                ),
+                DataSource(
+                    source_type=DataSourceType.CALCULATED_ACWR,
+                    source_name="Acute:Chronic Workload Ratio",
+                    confidence=0.90,
+                ),
+            ],
+        ))
+
+        data_points["training_load"] = {
+            "tsb": tsb,
+            "acwr": acwr,
+            "score": result.factors.training_load_score,
+        }
+        calculation_steps.append(
+            f"Training Load: {result.factors.training_load_score:.1f} x {weight:.2f} = {contribution:.1f}"
+        )
+        total_weight += weight
+        weighted_sum += contribution
+
+    # Recovery Days Factor
+    recovery_score = calculate_recovery_days_score(result.factors.recovery_days)
+    weight = weights.get('recovery_days', 0.10)
+    contribution = recovery_score * weight
+
+    if result.factors.recovery_days == 0:
+        impact = ImpactType.NEGATIVE
+    elif result.factors.recovery_days >= 2:
+        impact = ImpactType.POSITIVE
+    else:
+        impact = ImpactType.NEUTRAL
+
+    explanation = _get_recovery_days_explanation(result.factors.recovery_days)
+
+    factor_breakdown.append(ExplanationFactor(
+        name="Recovery Time",
+        value=result.factors.recovery_days,
+        display_value=f"{result.factors.recovery_days} days since hard workout",
+        impact=impact,
+        weight=weight,
+        contribution_points=contribution,
+        explanation=explanation,
+        threshold="Optimal: 2+ days between hard workouts",
+        baseline=2,
+        data_sources=[
+            DataSource(
+                source_type=DataSourceType.ACTIVITY_HISTORY,
+                source_name="Recent Activities",
+                confidence=1.0,
+            )
+        ],
+    ))
+
+    data_points["recovery_days"] = result.factors.recovery_days
+    calculation_steps.append(
+        f"Recovery: {recovery_score:.1f} x {weight:.2f} = {contribution:.1f}"
+    )
+    total_weight += weight
+    weighted_sum += contribution
+
+    # Build score calculation summary
+    if total_weight > 0:
+        final_score = weighted_sum / total_weight
+        calculation_steps.append(f"---")
+        calculation_steps.append(f"Total weighted: {weighted_sum:.1f} / {total_weight:.2f} = {final_score:.1f}")
+    else:
+        final_score = 50.0
+        calculation_steps.append("No factors available, defaulting to 50")
+
+    score_calculation = "\n".join(calculation_steps)
+
+    # Find key driver (most impactful factor)
+    if factor_breakdown:
+        key_factor = max(factor_breakdown, key=lambda f: abs(f.contribution_points))
+        key_driver = key_factor.name
+    else:
+        key_driver = None
+
+    # Determine alternatives considered
+    alternatives = []
+    if result.zone == "green":
+        alternatives = ["Quality training session", "Long run", "Tempo workout"]
+    elif result.zone == "yellow":
+        alternatives = ["Easy run", "Cross-training", "Light activity"]
+    else:
+        alternatives = ["Complete rest", "Light stretching", "Walk"]
+
+    # Build the explained recommendation
+    explained_rec = ExplainedRecommendation(
+        recommendation=result.recommendation,
+        confidence=_calculate_confidence(factor_breakdown, result.factors),
+        confidence_explanation=_get_confidence_explanation(factor_breakdown),
+        factors=factor_breakdown,
+        data_points=data_points,
+        calculation_summary=score_calculation,
+        alternatives_considered=alternatives,
+        key_driver=key_driver,
+    )
+
+    return ExplainedReadiness(
+        date=target_date.isoformat(),
+        overall_score=result.overall_score,
+        zone=result.zone,
+        recommendation=explained_rec,
+        factor_breakdown=factor_breakdown,
+        score_calculation=score_calculation,
+        comparison_to_baseline=None,  # Could add 7-day comparison
+        trend=None,  # Could add trend analysis
+    )
+
+
+def _get_hrv_explanation(score: float, hrv_data: Dict) -> str:
+    """Generate human-readable HRV explanation."""
+    hrv_last = hrv_data.get("hrv_last_night_avg")
+    hrv_weekly = hrv_data.get("hrv_weekly_avg")
+
+    if hrv_last and hrv_weekly and hrv_weekly > 0:
+        ratio = hrv_last / hrv_weekly
+        if ratio >= 1.2:
+            return f"Excellent HRV ({hrv_last} ms) - significantly above your baseline of {hrv_weekly} ms. Your autonomic nervous system is well-recovered."
+        elif ratio >= 1.0:
+            return f"Good HRV ({hrv_last} ms) - at or above your baseline of {hrv_weekly} ms. Normal recovery state."
+        elif ratio >= 0.85:
+            return f"HRV slightly below baseline ({hrv_last} ms vs {hrv_weekly} ms avg). Some systemic stress may be present."
+        else:
+            return f"HRV significantly below baseline ({hrv_last} ms vs {hrv_weekly} ms avg). Consider prioritizing recovery."
+
+    if score >= 80:
+        return "Strong HRV indicating good autonomic recovery."
+    elif score >= 60:
+        return "Moderate HRV - adequate recovery state."
+    else:
+        return "Lower HRV suggests accumulated stress or incomplete recovery."
+
+
+def _get_sleep_explanation(score: float, sleep_data: Dict) -> str:
+    """Generate human-readable sleep explanation."""
+    hours = sleep_data.get("total_sleep_hours", 0)
+    deep_pct = sleep_data.get("deep_sleep_pct")
+
+    parts = []
+
+    if hours:
+        if hours >= 8:
+            parts.append(f"Excellent sleep duration ({hours:.1f} hours)")
+        elif hours >= 7:
+            parts.append(f"Good sleep duration ({hours:.1f} hours)")
+        elif hours >= 6:
+            parts.append(f"Adequate but below optimal sleep ({hours:.1f} hours)")
+        else:
+            parts.append(f"Insufficient sleep ({hours:.1f} hours) - recovery compromised")
+
+    if deep_pct:
+        if deep_pct >= 20:
+            parts.append(f"with excellent deep sleep ({deep_pct:.0f}%)")
+        elif deep_pct >= 15:
+            parts.append(f"with adequate deep sleep ({deep_pct:.0f}%)")
+        else:
+            parts.append(f"but low deep sleep ({deep_pct:.0f}%) may limit recovery")
+
+    return ". ".join(parts) + "." if parts else "Sleep data analyzed."
+
+
+def _get_body_battery_explanation(score: float) -> str:
+    """Generate human-readable Body Battery explanation."""
+    if score >= 80:
+        return f"High energy reserves ({score:.0f}%) - well-charged for demanding training."
+    elif score >= 60:
+        return f"Moderate energy ({score:.0f}%) - suitable for normal training."
+    elif score >= 40:
+        return f"Lower energy ({score:.0f}%) - consider easier training today."
+    else:
+        return f"Depleted energy reserves ({score:.0f}%) - prioritize rest and recovery."
+
+
+def _get_stress_explanation(score: float, avg_stress: float) -> str:
+    """Generate human-readable stress explanation."""
+    # Score is inverted stress (high score = low stress)
+    if score >= 70:
+        return f"Low stress levels (avg {avg_stress:.0f}) - body is relaxed and ready for training."
+    elif score >= 50:
+        return f"Moderate stress levels (avg {avg_stress:.0f}) - normal baseline."
+    else:
+        return f"Elevated stress (avg {avg_stress:.0f}) - may impact recovery and performance."
+
+
+def _get_training_load_explanation(score: float, tsb: Optional[float], acwr: Optional[float]) -> str:
+    """Generate human-readable training load explanation."""
+    parts = []
+
+    if tsb is not None:
+        if tsb > 20:
+            parts.append(f"Very fresh (TSB: {tsb:+.1f}) - well-rested with positive form")
+        elif tsb > 0:
+            parts.append(f"Fresh (TSB: {tsb:+.1f}) - good balance of fitness and fatigue")
+        elif tsb > -10:
+            parts.append(f"Neutral fatigue (TSB: {tsb:+.1f}) - manageable training load")
+        elif tsb > -25:
+            parts.append(f"Accumulated fatigue (TSB: {tsb:+.1f}) - consider recovery")
+        else:
+            parts.append(f"High fatigue (TSB: {tsb:+.1f}) - recovery strongly recommended")
+
+    if acwr is not None:
+        if 0.8 <= acwr <= 1.3:
+            parts.append(f"optimal training load ratio (ACWR: {acwr:.2f})")
+        elif acwr < 0.8:
+            parts.append(f"undertrained (ACWR: {acwr:.2f}) - can increase load")
+        elif acwr <= 1.5:
+            parts.append(f"elevated load ratio (ACWR: {acwr:.2f}) - caution advised")
+        else:
+            parts.append(f"high injury risk zone (ACWR: {acwr:.2f}) - reduce training")
+
+    if parts:
+        return parts[0].capitalize() + (", " + parts[1] if len(parts) > 1 else "") + "."
+    return "Training load analyzed."
+
+
+def _get_recovery_days_explanation(days: int) -> str:
+    """Generate human-readable recovery days explanation."""
+    if days == 0:
+        return "Hard workout was yesterday - body still recovering from intense effort."
+    elif days == 1:
+        return "One day since hard workout - partial recovery. Easy day recommended."
+    elif days == 2:
+        return "Two days of recovery - good window for quality training."
+    elif days >= 3:
+        return f"{days} days since last hard effort - fully recovered and ready for intensity."
+    return "Recovery status analyzed."
+
+
+def _calculate_confidence(factors: List[ExplanationFactor], readiness_factors: ReadinessFactors) -> float:
+    """Calculate confidence in the recommendation based on data availability."""
+    available = readiness_factors.available_factors()
+
+    # Base confidence on data availability
+    if len(available) >= 5:
+        confidence = 0.95
+    elif len(available) >= 3:
+        confidence = 0.85
+    elif len(available) >= 1:
+        confidence = 0.70
+    else:
+        confidence = 0.50
+
+    # Adjust for data source confidence
+    if factors:
+        avg_source_confidence = sum(
+            sum(ds.confidence for ds in f.data_sources) / max(len(f.data_sources), 1)
+            for f in factors
+        ) / len(factors)
+        confidence *= avg_source_confidence
+
+    return min(0.99, max(0.30, confidence))
+
+
+def _get_confidence_explanation(factors: List[ExplanationFactor]) -> str:
+    """Explain the confidence level."""
+    if len(factors) >= 5:
+        return "High confidence - comprehensive data from multiple sources available."
+    elif len(factors) >= 3:
+        return "Good confidence - key metrics available for assessment."
+    elif len(factors) >= 1:
+        return "Moderate confidence - limited data available, recommendation may be less precise."
+    return "Low confidence - insufficient data for reliable assessment."

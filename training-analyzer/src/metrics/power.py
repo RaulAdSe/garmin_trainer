@@ -1,6 +1,224 @@
 """Cycling power metrics calculations (NP, IF, TSS, power zones)."""
 
-from typing import Dict, List, Tuple
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Dict, List, Optional, Tuple
+
+
+@dataclass
+class PowerZones:
+    """
+    Power training zones based on FTP (Functional Threshold Power).
+
+    Uses the classic 7-zone Coggan model:
+    - Zone 1: Active Recovery (<55% FTP)
+    - Zone 2: Endurance (55-75% FTP)
+    - Zone 3: Tempo (75-90% FTP)
+    - Zone 4: Threshold (90-105% FTP)
+    - Zone 5: VO2max (105-120% FTP)
+    - Zone 6: Anaerobic (120-150% FTP)
+    - Zone 7: Neuromuscular (>150% FTP)
+    """
+    ftp: int
+    zone1: Tuple[int, int] = field(default=(0, 0))
+    zone2: Tuple[int, int] = field(default=(0, 0))
+    zone3: Tuple[int, int] = field(default=(0, 0))
+    zone4: Tuple[int, int] = field(default=(0, 0))
+    zone5: Tuple[int, int] = field(default=(0, 0))
+    zone6: Tuple[int, int] = field(default=(0, 0))
+    zone7: Tuple[int, int] = field(default=(0, 0))
+    updated_at: Optional[datetime] = None
+
+    def __post_init__(self):
+        """Calculate zones based on FTP if not provided."""
+        if self.ftp > 0 and self.zone1 == (0, 0):
+            zones = calculate_power_zones(self.ftp)
+            self.zone1 = zones[1]
+            self.zone2 = zones[2]
+            self.zone3 = zones[3]
+            self.zone4 = zones[4]
+            self.zone5 = zones[5]
+            self.zone6 = zones[6]
+            self.zone7 = zones[7]
+        if self.updated_at is None:
+            self.updated_at = datetime.now()
+
+    def get_zone(self, zone_num: int) -> Tuple[int, int]:
+        """Get zone range by number (1-7)."""
+        zone_map = {
+            1: self.zone1,
+            2: self.zone2,
+            3: self.zone3,
+            4: self.zone4,
+            5: self.zone5,
+            6: self.zone6,
+            7: self.zone7,
+        }
+        return zone_map.get(zone_num, (0, 0))
+
+    def get_zone_for_power(self, power: int) -> int:
+        """Return zone number (1-7) for a given power value."""
+        if power < 0:
+            return 0
+        zones = [self.zone1, self.zone2, self.zone3, self.zone4,
+                 self.zone5, self.zone6, self.zone7]
+        for i, (min_w, max_w) in enumerate(zones, 1):
+            if power <= max_w:
+                return i
+        return 7
+
+    def to_dict(self) -> Dict:
+        """Convert to dictionary for serialization."""
+        zone_names = get_power_zone_names()
+        return {
+            "ftp": self.ftp,
+            "zones": {
+                f"zone{i}": {
+                    "name": zone_names[i],
+                    "min": self.get_zone(i)[0],
+                    "max": self.get_zone(i)[1],
+                }
+                for i in range(1, 8)
+            },
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+    def format_zones(self) -> str:
+        """Format zones for prompt injection."""
+        zone_names = get_power_zone_names()
+        lines = []
+        for i in range(1, 8):
+            min_w, max_w = self.get_zone(i)
+            lines.append(f"Z{i} ({zone_names[i]}): {min_w}-{max_w}W")
+        return ", ".join(lines)
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> "PowerZones":
+        """Create PowerZones from dictionary."""
+        zones_data = data.get("zones", {})
+        return cls(
+            ftp=data.get("ftp", 0),
+            zone1=tuple(zones_data.get("zone1", {}).values())[:2] if zones_data.get("zone1") else (0, 0),
+            zone2=tuple(zones_data.get("zone2", {}).values())[:2] if zones_data.get("zone2") else (0, 0),
+            zone3=tuple(zones_data.get("zone3", {}).values())[:2] if zones_data.get("zone3") else (0, 0),
+            zone4=tuple(zones_data.get("zone4", {}).values())[:2] if zones_data.get("zone4") else (0, 0),
+            zone5=tuple(zones_data.get("zone5", {}).values())[:2] if zones_data.get("zone5") else (0, 0),
+            zone6=tuple(zones_data.get("zone6", {}).values())[:2] if zones_data.get("zone6") else (0, 0),
+            zone7=tuple(zones_data.get("zone7", {}).values())[:2] if zones_data.get("zone7") else (0, 0),
+        )
+
+
+@dataclass
+class CyclingAthleteContext:
+    """
+    Cycling-specific athlete context for personalized workout analysis and design.
+
+    Contains FTP, power zones, and cycling-specific training metrics.
+    """
+    # Functional Threshold Power (1-hour max sustainable power)
+    ftp: int = 200
+
+    # FTP test date for staleness tracking
+    ftp_test_date: Optional[datetime] = None
+
+    # Power zones (auto-calculated from FTP)
+    power_zones: Optional[PowerZones] = None
+
+    # Cycling-specific fitness metrics
+    cycling_ctl: float = 30.0  # Cycling-specific Chronic Training Load
+    cycling_atl: float = 30.0  # Cycling-specific Acute Training Load
+    cycling_tsb: float = 0.0   # Cycling-specific TSB
+
+    # Efficiency metrics
+    typical_efficiency_factor: Optional[float] = None  # NP/HR typical value
+    power_to_weight: Optional[float] = None  # W/kg at FTP
+
+    # Athlete weight (for W/kg calculations)
+    weight_kg: Optional[float] = None
+
+    # Training preferences
+    preferred_indoor_outdoor: str = "outdoor"  # indoor, outdoor, both
+
+    def __post_init__(self):
+        """Initialize power zones from FTP if not provided."""
+        if self.power_zones is None and self.ftp > 0:
+            self.power_zones = PowerZones(ftp=self.ftp)
+        if self.weight_kg and self.ftp:
+            self.power_to_weight = round(self.ftp / self.weight_kg, 2)
+
+    def update_ftp(self, new_ftp: int, test_date: Optional[datetime] = None):
+        """Update FTP and recalculate zones."""
+        self.ftp = new_ftp
+        self.ftp_test_date = test_date or datetime.now()
+        self.power_zones = PowerZones(ftp=new_ftp, updated_at=self.ftp_test_date)
+        if self.weight_kg:
+            self.power_to_weight = round(self.ftp / self.weight_kg, 2)
+
+    def get_target_power_range(self, zone: int) -> Tuple[int, int]:
+        """Get target power range for a zone."""
+        if self.power_zones:
+            return self.power_zones.get_zone(zone)
+        # Fallback calculation
+        zones = calculate_power_zones(self.ftp)
+        return zones.get(zone, (0, 0))
+
+    def to_dict(self) -> Dict:
+        """Convert to dictionary for serialization."""
+        return {
+            "ftp": self.ftp,
+            "ftp_test_date": self.ftp_test_date.isoformat() if self.ftp_test_date else None,
+            "power_zones": self.power_zones.to_dict() if self.power_zones else None,
+            "cycling_ctl": self.cycling_ctl,
+            "cycling_atl": self.cycling_atl,
+            "cycling_tsb": self.cycling_tsb,
+            "typical_efficiency_factor": self.typical_efficiency_factor,
+            "power_to_weight": self.power_to_weight,
+            "weight_kg": self.weight_kg,
+            "preferred_indoor_outdoor": self.preferred_indoor_outdoor,
+        }
+
+    def to_prompt_context(self) -> str:
+        """Convert to formatted string for LLM prompt injection."""
+        lines = [
+            f"FTP: {self.ftp}W",
+        ]
+        if self.power_to_weight:
+            lines.append(f"Power-to-Weight: {self.power_to_weight} W/kg")
+        if self.power_zones:
+            lines.append(f"Power Zones: {self.power_zones.format_zones()}")
+        lines.extend([
+            f"Cycling CTL: {self.cycling_ctl:.1f} | ATL: {self.cycling_atl:.1f} | TSB: {self.cycling_tsb:.1f}",
+        ])
+        if self.typical_efficiency_factor:
+            lines.append(f"Typical Efficiency Factor: {self.typical_efficiency_factor:.2f}")
+        return "\n".join(lines)
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> "CyclingAthleteContext":
+        """Create CyclingAthleteContext from dictionary."""
+        power_zones = None
+        if data.get("power_zones"):
+            power_zones = PowerZones.from_dict(data["power_zones"])
+
+        ftp_test_date = None
+        if data.get("ftp_test_date"):
+            if isinstance(data["ftp_test_date"], str):
+                ftp_test_date = datetime.fromisoformat(data["ftp_test_date"])
+            else:
+                ftp_test_date = data["ftp_test_date"]
+
+        return cls(
+            ftp=data.get("ftp", 200),
+            ftp_test_date=ftp_test_date,
+            power_zones=power_zones,
+            cycling_ctl=data.get("cycling_ctl", 30.0),
+            cycling_atl=data.get("cycling_atl", 30.0),
+            cycling_tsb=data.get("cycling_tsb", 0.0),
+            typical_efficiency_factor=data.get("typical_efficiency_factor"),
+            power_to_weight=data.get("power_to_weight"),
+            weight_kg=data.get("weight_kg"),
+            preferred_indoor_outdoor=data.get("preferred_indoor_outdoor", "outdoor"),
+        )
 
 
 def calculate_normalized_power(power_samples: List[int], sample_rate_hz: int = 1) -> float:

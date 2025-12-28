@@ -341,6 +341,169 @@ class SwimStrokeType(str, Enum):
     MIXED = "mixed"
 
 
+@dataclass
+class SwimZones:
+    """
+    Swimming training zones based on Critical Swim Speed (CSS).
+
+    Each zone is defined as a tuple of (fast_pace, slow_pace) in seconds per 100m.
+    Note: Lower numbers = faster pace.
+
+    Zone 1 (Recovery): Very easy swimming for active recovery
+    Zone 2 (Aerobic Endurance): Base aerobic development, sustainable long efforts
+    Zone 3 (Threshold): At or near CSS, lactate threshold development
+    Zone 4 (VO2max): Above threshold, develops maximal aerobic capacity
+    Zone 5 (Sprint): All-out efforts, anaerobic power and speed
+    """
+    css_pace: int  # Critical Swim Speed pace in sec/100m
+    zone1_recovery: Tuple[int, int] = (0, 0)
+    zone2_aerobic: Tuple[int, int] = (0, 0)
+    zone3_threshold: Tuple[int, int] = (0, 0)
+    zone4_vo2max: Tuple[int, int] = (0, 0)
+    zone5_sprint: Tuple[int, int] = (0, 0)
+
+    def __post_init__(self):
+        """Calculate zone boundaries from CSS pace if not provided."""
+        if self.zone1_recovery == (0, 0):
+            # Zone 1: 115-140% of CSS pace (slower)
+            self.zone1_recovery = (
+                int(round(self.css_pace * 1.15)),
+                int(round(self.css_pace * 1.40))
+            )
+        if self.zone2_aerobic == (0, 0):
+            # Zone 2: 105-115% of CSS pace
+            self.zone2_aerobic = (
+                int(round(self.css_pace * 1.05)),
+                int(round(self.css_pace * 1.15))
+            )
+        if self.zone3_threshold == (0, 0):
+            # Zone 3: 95-105% of CSS pace (threshold)
+            self.zone3_threshold = (
+                int(round(self.css_pace * 0.95)),
+                int(round(self.css_pace * 1.05))
+            )
+        if self.zone4_vo2max == (0, 0):
+            # Zone 4: 85-95% of CSS pace (faster than threshold)
+            self.zone4_vo2max = (
+                int(round(self.css_pace * 0.85)),
+                int(round(self.css_pace * 0.95))
+            )
+        if self.zone5_sprint == (0, 0):
+            # Zone 5: 70-85% of CSS pace (sprint, fastest)
+            self.zone5_sprint = (
+                int(round(self.css_pace * 0.70)),
+                int(round(self.css_pace * 0.85))
+            )
+
+    @classmethod
+    def from_css(cls, css_pace: int) -> "SwimZones":
+        """Create SwimZones from CSS pace."""
+        return cls(css_pace=css_pace)
+
+    @classmethod
+    def from_test_times(cls, t400_sec: float, t200_sec: float) -> "SwimZones":
+        """
+        Create SwimZones from 400m and 200m test times.
+
+        CSS = (400m - 200m) / (T400 - T200) converted to sec/100m
+
+        Args:
+            t400_sec: Time to swim 400m in seconds
+            t200_sec: Time to swim 200m in seconds
+
+        Returns:
+            SwimZones calculated from the derived CSS
+        """
+        if t200_sec <= 0 or t400_sec <= 0:
+            raise ValueError("Both times must be positive")
+        if t400_sec <= t200_sec:
+            raise ValueError("400m time must be greater than 200m time")
+
+        css_speed = 200 / (t400_sec - t200_sec)
+        css_pace = int(round(100 / css_speed))
+        return cls(css_pace=css_pace)
+
+    def format_pace(self, pace_sec: int) -> str:
+        """Format pace in seconds to mm:ss format."""
+        minutes = pace_sec // 60
+        seconds = pace_sec % 60
+        return f"{minutes}:{seconds:02d}"
+
+    def get_zone_for_pace(self, pace: int) -> int:
+        """
+        Determine which zone a given pace falls into.
+
+        Args:
+            pace: Swim pace in sec/100m
+
+        Returns:
+            Zone number (1-5), or 0 if pace is too slow
+        """
+        if pace > self.zone1_recovery[1]:
+            return 0  # Too slow
+        elif pace >= self.zone1_recovery[0]:
+            return 1
+        elif pace >= self.zone2_aerobic[0]:
+            return 2
+        elif pace >= self.zone3_threshold[0]:
+            return 3
+        elif pace >= self.zone4_vo2max[0]:
+            return 4
+        else:
+            return 5
+
+    def to_dict(self) -> Dict[str, any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "css_pace": self.css_pace,
+            "css_pace_formatted": self.format_pace(self.css_pace),
+            "zones": {
+                "zone1_recovery": {
+                    "name": "Recovery",
+                    "fast": self.zone1_recovery[0],
+                    "slow": self.zone1_recovery[1],
+                    "description": f"{self.format_pace(self.zone1_recovery[0])} - {self.format_pace(self.zone1_recovery[1])}/100m",
+                },
+                "zone2_aerobic": {
+                    "name": "Aerobic Endurance",
+                    "fast": self.zone2_aerobic[0],
+                    "slow": self.zone2_aerobic[1],
+                    "description": f"{self.format_pace(self.zone2_aerobic[0])} - {self.format_pace(self.zone2_aerobic[1])}/100m",
+                },
+                "zone3_threshold": {
+                    "name": "Threshold",
+                    "fast": self.zone3_threshold[0],
+                    "slow": self.zone3_threshold[1],
+                    "description": f"{self.format_pace(self.zone3_threshold[0])} - {self.format_pace(self.zone3_threshold[1])}/100m",
+                },
+                "zone4_vo2max": {
+                    "name": "VO2max",
+                    "fast": self.zone4_vo2max[0],
+                    "slow": self.zone4_vo2max[1],
+                    "description": f"{self.format_pace(self.zone4_vo2max[0])} - {self.format_pace(self.zone4_vo2max[1])}/100m",
+                },
+                "zone5_sprint": {
+                    "name": "Sprint",
+                    "fast": self.zone5_sprint[0],
+                    "slow": self.zone5_sprint[1],
+                    "description": f"{self.format_pace(self.zone5_sprint[0])} - {self.format_pace(self.zone5_sprint[1])}/100m",
+                },
+            },
+        }
+
+    def to_prompt_string(self) -> str:
+        """Format swim zones for LLM prompt injection."""
+        lines = [
+            f"SWIM ZONES (CSS: {self.format_pace(self.css_pace)}/100m):",
+            f"  Zone 1 (Recovery):  {self.format_pace(self.zone1_recovery[0])} - {self.format_pace(self.zone1_recovery[1])}/100m",
+            f"  Zone 2 (Aerobic):   {self.format_pace(self.zone2_aerobic[0])} - {self.format_pace(self.zone2_aerobic[1])}/100m",
+            f"  Zone 3 (Threshold): {self.format_pace(self.zone3_threshold[0])} - {self.format_pace(self.zone3_threshold[1])}/100m",
+            f"  Zone 4 (VO2max):    {self.format_pace(self.zone4_vo2max[0])} - {self.format_pace(self.zone4_vo2max[1])}/100m",
+            f"  Zone 5 (Sprint):    {self.format_pace(self.zone5_sprint[0])} - {self.format_pace(self.zone5_sprint[1])}/100m",
+        ]
+        return "\n".join(lines)
+
+
 class PoolLength(int, Enum):
     """Standard pool lengths in meters."""
     SCM = 25   # Short Course Meters
