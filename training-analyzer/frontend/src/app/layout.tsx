@@ -14,16 +14,14 @@ export const viewport: Viewport = {
   themeColor: "#0d9488",
 };
 
+// Root layout - serves as the base for all pages
+// The actual <html> and <body> tags are rendered in [locale]/layout.tsx
+// to properly set the lang attribute based on the current locale.
+// This layout just passes children through.
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <html lang="en" className="dark" suppressHydrationWarning>
-      <body className="bg-gray-950 text-gray-100 min-h-screen antialiased">
-        {children}
-      </body>
-    </html>
-  );
+  return children;
 }

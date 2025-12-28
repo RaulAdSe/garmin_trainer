@@ -30,6 +30,7 @@ class ChatRequest(BaseModel):
     """Request for chat processing."""
     message: str = Field(..., min_length=1, max_length=2000)
     conversation_id: Optional[str] = Field(None, description="Optional conversation ID for context")
+    language: str = Field(default="en", description="Language code for response (en, es)")
 
 
 class ChatResponse(BaseModel):
@@ -132,6 +133,7 @@ class ChatService(BaseService):
             result = await self._chat_agent.chat(
                 message=request.message,
                 conversation_history=history,
+                language=request.language,
             )
 
             # Add assistant response to history

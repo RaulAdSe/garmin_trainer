@@ -44,6 +44,7 @@ class ChatState(TypedDict):
     # Input
     message: str
     conversation_history: List[Dict[str, str]]
+    language: str  # Language code for response (en, es)
 
     # Processing
     chat_id: str
@@ -261,6 +262,7 @@ class ChatAgent:
             athlete_context = state.get("athlete_context", {})
             training_data = state.get("training_data", {})
             conversation_history = state.get("conversation_history", [])
+            language = state.get("language", "en")
 
             # Build context prompt
             context_prompt = build_athlete_context_prompt(
@@ -283,9 +285,20 @@ class ChatAgent:
                     history_lines.append(f"{role.upper()}: {content[:200]}")
                 history_context = "\n".join(history_lines)
 
-            system_prompt = CHAT_SYSTEM.format(
+            # Get language name for prompt
+            language_names = {"en": "English", "es": "Spanish"}
+            language_name = language_names.get(language, "English")
+
+            # Build system prompt with language instruction
+            base_system = CHAT_SYSTEM.format(
                 athlete_context=context_prompt,
             )
+
+            # Add language instruction
+            system_prompt = f"""{base_system}
+
+LANGUAGE INSTRUCTION:
+You MUST respond entirely in {language_name}. All responses, explanations, recommendations, and metric descriptions must be in {language_name}."""
 
             user_prompt = CHAT_USER.format(
                 question=message,
@@ -625,6 +638,7 @@ class ChatAgent:
         self,
         message: str,
         conversation_history: Optional[List[Dict[str, str]]] = None,
+        language: str = "en",
     ) -> Dict[str, Any]:
         """
         Process a chat message and return a response.
@@ -633,6 +647,7 @@ class ChatAgent:
             message: The user's message/question
             conversation_history: Optional list of previous messages
                 [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]
+            language: Language code for the response (en=English, es=Spanish)
 
         Returns:
             Dictionary with:
@@ -644,6 +659,7 @@ class ChatAgent:
         initial_state: ChatState = {
             "message": message,
             "conversation_history": conversation_history or [],
+            "language": language,
             "chat_id": str(uuid.uuid4()),
             "intent": None,
             "intent_data": None,

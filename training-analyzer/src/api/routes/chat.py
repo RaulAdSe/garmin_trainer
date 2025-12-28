@@ -43,6 +43,13 @@ class ChatMessageRequest(BaseModel):
         None,
         description="Optional conversation ID for maintaining context across messages",
     )
+    language: str = Field(
+        default="en",
+        description="Language code for the response (en=English, es=Spanish)",
+        json_schema_extra={
+            "examples": ["en", "es"]
+        }
+    )
 
 
 class ChatMessageResponse(BaseModel):
@@ -152,6 +159,7 @@ async def send_message(
         chat_request = ChatRequest(
             message=request.message,
             conversation_id=request.conversation_id,
+            language=request.language,
         )
 
         # Process through service
