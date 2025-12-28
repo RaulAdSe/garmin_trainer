@@ -1,119 +1,155 @@
 # Internationalization (i18n) Implementation
 
-This document describes the internationalization setup for the Training Analyzer frontend, including the architecture, configuration, known issues, and solutions.
+This document describes the internationalization setup for the Training Analyzer frontend.
 
 ## Overview
 
-The frontend uses **next-intl** (v4.6.1) with Next.js 16 App Router to provide multi-language support. Currently supported locales:
+The frontend uses **next-intl** (v4.6.1) with Next.js 16 App Router. Currently supported locales:
 
 - **English (en)** - Default
 - **Spanish (es)**
 
 ## Architecture
 
+### Single Source of Truth
+
+All i18n configuration lives in `src/i18n/config.ts`:
+
+```typescript
+// src/i18n/config.ts
+export const locales = ['en', 'es'] as const;
+export const defaultLocale = 'en' as const;
+export type Locale = (typeof locales)[number];
+
+export const appRoutes = [
+  '/workouts',
+  '/workouts/:path*',
+  '/plans',
+  '/plans/:path*',
+  '/design',
+  '/goals',
+  '/sync',
+] as const;
+```
+
+All other files import from this config:
+
+```
+src/i18n/config.ts     ← Single source of truth
+       ↓
+  ┌────┴────────────┬─────────────────┐
+  ↓                 ↓                 ↓
+routing.ts    middleware.ts    next.config.ts
+```
+
 ### File Structure
 
 ```
 frontend/
-├── middleware.ts                    # Handles locale detection and redirects
-├── next.config.ts                   # Next.js config with i18n plugin and fallback redirects
+├── middleware.ts              # Locale detection and redirects
+├── next.config.ts             # Fallback redirects (imports from config)
 ├── src/
-│   ├── app/
-│   │   ├── layout.tsx               # Root layout (html/body tags)
-│   │   ├── providers.tsx            # React Query and other providers
-│   │   └── [locale]/                # All pages under dynamic locale segment
-│   │       ├── layout.tsx           # Locale layout with NextIntlClientProvider
-│   │       ├── page.tsx             # Dashboard
-│   │       ├── workouts/
-│   │       │   ├── page.tsx         # Workouts list
-│   │       │   └── [id]/page.tsx    # Workout detail
-│   │       ├── plans/
-│   │       │   ├── page.tsx         # Training plans list
-│   │       │   ├── new/page.tsx     # Create new plan
-│   │       │   └── [id]/page.tsx    # Plan detail
-│   │       ├── design/page.tsx      # Workout designer
-│   │       ├── goals/page.tsx       # Goals management
-│   │       └── sync/page.tsx        # Data sync page
 │   ├── i18n/
-│   │   ├── routing.ts               # Locale configuration
-│   │   ├── navigation.ts            # i18n-aware navigation utilities
-│   │   └── request.ts               # Server-side locale handling
-│   └── messages/
-│       ├── en.json                  # English translations
-│       └── es.json                  # Spanish translations
+│   │   ├── config.ts          # ⭐ SINGLE SOURCE OF TRUTH
+│   │   ├── routing.ts         # next-intl routing (imports from config)
+│   │   ├── navigation.ts      # i18n-aware Link, useRouter, etc.
+│   │   └── request.ts         # Server-side locale handling
+│   ├── messages/
+│   │   ├── en.json            # English translations
+│   │   └── es.json            # Spanish translations
+│   └── app/
+│       ├── layout.tsx         # Root layout (minimal, passes children)
+│       └── [locale]/          # All pages under dynamic locale segment
+│           ├── layout.tsx     # Locale layout (<html lang={locale}>)
+│           ├── not-found.tsx  # 404 page
+│           ├── page.tsx       # Dashboard
+│           ├── workouts/
+│           ├── plans/
+│           ├── design/
+│           ├── goals/
+│           └── sync/
 ```
 
-### Key Configuration Files
+## Adding a New Locale
 
-#### 1. Routing Configuration (`src/i18n/routing.ts`)
+**Edit only `src/i18n/config.ts`:**
 
 ```typescript
-import { defineRouting } from 'next-intl/routing';
+// Before
+export const locales = ['en', 'es'] as const;
 
-export const routing = defineRouting({
-  locales: ['en', 'es'],
-  defaultLocale: 'en',
-  localePrefix: 'always'  // All URLs require locale prefix
-});
-
-export type Locale = (typeof routing.locales)[number];
+// After
+export const locales = ['en', 'es', 'fr'] as const;
 ```
 
-#### 2. Navigation Utilities (`src/i18n/navigation.ts`)
+Then create the translation file:
 
-```typescript
-import { createNavigation } from 'next-intl/navigation';
-import { routing } from './routing';
-
-export const { Link, redirect, usePathname, useRouter, getPathname } =
-  createNavigation(routing);
+```bash
+cp src/messages/en.json src/messages/fr.json
+# Edit fr.json with French translations
 ```
 
-**Important:** Always import `Link`, `useRouter`, and `usePathname` from `@/i18n/navigation` instead of `next/link` or `next/navigation` to ensure proper locale handling.
+That's it. No other files need editing.
 
-#### 3. Middleware (`middleware.ts`)
+## Adding a New Route/Page
+
+### Step 1: Add route to config
 
 ```typescript
-import createMiddleware from 'next-intl/middleware';
-import { defineRouting } from 'next-intl/routing';
-
-const routing = defineRouting({
-  locales: ['en', 'es'],
-  defaultLocale: 'en',
-  localePrefix: 'always'
-});
-
-export default createMiddleware(routing);
-
-export const config = {
-  matcher: ['/((?!api|_next|_vercel|.*\\..*).*)', '/']
-};
+// src/i18n/config.ts
+export const appRoutes = [
+  '/workouts',
+  '/workouts/:path*',
+  '/plans',
+  '/plans/:path*',
+  '/design',
+  '/goals',
+  '/sync',
+  '/settings',        // ← Add new route
+] as const;
 ```
 
-#### 4. Next.js Config (`next.config.ts`)
+### Step 2: Create the page
+
+```bash
+mkdir -p src/app/[locale]/settings
+touch src/app/[locale]/settings/page.tsx
+```
 
 ```typescript
-import createNextIntlPlugin from 'next-intl/plugin';
+// src/app/[locale]/settings/page.tsx
+import { useTranslations } from 'next-intl';
 
-const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
+export default function SettingsPage() {
+  const t = useTranslations('settings');
+  return <h1>{t('title')}</h1>;
+}
+```
 
-const nextConfig = {
-  async rewrites() {
-    return [
-      { source: "/api/v1/:path*", destination: "http://localhost:8000/api/v1/:path*" }
-    ];
-  },
-  // Fallback redirects for dev mode (see Known Issues)
-  async redirects() {
-    return [
-      { source: '/', destination: '/en', permanent: false },
-      { source: '/workouts', destination: '/en/workouts', permanent: false },
-      // ... more routes
-    ];
+### Step 3: Add translations
+
+```json
+// src/messages/en.json
+{
+  "settings": {
+    "title": "Settings"
   }
-};
+}
 
-export default withNextIntl(nextConfig);
+// src/messages/es.json
+{
+  "settings": {
+    "title": "Configuración"
+  }
+}
+```
+
+### Step 4: Add navigation (optional)
+
+```typescript
+import { Link } from '@/i18n/navigation';
+
+<Link href="/settings">Settings</Link>
 ```
 
 ## URL Structure
@@ -127,36 +163,33 @@ With `localePrefix: 'always'`, all routes require a locale prefix:
 | `/en/workouts` | - | Workouts list (English) |
 | `/es/workouts` | - | Workouts list (Spanish) |
 
-## Components
+## Navigation
 
-### Language Switcher (`src/components/ui/LanguageSwitcher.tsx`)
+**Always use i18n-aware navigation:**
 
-A dropdown component that allows users to switch between available locales. Uses `useRouter` and `usePathname` from `@/i18n/navigation` to preserve the current path while changing the locale.
+```typescript
+// ✅ Correct
+import { Link, useRouter, usePathname } from '@/i18n/navigation';
 
-### Navigation (`src/components/ui/Navigation.tsx`)
+// ❌ Wrong - will break locale handling
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+```
 
-The main navigation component uses `Link` from `@/i18n/navigation` to ensure all navigation links are locale-aware.
+**Note:** `useParams`, `useSearchParams`, and `notFound` should still be imported from `next/navigation`.
 
 ## Translation Files
 
-Translation files are stored in `src/messages/` as JSON:
-
 ```json
-// en.json
+// src/messages/en.json
 {
   "navigation": {
     "dashboard": "Dashboard",
-    "workouts": "Workouts",
-    "plans": "Plans",
-    "design": "Design",
-    "goals": "Goals",
-    "sync": "Sync"
+    "workouts": "Workouts"
   },
   "dashboard": {
-    "title": "Training Dashboard",
-    "subtitle": "Your personalized training insights"
+    "title": "Training Dashboard"
   }
-  // ... more translations
 }
 ```
 
@@ -171,96 +204,54 @@ function MyComponent() {
 }
 ```
 
-## Known Issues and Solutions
+## Components
 
-### Issue 1: Middleware Not Running in Dev Mode (SSG Pages)
+### Language Switcher
 
-**Problem:** Next.js 16 development mode with Turbopack/Webpack doesn't always execute middleware for statically generated pages. This causes 404 errors when visiting `/workouts` instead of redirecting to `/en/workouts`.
+`src/components/ui/LanguageSwitcher.tsx` - Dropdown to switch locales while preserving current path.
 
-**Solution:** Added fallback redirects in `next.config.ts` that work in both dev and production modes. The middleware handles production, while redirects provide dev fallback.
+### Navigation
 
-**Production:** Middleware works correctly, providing:
-- Locale detection from `Accept-Language` header
-- Cookie-based locale persistence
-- Proper 307 redirects
+`src/components/ui/Navigation.tsx` - Uses `Link` from `@/i18n/navigation` for locale-aware links.
 
-**Development:** Falls back to `next.config.ts` redirects.
+## Technical Details
 
-### Issue 2: Path Aliases in Middleware
+### Why config.ts exists
 
-**Problem:** The `@/` path alias from `tsconfig.json` doesn't always resolve correctly in middleware files.
+Edge Runtime (where middleware runs) doesn't reliably resolve TypeScript path aliases (`@/`). By using relative imports from a shared config file, we avoid duplication while maintaining compatibility.
 
-**Solution:** Inline the routing configuration directly in `middleware.ts` instead of importing from `@/i18n/routing`.
+### Middleware behavior
 
-### Issue 3: Wrong Link/Router Imports
+1. Skips API routes, static files, Next.js internals
+2. Redirects non-locale paths → `/en/*` (307)
+3. Lets next-intl handle locale detection for root path
 
-**Problem:** Using `next/link` or `next/navigation` instead of `@/i18n/navigation` causes navigation to non-locale-prefixed URLs.
+### Fallback redirects
 
-**Solution:** Audit and fix all imports:
-- `import Link from 'next/link'` → `import { Link } from '@/i18n/navigation'`
-- `import { useRouter } from 'next/navigation'` → `import { useRouter } from '@/i18n/navigation'`
-- `import { usePathname } from 'next/navigation'` → `import { usePathname } from '@/i18n/navigation'`
+`next.config.ts` has fallback redirects for development mode where middleware may not run for SSG pages (Next.js 16 + Turbopack limitation).
 
-**Note:** `useParams`, `useSearchParams`, and `notFound` should still be imported from `next/navigation` as they are not part of next-intl's navigation exports.
-
-### Issue 4: Root Layout HTML/Body Tags
-
-**Problem:** Next.js requires `<html>` and `<body>` tags in the root layout, but having them in both root and locale layouts causes hydration errors.
-
-**Solution:**
-- `src/app/layout.tsx` (root): Contains `<html>` and `<body>` tags
-- `src/app/[locale]/layout.tsx`: Only contains `NextIntlClientProvider` wrapper, no HTML/body tags
-
-## Testing Checklist
-
-After any i18n changes, verify:
+## Testing
 
 ```bash
 # Root redirects to default locale
-curl -I http://localhost:3000/
-# Expected: 307 redirect to /en
+curl -s -o /dev/null -w "%{http_code} %{redirect_url}" http://localhost:3000/
+# Expected: 307 http://localhost:3000/en
 
 # Non-prefixed routes redirect
-curl -I http://localhost:3000/workouts
-# Expected: 307 redirect to /en/workouts
+curl -s -o /dev/null -w "%{http_code} %{redirect_url}" http://localhost:3000/workouts
+# Expected: 307 http://localhost:3000/en/workouts
 
 # Locale-prefixed routes work
-curl -I http://localhost:3000/en/workouts
-# Expected: 200 OK
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/en/workouts
+# Expected: 200
 
-curl -I http://localhost:3000/es/workouts
-# Expected: 200 OK
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/es/workouts
+# Expected: 200
 
-# API proxy still works
-curl http://localhost:3000/api/v1/workouts/
-# Expected: JSON response
+# HTML lang attribute is dynamic
+curl -s http://localhost:3000/en | grep -o '<html[^>]*>'
+# Expected: <html lang="en" ...>
+
+curl -s http://localhost:3000/es | grep -o '<html[^>]*>'
+# Expected: <html lang="es" ...>
 ```
-
-## Adding a New Locale
-
-1. Add locale to `src/i18n/routing.ts`:
-   ```typescript
-   locales: ['en', 'es', 'fr']  // Add 'fr'
-   ```
-
-2. Update middleware inline config if needed
-
-3. Create translation file `src/messages/fr.json`
-
-4. Add redirect fallback in `next.config.ts`:
-   ```typescript
-   { source: '/workouts', destination: '/fr/workouts', permanent: false }
-   ```
-
-## Adding a New Page
-
-1. Create page in `src/app/[locale]/your-page/page.tsx`
-
-2. Add translations to all locale files in `src/messages/`
-
-3. Add navigation link using `Link` from `@/i18n/navigation`
-
-4. Add redirect fallback in `next.config.ts`:
-   ```typescript
-   { source: '/your-page', destination: '/en/your-page', permanent: false }
-   ```
