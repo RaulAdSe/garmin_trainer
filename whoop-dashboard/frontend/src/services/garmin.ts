@@ -144,7 +144,10 @@ const OAUTH_URL = 'https://connectapi.garmin.com/oauth-service/oauth';
 // Use connectapi.garmin.com for API calls (NOT connect.garmin.com/modern/proxy/)
 const CONNECT_API = 'https://connectapi.garmin.com';
 
-// OAuth1 consumer credentials (from https://thegarth.s3.amazonaws.com/oauth_consumer.json)
+// OAuth1 consumer credentials - these are PUBLIC app-level identifiers, NOT secrets.
+// They are published by the garth library maintainer at:
+// https://thegarth.s3.amazonaws.com/oauth_consumer.json
+// Every app using Garmin Connect API (garth, python-garminconnect, etc.) uses these same credentials.
 const OAUTH_CONSUMER_KEY = 'fc3e99d2-118c-44b8-8ae3-03370dde24c0';
 const OAUTH_CONSUMER_SECRET = 'E08WAR897WEy2knn7aFBrvegVAf0AFdWBBF';
 
