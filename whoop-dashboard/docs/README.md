@@ -18,6 +18,7 @@ New to the project? Start here:
 | Document | Description |
 |----------|-------------|
 | **[Getting Started](./getting-started.md)** | Installation, configuration, and basic usage |
+| **[iOS Deployment](./ios-deployment.md)** | Native iOS app setup, authentication, and deployment |
 | **[Architecture](./architecture.md)** | Technical architecture, data flow, and project structure |
 | **[API Reference](./api-reference.md)** | REST API endpoints, request/response formats |
 | **[Metrics Explained](./metrics-explained.md)** | Deep dive into recovery, strain, sleep, and HRV calculations |
@@ -40,7 +41,9 @@ The WHOOP Dashboard transforms Garmin Connect data into actionable health insigh
 | **Actionable Insights** | GO / MODERATE / RECOVER decisions |
 | **Causality Engine** | Detects patterns and correlations in YOUR data |
 | **Sleep Targets** | Personalized sleep need based on strain and debt |
-| **iOS App** | Native iOS deployment via Capacitor |
+| **Native iOS App** | Standalone app with on-device Garmin authentication |
+| **Offline Support** | Works without internet after initial sync |
+| **Secure Storage** | iOS Keychain for credentials |
 
 ### Tech Stack
 
@@ -48,22 +51,32 @@ The WHOOP Dashboard transforms Garmin Connect data into actionable health insigh
 |-----------|------------|
 | Frontend | Next.js 16 + React 19 |
 | Styling | Tailwind CSS 4 |
-| iOS | Capacitor (static export) |
-| Data Fetching | Python CLI + Garmin Connect API |
-| Storage | SQLite (`wellness.db`) |
-| Database Access | better-sqlite3 |
+| iOS App | Capacitor + CapacitorHttp |
+| iOS Auth | OAuth1 (HMAC-SHA1) → OAuth2 |
+| iOS Storage | IndexedDB (Dexie) + iOS Keychain |
+| Web Data Fetching | Python CLI + garth library |
+| Web Storage | SQLite (`wellness.db`) |
+| Database Access | better-sqlite3 / Dexie |
 
 ---
 
 ## Architecture Summary
 
+**Option A: Web Dashboard** (requires Python CLI)
 ```
 Garmin Connect → Python CLI → SQLite → Next.js API → React Dashboard
      ↓              ↓           ↓           ↓            ↓
   Raw data      Fetch &     Store &     Serve &      Display &
                transform   persist     calculate    visualize
-                                           ↓
-                                    Capacitor → iOS App
+```
+
+**Option B: iOS Native App** (standalone, no backend)
+```
+Garmin Connect ←→ iOS App (Capacitor) → IndexedDB
+     ↓                    ↓                  ↓
+  OAuth1/2         On-device auth      Local storage
+                         ↓
+                   iOS Keychain (secure)
 ```
 
 ---
@@ -87,14 +100,19 @@ npm run dev
 # Opens at http://localhost:3000
 ```
 
-### iOS Deployment
+### iOS Native App
 
 ```bash
 cd frontend
-npm run build           # Static export
-npx cap sync ios        # Sync to iOS
-npx cap open ios        # Open in Xcode
+npm install && npm run build   # Build static export
+npx cap sync ios               # Sync to iOS project
+npx cap open ios               # Open in Xcode
+# Build and run (Cmd+R)
 ```
+
+**Features:** On-device Garmin login, offline support, iOS Keychain storage.
+**Note:** Free Apple accounts require reinstall every 7 days.
+See **[iOS Deployment Guide](./ios-deployment.md)** for complete setup.
 
 ### API Endpoints
 

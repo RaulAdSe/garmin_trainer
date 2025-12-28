@@ -8,24 +8,35 @@ This document explains the technical architecture and data flow of the WHOOP Das
 
 The WHOOP Dashboard is a **WHOOP-style wellness dashboard** that transforms Garmin Connect data into actionable health insights. It follows the philosophy: **"Don't show data, tell me what to do."**
 
+### Deployment Options
+
+The dashboard supports two deployment modes:
+
+**Option A: Web Dashboard** (requires Python CLI for data fetching)
 ```
-┌──────────────────────┐     ┌───────────────────┐     ┌───────────────────┐
-│   Garmin Connect     │────▶│   Python CLI      │────▶│   SQLite DB       │
-│   (Data Source)      │     │   (Data Fetcher)  │     │   (wellness.db)   │
-└──────────────────────┘     └───────────────────┘     └─────────┬─────────┘
-                                                                  │
-                                                                  ▼
-                                                       ┌───────────────────┐
-                                                       │   Next.js API     │
-                                                       │   (Data Layer)    │
-                                                       └─────────┬─────────┘
-                                                                  │
-                                              ┌───────────────────┼───────────────────┐
-                                              ▼                                       ▼
-                                   ┌───────────────────┐               ┌───────────────────┐
-                                   │   React Frontend  │               │   Capacitor iOS   │
-                                   │   (Web Dashboard) │               │   (Native App)    │
-                                   └───────────────────┘               └───────────────────┘
+┌──────────────────┐     ┌───────────────┐     ┌───────────────┐
+│  Garmin Connect  │────▶│  Python CLI   │────▶│   SQLite DB   │
+│  (via garth)     │     │  (whoop fetch)│     │  (wellness.db)│
+└──────────────────┘     └───────────────┘     └───────┬───────┘
+                                                        │
+                                                        ▼
+                                             ┌───────────────────┐
+                                             │  Next.js Frontend │
+                                             │  (localhost:3000) │
+                                             └───────────────────┘
+```
+
+**Option B: Native iOS App** (standalone, no backend required)
+```
+┌──────────────────┐     ┌───────────────┐     ┌───────────────┐
+│  Garmin Connect  │◀───▶│   iOS App     │────▶│  IndexedDB    │
+│  (connectapi)    │     │  (Capacitor)  │     │  (on-device)  │
+└──────────────────┘     └───────┬───────┘     └───────────────┘
+                                 │
+                         ┌───────▼───────┐
+                         │  iOS Keychain │
+                         │  (secure)     │
+                         └───────────────┘
 ```
 
 ---
@@ -34,13 +45,16 @@ The WHOOP Dashboard is a **WHOOP-style wellness dashboard** that transforms Garm
 
 | Layer | Technology | Purpose |
 |-------|------------|---------|
-| **Data Fetching** | Python 3.10+ | CLI to fetch data from Garmin Connect |
-| **Data Storage** | SQLite | Local database (`wellness.db`) |
+| **Data Fetching (Web)** | Python 3.10+ | CLI to fetch data from Garmin Connect |
+| **Data Fetching (iOS)** | On-device OAuth | Direct Garmin API with HMAC-SHA1 signing |
+| **Data Storage (Web)** | SQLite | Local database (`wellness.db`) |
+| **Data Storage (iOS)** | IndexedDB | Browser-based local storage |
+| **Credential Storage** | iOS Keychain | Secure password/token storage |
 | **Backend API** | Next.js API Routes | Serve data and calculate metrics |
 | **Frontend** | React 19 + Next.js 16 | Dashboard UI |
 | **Styling** | Tailwind CSS 4 | Utility-first CSS |
-| **Database Access** | better-sqlite3 | Synchronous SQLite for Node.js |
-| **iOS Deployment** | Capacitor | Static export to native iOS app |
+| **Database Access** | better-sqlite3 / Dexie | SQLite (web) / IndexedDB (iOS) |
+| **iOS Deployment** | Capacitor | Native iOS wrapper with plugins |
 
 ---
 
@@ -143,9 +157,67 @@ The single-page dashboard provides:
 - **Strain tab**: Strain target, breakdown, trend
 - **Sleep tab**: Sleep stages, debt calculation, personalized targets
 
-### 5. iOS Deployment (Capacitor)
+### 5. iOS Native App (Capacitor)
 
-The app uses Next.js static export with Capacitor for iOS:
+The iOS app is a fully standalone native application with on-device authentication:
+
+#### Authentication Flow
+
+```
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│  User Login  │────▶│  SSO Embed   │────▶│  Get CSRF    │
+│  (email/pw)  │     │  (cookies)   │     │   Token      │
+└──────────────┘     └──────────────┘     └──────┬───────┘
+                                                  │
+      ┌───────────────────────────────────────────┘
+      ▼
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│   Submit     │────▶│   Exchange   │────▶│   Exchange   │
+│   Creds      │     │   Ticket →   │     │   OAuth1 →   │
+│              │     │   OAuth1     │     │   OAuth2     │
+└──────────────┘     └──────────────┘     └──────────────┘
+```
+
+#### OAuth1 Signing (HMAC-SHA1)
+
+The app implements proper OAuth1 signing using the Web Crypto API:
+
+```typescript
+// Build signature base string
+const baseString = [
+  method.toUpperCase(),
+  percentEncode(baseUrl),
+  percentEncode(sortedParams)
+].join('&');
+
+// Sign with HMAC-SHA1
+const signingKey = `${percentEncode(consumerSecret)}&${percentEncode(tokenSecret)}`;
+const signature = await hmacSha1(signingKey, baseString);
+```
+
+#### Garmin API Integration
+
+Uses `connectapi.garmin.com` (NOT `connect.garmin.com/modern/proxy/`):
+
+| Endpoint | Data Retrieved |
+|----------|----------------|
+| `/wellness-service/wellness/dailySleep` | Sleep duration, stages, score |
+| `/hrv-service/hrv/{date}` | HRV metrics and status |
+| `/wellness-service/wellness/dailyStress/{date}` | Stress levels |
+| `/wellness-service/wellness/bodyBattery/reports/daily` | Body battery |
+| `/usersummary-service/stats/steps/daily/{start}/{end}` | Step counts |
+| `/wellness-service/wellness/dailyHeartRate/{user}` | Resting heart rate |
+
+#### Secure Storage
+
+| Data | Storage Location | Security Level |
+|------|------------------|----------------|
+| Password | iOS Keychain | Hardware-backed encryption |
+| Refresh Token | iOS Keychain | Hardware-backed encryption |
+| OAuth Tokens | Capacitor Preferences | Encrypted at rest |
+| Wellness Data | IndexedDB | App sandbox |
+
+#### Building for iOS
 
 ```bash
 # Build static export
@@ -158,18 +230,7 @@ npx cap sync ios
 npx cap open ios
 ```
 
-**Configuration:**
-```typescript
-// capacitor.config.ts
-const config: CapacitorConfig = {
-  appId: 'com.whoop.dashboard',
-  appName: 'WHOOP Dashboard',
-  webDir: 'out',
-  server: {
-    url: 'http://localhost:3000'  // Development
-  }
-};
-```
+See [ios-deployment.md](./ios-deployment.md) for complete iOS setup guide.
 
 ---
 

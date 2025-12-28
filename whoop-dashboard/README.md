@@ -11,7 +11,9 @@ WHOOP-style wellness dashboard that transforms Garmin Connect data into actionab
 - **Causality Engine**: Detects patterns and correlations in YOUR data
 - **Sleep Analysis**: Tonight's personalized sleep target based on strain and debt
 - **Trend Visualization**: 14-day trends with direction indicators
-- **iOS App Ready**: Capacitor integration for native iOS deployment
+- **Native iOS App**: Standalone app with on-device Garmin authentication (no backend required)
+- **Offline Support**: Works without internet after initial sync
+- **Secure Storage**: iOS Keychain for credentials, IndexedDB for wellness data
 
 ## Project Structure
 
@@ -113,22 +115,27 @@ whoop stats              # Database statistics
 - **Storage**: SQLite (`wellness.db`)
 - **Database Access**: better-sqlite3
 
-## iOS Deployment
+## iOS Native App
 
-The app is ready for iOS deployment using Capacitor:
+The iOS app is a **standalone native application** with on-device Garmin authentication:
 
 ```bash
 cd frontend
-
-# Build static export
-npm run build
-
-# Sync to iOS
+npm install && npm run build
 npx cap sync ios
-
-# Open in Xcode
 npx cap open ios
+# Build and run in Xcode (Cmd+R)
 ```
+
+**Features:**
+- Direct Garmin SSO login (OAuth1 with HMAC-SHA1 → OAuth2)
+- Offline support with local IndexedDB storage
+- Secure credential storage via iOS Keychain
+- Auto token refresh
+
+**Note:** Free Apple Developer accounts require reinstalling every 7 days.
+
+See [docs/ios-deployment.md](docs/ios-deployment.md) for complete guide.
 
 ## Testing
 
@@ -140,7 +147,7 @@ pytest tests/ -v
 ## Documentation
 
 - [Architecture](docs/architecture.md) - Technical architecture and data flow
-- [API Reference](docs/api-reference.md) - API documentation
+- [iOS Deployment](docs/ios-deployment.md) - Native iOS app setup and deployment
 - [Getting Started](docs/getting-started.md) - Setup and usage guide
+- [API Reference](docs/api-reference.md) - API documentation
 - [Metrics Explained](docs/metrics-explained.md) - How metrics are calculated
-- [VISION.md](VISION.md) - Product philosophy and roadmap
