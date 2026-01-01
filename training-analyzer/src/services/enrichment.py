@@ -4,6 +4,7 @@ This service reads raw activities from the n8n database,
 calculates training metrics, and stores enriched data.
 """
 
+import logging
 import sqlite3
 import os
 import json
@@ -11,6 +12,8 @@ from datetime import datetime, date, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple
 from contextlib import contextmanager
+
+logger = logging.getLogger(__name__)
 
 from ..db.database import (
     TrainingDatabase,
@@ -174,7 +177,7 @@ class EnrichmentService:
 
         except Exception as e:
             # If we can't connect to n8n, return empty list with warning
-            print(f"Warning: Could not read from n8n database: {e}")
+            logger.warning(f"Could not read from n8n database: {e}")
             return []
 
     def enrich_activity(
@@ -253,9 +256,46 @@ class EnrichmentService:
                 gender=profile.gender,
             )
 
+        # Extract cadence - try multiple common field names from Garmin API
+        # For running: averageRunningCadenceInStepsPerMinute (doubled from single foot)
+        # For cycling: averageBikingCadenceInRevPerMinute
+        cadence = None
+        activity_type_lower = (raw_activity.get("activity_type") or "").lower()
+
+        # Try running cadence fields (Garmin reports single-foot, we want total spm)
+        if "run" in activity_type_lower:
+            cadence = raw_activity.get("averageRunningCadenceInStepsPerMinute")
+            if cadence is None:
+                # Try alternative field names
+                cadence = raw_activity.get("avg_running_cadence")
+                if cadence is None:
+                    cadence = raw_activity.get("avg_cadence")
+                if cadence is not None and cadence < 120:
+                    # Garmin reports half cadence (one foot), double it
+                    cadence = int(cadence * 2)
+        elif "cycling" in activity_type_lower or "biking" in activity_type_lower:
+            cadence = raw_activity.get("averageBikingCadenceInRevPerMinute")
+            if cadence is None:
+                cadence = raw_activity.get("avg_cycling_cadence")
+                if cadence is None:
+                    cadence = raw_activity.get("avg_cadence")
+        else:
+            # Generic cadence field
+            cadence = raw_activity.get("avg_cadence")
+
+        # Ensure cadence is valid integer if present
+        if cadence is not None:
+            try:
+                cadence = int(cadence)
+                if cadence <= 0:
+                    cadence = None
+            except (ValueError, TypeError):
+                cadence = None
+
         return ActivityMetrics(
             activity_id=activity_id,
             date=activity_date,
+            start_time=start_time if start_time else None,  # Full ISO timestamp
             activity_type=raw_activity.get("activity_type"),
             activity_name=raw_activity.get("activity_name"),
             hrss=hrss,
@@ -270,6 +310,7 @@ class EnrichmentService:
             zone3_pct=None,
             zone4_pct=None,
             zone5_pct=None,
+            cadence=cadence,
         )
 
     def enrich_cycling_activity_with_power(
@@ -455,7 +496,7 @@ class EnrichmentService:
         if ftp is None:
             ftp = self.get_athlete_ftp()
             if ftp is None:
-                print("Warning: No FTP set. Use set_athlete_ftp() first.")
+                logger.warning("No FTP set. Use set_athlete_ftp() first.")
                 return 0, 0
 
         # Get cycling activities
@@ -487,7 +528,7 @@ class EnrichmentService:
                         success += 1
 
             except Exception as e:
-                print(
+                logger.warning(
                     f"Error enriching cycling activity "
                     f"{raw_activity.get('activity_id')}: {e}"
                 )
@@ -523,7 +564,7 @@ class EnrichmentService:
                     self.training_db.save_activity_metrics(metrics)
                     success += 1
             except Exception as e:
-                print(f"Error enriching activity {raw_activity.get('activity_id')}: {e}")
+                logger.warning(f"Error enriching activity {raw_activity.get('activity_id')}: {e}")
 
         return processed, success
 

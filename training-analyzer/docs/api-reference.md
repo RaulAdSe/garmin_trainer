@@ -1,6 +1,6 @@
 # API Reference
 
-This document describes the REST API endpoints available in the Training Analyzer.
+This document describes the REST API endpoints available in trAIner.
 
 ---
 

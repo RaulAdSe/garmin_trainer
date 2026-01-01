@@ -37,6 +37,7 @@ from .condensation import (
     PaceSummary,
     ElevationSummary,
     SplitsSummary,
+    CadenceSummary,
     TrendDirection,
     TerrainType,
     condense_workout_data,
@@ -44,6 +45,7 @@ from .condensation import (
     calculate_pace_summary,
     calculate_elevation_summary,
     calculate_splits_summary,
+    calculate_cadence_summary,
     extract_insights,
 )
 
@@ -77,6 +79,7 @@ __all__ = [
     "PaceSummary",
     "ElevationSummary",
     "SplitsSummary",
+    "CadenceSummary",
     "TrendDirection",
     "TerrainType",
     "condense_workout_data",
@@ -84,5 +87,6 @@ __all__ = [
     "calculate_pace_summary",
     "calculate_elevation_summary",
     "calculate_splits_summary",
+    "calculate_cadence_summary",
     "extract_insights",
 ]

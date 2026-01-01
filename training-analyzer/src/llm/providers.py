@@ -7,15 +7,17 @@ This module provides a unified interface for LLM interactions with:
 - Rate limit handling
 - Proper error handling and custom exceptions
 - Response caching support
+- AI usage tracking and cost logging
 """
 
 from enum import Enum
-from typing import AsyncIterator, Callable, Dict, Optional, TypeVar, Any
+from typing import AsyncIterator, Callable, Dict, Optional, TypeVar, Any, Tuple
 import asyncio
 import logging
 import os
 import threading
 import time
+import uuid
 
 from openai import AsyncOpenAI, APIError, RateLimitError, APIConnectionError
 
@@ -132,6 +134,7 @@ class LLMClient:
     - Rate limit handling
     - Request metrics tracking
     - Proper error handling with custom exceptions
+    - AI usage tracking with cost logging
     """
 
     def __init__(
@@ -163,6 +166,74 @@ class LLMClient:
         self.retry_config = retry_config or RetryConfig()
         self.metrics = LLMMetrics()
         self._logger = logger
+        self._usage_repo = None  # Lazy-loaded
+
+    def _get_usage_repo(self):
+        """Get the AI usage repository (lazy loaded)."""
+        if self._usage_repo is None:
+            try:
+                from ..db.repositories.ai_usage_repository import get_ai_usage_repository
+                self._usage_repo = get_ai_usage_repository()
+            except Exception as e:
+                self._logger.warning(f"Failed to initialize AI usage repository: {e}")
+                self._usage_repo = None
+        return self._usage_repo
+
+    def _log_usage(
+        self,
+        model_id: str,
+        model_type: Optional[str],
+        input_tokens: int,
+        output_tokens: int,
+        duration_ms: int,
+        analysis_type: str,
+        user_id: Optional[str] = None,
+        entity_type: Optional[str] = None,
+        entity_id: Optional[str] = None,
+        status: str = "completed",
+        error_message: Optional[str] = None,
+    ) -> None:
+        """
+        Log AI usage to the database.
+
+        Args:
+            model_id: The model used
+            model_type: 'fast' or 'smart'
+            input_tokens: Number of input tokens
+            output_tokens: Number of output tokens
+            duration_ms: Request duration in milliseconds
+            analysis_type: Type of analysis (e.g., 'workout_analysis', 'chat')
+            user_id: User who made the request (optional)
+            entity_type: Type of entity (e.g., 'workout')
+            entity_id: ID of the entity
+            status: Request status
+            error_message: Error message if failed
+        """
+        repo = self._get_usage_repo()
+        if repo is None:
+            return
+
+        try:
+            from ..services.ai_cost_calculator import calculate_cost
+            total_cost = calculate_cost(model_id, input_tokens, output_tokens)
+
+            repo.log_usage(
+                request_id=str(uuid.uuid4()),
+                user_id=user_id,
+                model_id=model_id,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                total_cost_cents=total_cost,
+                analysis_type=analysis_type,
+                duration_ms=duration_ms,
+                model_type=model_type,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                status=status,
+                error_message=error_message,
+            )
+        except Exception as e:
+            self._logger.warning(f"Failed to log AI usage: {e}")
 
     def _get_model(self, model_type: ModelType) -> str:
         """Get the model ID for a model type."""
@@ -289,6 +360,10 @@ class LLMClient:
         max_tokens: int = 1000,
         temperature: float = 0.7,
         timeout: Optional[float] = 60.0,
+        user_id: Optional[str] = None,
+        analysis_type: str = "general",
+        entity_type: Optional[str] = None,
+        entity_id: Optional[str] = None,
     ) -> str:
         """
         Get a completion from the LLM.
@@ -300,6 +375,10 @@ class LLMClient:
             max_tokens: Maximum tokens in response
             temperature: Sampling temperature
             timeout: Request timeout in seconds
+            user_id: User ID for usage tracking (optional)
+            analysis_type: Type of analysis for usage tracking
+            entity_type: Type of entity being analyzed (e.g., 'workout')
+            entity_id: ID of the entity being analyzed
 
         Returns:
             The assistant's response text
@@ -307,8 +386,13 @@ class LLMClient:
         Raises:
             LLMError: On failure
         """
-        async def _make_request() -> str:
-            model_name = self._get_model(model)
+        start_time = time.time()
+        model_name = self._get_model(model)
+        input_tokens = 0
+        output_tokens = 0
+
+        async def _make_request() -> Tuple[str, int, int]:
+            nonlocal input_tokens, output_tokens
             is_gpt5 = "gpt-5" in model_name
             # GPT-5 models use max_completion_tokens instead of max_tokens
             token_param = "max_completion_tokens" if is_gpt5 else "max_tokens"
@@ -327,12 +411,53 @@ class LLMClient:
                 ),
                 timeout=timeout,
             )
+
+            # Extract token usage
+            if response.usage:
+                input_tokens = response.usage.prompt_tokens
+                output_tokens = response.usage.completion_tokens
+
             content = response.choices[0].message.content
             if content is None:
                 raise LLMResponseInvalidError(message="Empty response from LLM")
             return content
 
-        return await self._execute_with_retry(_make_request, "completion")
+        try:
+            result = await self._execute_with_retry(_make_request, "completion")
+            duration_ms = int((time.time() - start_time) * 1000)
+
+            # Log usage
+            self._log_usage(
+                model_id=model_name,
+                model_type=model.value,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                duration_ms=duration_ms,
+                analysis_type=analysis_type,
+                user_id=user_id,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                status="completed",
+            )
+
+            return result
+
+        except Exception as e:
+            duration_ms = int((time.time() - start_time) * 1000)
+            self._log_usage(
+                model_id=model_name,
+                model_type=model.value,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                duration_ms=duration_ms,
+                analysis_type=analysis_type,
+                user_id=user_id,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                status="failed",
+                error_message=str(e),
+            )
+            raise
 
     async def completion_json(
         self,
@@ -342,6 +467,10 @@ class LLMClient:
         max_tokens: int = 1000,
         temperature: float = 0.7,
         timeout: Optional[float] = 60.0,
+        user_id: Optional[str] = None,
+        analysis_type: str = "general",
+        entity_type: Optional[str] = None,
+        entity_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Get a JSON completion from the LLM using JSON mode.
@@ -356,6 +485,10 @@ class LLMClient:
             max_tokens: Maximum tokens in response
             temperature: Sampling temperature
             timeout: Request timeout in seconds
+            user_id: User ID for usage tracking (optional)
+            analysis_type: Type of analysis for usage tracking
+            entity_type: Type of entity being analyzed (e.g., 'workout')
+            entity_id: ID of the entity being analyzed
 
         Returns:
             The parsed JSON response as a dictionary
@@ -366,8 +499,13 @@ class LLMClient:
         """
         import json
 
+        start_time = time.time()
+        model_name = self._get_model(model)
+        input_tokens = 0
+        output_tokens = 0
+
         async def _make_request() -> Dict[str, Any]:
-            model_name = self._get_model(model)
+            nonlocal input_tokens, output_tokens
             is_gpt5 = "gpt-5" in model_name
             # GPT-5 models use max_completion_tokens instead of max_tokens
             token_param = "max_completion_tokens" if is_gpt5 else "max_tokens"
@@ -387,6 +525,12 @@ class LLMClient:
                 ),
                 timeout=timeout,
             )
+
+            # Extract token usage
+            if response.usage:
+                input_tokens = response.usage.prompt_tokens
+                output_tokens = response.usage.completion_tokens
+
             content = response.choices[0].message.content
             finish_reason = response.choices[0].finish_reason
             if content is None or content.strip() == "":
@@ -402,7 +546,42 @@ class LLMClient:
                     details={"raw_content": content[:500]},
                 )
 
-        return await self._execute_with_retry(_make_request, "completion_json")
+        try:
+            result = await self._execute_with_retry(_make_request, "completion_json")
+            duration_ms = int((time.time() - start_time) * 1000)
+
+            # Log usage
+            self._log_usage(
+                model_id=model_name,
+                model_type=model.value,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                duration_ms=duration_ms,
+                analysis_type=analysis_type,
+                user_id=user_id,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                status="completed",
+            )
+
+            return result
+
+        except Exception as e:
+            duration_ms = int((time.time() - start_time) * 1000)
+            self._log_usage(
+                model_id=model_name,
+                model_type=model.value,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                duration_ms=duration_ms,
+                analysis_type=analysis_type,
+                user_id=user_id,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                status="failed",
+                error_message=str(e),
+            )
+            raise
 
     def get_model_name(self, model_type: ModelType = ModelType.SMART) -> str:
         """
@@ -423,6 +602,10 @@ class LLMClient:
         model: ModelType = ModelType.SMART,
         max_tokens: int = 1000,
         temperature: float = 0.7,
+        user_id: Optional[str] = None,
+        analysis_type: str = "general",
+        entity_type: Optional[str] = None,
+        entity_id: Optional[str] = None,
     ) -> AsyncIterator[str]:
         """
         Stream a completion from the LLM.
@@ -433,15 +616,20 @@ class LLMClient:
             model: Model type to use
             max_tokens: Maximum tokens in response
             temperature: Sampling temperature
+            user_id: User ID for usage tracking (optional)
+            analysis_type: Type of analysis for usage tracking
+            entity_type: Type of entity being analyzed (e.g., 'workout')
+            entity_id: ID of the entity being analyzed
 
         Yields:
             Chunks of the assistant's response
         """
         start_time = time.time()
         chunks_yielded = 0
+        total_content = ""
+        model_name = self._get_model(model)
 
         try:
-            model_name = self._get_model(model)
             is_gpt5 = "gpt-5" in model_name
             # GPT-5 models use max_completion_tokens instead of max_tokens
             token_param = "max_completion_tokens" if is_gpt5 else "max_tokens"
@@ -457,28 +645,102 @@ class LLMClient:
                 **{token_param: max_tokens},
                 **temp_param,
                 stream=True,
+                stream_options={"include_usage": True},
             )
 
-            async for chunk in stream:
-                if chunk.choices[0].delta.content:
-                    chunks_yielded += 1
-                    yield chunk.choices[0].delta.content
+            input_tokens = 0
+            output_tokens = 0
 
-            duration_ms = (time.time() - start_time) * 1000
+            async for chunk in stream:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    chunks_yielded += 1
+                    content = chunk.choices[0].delta.content
+                    total_content += content
+                    yield content
+
+                # Get usage from the final chunk (when stream_options includes usage)
+                if hasattr(chunk, 'usage') and chunk.usage:
+                    input_tokens = chunk.usage.prompt_tokens
+                    output_tokens = chunk.usage.completion_tokens
+
+            duration_ms = int((time.time() - start_time) * 1000)
             self.metrics.record_request(
                 success=True,
                 duration_ms=duration_ms,
             )
 
+            # Estimate tokens if not provided (streaming doesn't always include usage)
+            if output_tokens == 0:
+                # Rough estimate: 4 chars per token
+                output_tokens = len(total_content) // 4
+            if input_tokens == 0:
+                input_tokens = (len(system) + len(user)) // 4
+
+            # Log usage
+            self._log_usage(
+                model_id=model_name,
+                model_type=model.value,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                duration_ms=duration_ms,
+                analysis_type=analysis_type,
+                user_id=user_id,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                status="completed",
+            )
+
         except RateLimitError as e:
             self.metrics.record_request(success=False)
+            duration_ms = int((time.time() - start_time) * 1000)
+            self._log_usage(
+                model_id=model_name,
+                model_type=model.value,
+                input_tokens=0,
+                output_tokens=0,
+                duration_ms=duration_ms,
+                analysis_type=analysis_type,
+                user_id=user_id,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                status="failed",
+                error_message="Rate limit exceeded",
+            )
             raise LLMRateLimitError()
         except APIConnectionError as e:
             self.metrics.record_request(success=False)
+            duration_ms = int((time.time() - start_time) * 1000)
+            self._log_usage(
+                model_id=model_name,
+                model_type=model.value,
+                input_tokens=0,
+                output_tokens=0,
+                duration_ms=duration_ms,
+                analysis_type=analysis_type,
+                user_id=user_id,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                status="failed",
+                error_message=str(e),
+            )
             raise LLMServiceUnavailableError(message=str(e))
         except Exception as e:
             self.metrics.record_request(success=False)
             self._logger.error(f"Stream error: {e}")
+            duration_ms = int((time.time() - start_time) * 1000)
+            self._log_usage(
+                model_id=model_name,
+                model_type=model.value,
+                input_tokens=0,
+                output_tokens=0,
+                duration_ms=duration_ms,
+                analysis_type=analysis_type,
+                user_id=user_id,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                status="failed",
+                error_message=str(e),
+            )
             raise LLMError(message=f"Streaming error: {e}")
 
     def get_metrics(self) -> Dict[str, Any]:

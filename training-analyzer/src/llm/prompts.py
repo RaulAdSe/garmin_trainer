@@ -1,4 +1,4 @@
-"""LLM prompt templates for the Reactive Training App."""
+"""LLM prompt templates for the trAIner App."""
 
 # ============================================================================
 # WORKOUT ANALYSIS PROMPTS
@@ -32,6 +32,11 @@ KEY METRICS TO ANALYZE:
 - Comparison to similar recent workouts
 - VO2max context: Was the effort appropriate for the athlete's aerobic capacity?
 - Race prediction alignment: How does this workout pace compare to predicted race paces?
+- Cadence analysis (for running):
+  * Optimal running cadence is typically 170-185 spm (steps per minute)
+  * Low cadence (<165 spm) suggests overstriding, increased injury risk
+  * Cadence drop in final quarter indicates form fatigue
+  * Consistent cadence reflects good running economy
 - Previous day activity impact: Compare previous day steps to 7-day average
   * LOW (<5k steps): Athlete should be fresher, expect better performance
   * NORMAL (5k-12k): Typical day, no special consideration
@@ -92,6 +97,11 @@ KEY METRICS TO ANALYZE:
 - Comparison to similar recent workouts
 - VO2max context: Was the effort appropriate for the athlete's aerobic capacity?
 - Race prediction alignment: How does this workout pace compare to predicted race paces?
+- Cadence analysis (for running):
+  * Optimal running cadence is typically 170-185 spm (steps per minute)
+  * Low cadence (<165 spm) suggests overstriding, increased injury risk
+  * Cadence drop in final quarter indicates form fatigue
+  * Consistent cadence reflects good running economy
 - Previous day activity impact: Compare previous day steps to 7-day average
   * LOW (<5k steps): Athlete should be fresher, expect better performance
   * NORMAL (5k-12k): Typical day, no special consideration
@@ -735,6 +745,12 @@ KEY METRICS TO ANALYZE:
 - VI interpretation: <1.05 very steady (TT/trainer), 1.05-1.15 normal (road), >1.15 variable (race/MTB)
 - Power zone distribution: Did they spend time in the right zones for the workout intent?
 - Efficiency Factor (EF = NP/Avg HR): Higher is better aerobic efficiency
+- Cadence analysis (for cycling):
+  * Optimal cycling cadence is typically 85-95 rpm for road cycling
+  * Low cadence (<80 rpm) increases muscular strain, reduces efficiency
+  * High cadence (>100 rpm) may indicate spinning without power
+  * Cadence drop late in ride indicates muscular fatigue
+  * Consistent cadence reflects good pedaling technique
 
 POWER ZONE GUIDELINES (Coggan):
 - Z1 Active Recovery: <55% FTP - Very easy spinning, recovery

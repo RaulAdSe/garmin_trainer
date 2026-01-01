@@ -13,3 +13,18 @@ export {
   useTypingStream,
   useMultiLLMStream,
 } from './useLLMStream';
+
+export {
+  useAchievements,
+  useRecentAchievements,
+  useUserProgress,
+  useCheckAchievements,
+  achievementKeys,
+} from './useAchievements';
+
+export {
+  useAthleteContext,
+  useReadiness,
+  useFitnessMetrics,
+  useVO2MaxTrend,
+} from './useAthleteContext';

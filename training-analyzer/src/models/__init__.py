@@ -1,4 +1,4 @@
-"""Data models for the Reactive Training App."""
+"""Data models for the trAIner App."""
 
 # Import the unified AthleteContext from the dedicated module
 from .athlete_context import (
@@ -84,6 +84,23 @@ from .explanations import (
     ExplainedSessionRationale,
 )
 
+from .strava import (
+    # Enums
+    SyncStatus,
+    # Core models
+    StravaCredentials,
+    StravaPreferences,
+    StravaActivitySync,
+    # Request/Response models
+    StravaConnectRequest,
+    StravaConnectResponse,
+    StravaCallbackRequest,
+    StravaStatusResponse,
+    StravaPreferencesUpdate,
+    StravaSyncRequest,
+    StravaSyncResponse,
+)
+
 __all__ = [
     # Unified AthleteContext (and backward compatibility aliases)
     "AthleteContext",
@@ -152,4 +169,16 @@ __all__ = [
     "ExplainedReadiness",
     "ExplainedWorkoutRecommendation",
     "ExplainedSessionRationale",
+    # Strava models
+    "SyncStatus",
+    "StravaCredentials",
+    "StravaPreferences",
+    "StravaActivitySync",
+    "StravaConnectRequest",
+    "StravaConnectResponse",
+    "StravaCallbackRequest",
+    "StravaStatusResponse",
+    "StravaPreferencesUpdate",
+    "StravaSyncRequest",
+    "StravaSyncResponse",
 ]

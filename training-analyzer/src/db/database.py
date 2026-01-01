@@ -4,11 +4,12 @@ import sqlite3
 import os
 from datetime import datetime, date
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple, Union
 from contextlib import contextmanager
 from dataclasses import dataclass
 
 from .schema import SCHEMA
+from .connection_pool import SQLiteConnectionPool
 
 
 @dataclass
@@ -55,6 +56,8 @@ class ActivityMetrics:
     zone3_pct: Optional[float]
     zone4_pct: Optional[float]
     zone5_pct: Optional[float]
+    # Full ISO timestamp (e.g., "2024-01-15T07:30:00")
+    start_time: Optional[str] = None
     # Phase 2: Multi-sport extensions
     sport_type: Optional[str] = None
     avg_power: Optional[int] = None
@@ -72,6 +75,7 @@ class ActivityMetrics:
         return {
             "activity_id": self.activity_id,
             "date": self.date,
+            "start_time": self.start_time,
             "activity_type": self.activity_type,
             "activity_name": self.activity_name,
             "hrss": self.hrss,
@@ -205,20 +209,50 @@ def get_default_db_path() -> Path:
 
 
 class TrainingDatabase:
-    """SQLite database manager for training metrics."""
+    """SQLite database manager for training metrics.
 
-    def __init__(self, db_path: Optional[str] = None):
+    Supports two connection modes:
+    1. Connection pooling (recommended for production): Pass use_pool=True
+       for better performance with concurrent requests.
+    2. Direct connections (default): Each operation creates a new connection.
+
+    Connection pooling provides:
+    - WAL mode for concurrent reads during writes
+    - NORMAL synchronous mode for better write performance
+    - 64MB cache size for improved read performance
+    - Thread-safe connection reuse
+    """
+
+    def __init__(
+        self,
+        db_path: Optional[Union[str, Path]] = None,
+        use_pool: bool = False,
+        pool_size: int = 5
+    ):
         """
         Initialize the training database.
 
         Args:
             db_path: Path to SQLite database file. If not provided,
                      uses TRAINING_DB_PATH env var or default location.
+            use_pool: If True, use connection pooling for better performance.
+                      Recommended for production/API server use.
+            pool_size: Number of connections in the pool (default: 5).
+                       Only used when use_pool=True.
         """
         if db_path:
             self.db_path = Path(db_path)
         else:
             self.db_path = get_default_db_path()
+
+        self._use_pool = use_pool
+        self._pool: Optional[SQLiteConnectionPool] = None
+
+        if use_pool:
+            self._pool = SQLiteConnectionPool(
+                self.db_path,
+                pool_size=pool_size
+            )
 
         self._init_db()
 
@@ -229,17 +263,46 @@ class TrainingDatabase:
 
     @contextmanager
     def _get_connection(self):
-        """Get database connection with context manager."""
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        try:
-            yield conn
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
+        """
+        Get database connection with context manager.
+
+        Uses connection pooling if enabled, otherwise creates a new connection.
+        """
+        if self._use_pool and self._pool is not None:
+            # Use connection from pool
+            with self._pool.get_connection() as conn:
+                yield conn
+        else:
+            # Create new connection (legacy behavior)
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            try:
+                yield conn
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+
+    def close(self) -> None:
+        """
+        Close all database connections.
+
+        Should be called during application shutdown when using connection pooling.
+        """
+        if self._pool is not None:
+            self._pool.close()
+            self._pool = None
+
+    def __enter__(self):
+        """Support using TrainingDatabase as a context manager."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Close connections when exiting context."""
+        self.close()
+        return False
 
     # === User Profile Methods ===
 
@@ -317,18 +380,19 @@ class TrainingDatabase:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO activity_metrics
-                (activity_id, date, activity_type, activity_name, hrss, trimp,
+                (activity_id, date, start_time, activity_type, activity_name, hrss, trimp,
                  avg_hr, max_hr, duration_min, distance_km, pace_sec_per_km,
                  zone1_pct, zone2_pct, zone3_pct, zone4_pct, zone5_pct,
                  sport_type, avg_power, max_power, normalized_power, tss,
                  intensity_factor, variability_index, avg_speed_kmh,
                  elevation_gain_m, cadence, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 """,
                 (
                     metrics.activity_id,
                     metrics.date,
+                    metrics.start_time,
                     metrics.activity_type,
                     metrics.activity_name,
                     metrics.hrss,
@@ -368,6 +432,15 @@ class TrainingDatabase:
                 return ActivityMetrics(**dict(row))
             return None
 
+    def get_all_activity_metrics(self) -> List[ActivityMetrics]:
+        """Get all activities from the database."""
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM activity_metrics ORDER BY date DESC",
+            ).fetchall()
+
+            return [ActivityMetrics(**dict(row)) for row in rows]
+
     def get_activities_for_date(self, date_str: str) -> List[ActivityMetrics]:
         """Get all activities for a specific date."""
         with self._get_connection() as conn:
@@ -379,9 +452,9 @@ class TrainingDatabase:
             return [ActivityMetrics(**dict(row)) for row in rows]
 
     def get_activities_range(
-        self, start_date: str, end_date: str
+        self, start_date: str, end_date: str, user_id: str = "default"
     ) -> List[ActivityMetrics]:
-        """Get all activities in a date range."""
+        """Get all activities in a date range for a specific user."""
         with self._get_connection() as conn:
             rows = conn.execute(
                 """
@@ -393,6 +466,69 @@ class TrainingDatabase:
             ).fetchall()
 
             return [ActivityMetrics(**dict(row)) for row in rows]
+
+    def get_activities_paginated(
+        self,
+        user_id: str = "default",
+        page: int = 1,
+        page_size: int = 20,
+        activity_type: Optional[str] = None,
+    ) -> Tuple[List[ActivityMetrics], int]:
+        """
+        Get paginated activities with total count.
+
+        Uses proper SQL LIMIT/OFFSET for efficient pagination instead of
+        loading all records and slicing in Python.
+
+        Args:
+            user_id: User ID for multi-tenant filtering
+            page: Page number (1-indexed)
+            page_size: Number of items per page
+            activity_type: Optional filter by activity type (e.g., "running", "cycling")
+
+        Returns:
+            Tuple of (List[ActivityMetrics], total_count)
+        """
+        offset = (page - 1) * page_size
+
+        with self._get_connection() as conn:
+            # Build the query with optional activity_type filter
+            if activity_type:
+                # Count query with activity_type filter
+                count_result = conn.execute(
+                    "SELECT COUNT(*) FROM activity_metrics WHERE activity_type = ?",
+                    (activity_type,),
+                ).fetchone()
+                total = count_result[0]
+
+                # Paginated query with activity_type filter
+                rows = conn.execute(
+                    """
+                    SELECT * FROM activity_metrics
+                    WHERE activity_type = ?
+                    ORDER BY date DESC, activity_id
+                    LIMIT ? OFFSET ?
+                    """,
+                    (activity_type, page_size, offset),
+                ).fetchall()
+            else:
+                # Count query without filter
+                count_result = conn.execute(
+                    "SELECT COUNT(*) FROM activity_metrics"
+                ).fetchone()
+                total = count_result[0]
+
+                # Paginated query without filter
+                rows = conn.execute(
+                    """
+                    SELECT * FROM activity_metrics
+                    ORDER BY date DESC, activity_id
+                    LIMIT ? OFFSET ?
+                    """,
+                    (page_size, offset),
+                ).fetchall()
+
+            return [ActivityMetrics(**dict(row)) for row in rows], total
 
     def get_unenriched_activity_ids(self) -> List[str]:
         """Get activity IDs that haven't been enriched yet."""

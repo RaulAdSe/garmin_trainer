@@ -1,5 +1,18 @@
 // API client for the Reactive Training App
 
+import { authFetch, hasAuthToken } from './auth-fetch';
+
+/**
+ * Check if a user is authenticated (has a valid token).
+ * Use this helper before making API calls that require authentication
+ * to provide better UX (e.g., show login prompt instead of error).
+ *
+ * Note: This only checks for token presence, not validity.
+ * Token validity is verified server-side.
+ */
+export function isAuthenticated(): boolean {
+  return hasAuthToken();
+}
 import type {
   Workout,
   WorkoutAnalysis,
@@ -28,9 +41,14 @@ import type {
   AthleteContext,
   ReadinessResponse,
   FitnessMetricsHistory,
+  // Gamification
+  AchievementWithStatus,
+  UserAchievement,
+  UserProgress,
 } from './types';
 
-const API_BASE = '/api/v1';
+// Call backend directly - CORS is configured for localhost:3000
+const API_BASE = 'http://localhost:8000/api/v1';
 
 class ApiClientError extends Error {
   public code?: string;
@@ -51,7 +69,6 @@ async function handleResponse<T>(response: Response): Promise<T> {
     let errorData: ApiError;
     try {
       const text = await response.text();
-      console.error('[API] Error response body:', text);
       try {
         errorData = JSON.parse(text);
       } catch {
@@ -60,7 +77,20 @@ async function handleResponse<T>(response: Response): Promise<T> {
     } catch {
       errorData = { message: response.statusText || 'Unknown error' };
     }
-    console.error('[API] Error details:', response.status, errorData);
+
+    // Log based on error type:
+    // - 401: silent (expected when not logged in)
+    // - 403: warn level (authorization issue)
+    // - 5xx: error level (server errors)
+    // - others: error level
+    if (response.status === 401) {
+      // 401 is expected behavior when not authenticated - no logging needed
+    } else if (response.status === 403) {
+      console.warn('[API] Forbidden:', response.status, errorData);
+    } else {
+      console.error('[API] Error details:', response.status, errorData);
+    }
+
     throw new ApiClientError(
       errorData.message,
       response.status,
@@ -138,9 +168,9 @@ export async function getWorkouts(
   params.set('pageSize', String(pageSize));
 
   const queryString = params.toString();
-  const url = `${API_BASE}/workouts${queryString ? `?${queryString}` : ''}`;
+  const url = `${API_BASE}/workouts/${queryString ? `?${queryString}` : ''}`;
 
-  const response = await fetch(url);
+  const response = await authFetch(url);
   const data = await handleResponse<BackendPaginatedResponse>(response);
 
   // Transform activities to Workout type
@@ -156,14 +186,14 @@ export async function getWorkouts(
 }
 
 export async function getWorkout(workoutId: string): Promise<Workout> {
-  const response = await fetch(`${API_BASE}/workouts/${workoutId}`);
+  const response = await authFetch(`${API_BASE}/workouts/${workoutId}`);
   const activity = await handleResponse<ActivityResponse>(response);
   return transformActivityToWorkout(activity);
 }
 
 export async function getWorkoutAnalysis(workoutId: string): Promise<WorkoutAnalysis | null> {
   try {
-    const response = await fetch(`${API_BASE}/analysis/workout/${workoutId}`);
+    const response = await authFetch(`${API_BASE}/analysis/workout/${workoutId}`);
     if (response.status === 404) {
       return null;
     }
@@ -197,7 +227,7 @@ export async function analyzeWorkout(
 ): Promise<WorkoutAnalysis> {
   console.log('[API] analyzeWorkout called for:', request.workoutId);
 
-  const response = await fetch(`${API_BASE}/analysis/workout/${request.workoutId}`, {
+  const response = await authFetch(`${API_BASE}/analysis/workout/${request.workoutId}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -237,7 +267,7 @@ export function analyzeWorkoutStream(
     try {
       const url = `${API_BASE}/analysis/workout/${request.workoutId}?stream=true`;
 
-      const response = await fetch(url, {
+      const response = await authFetch(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -341,13 +371,13 @@ export async function getPlans(
   const queryString = params.toString();
   const url = `${API_BASE}/plans${queryString ? `?${queryString}` : ''}`;
 
-  const response = await fetch(url);
+  const response = await authFetch(url);
   return handleResponse<PaginatedResponse<PlanSummary>>(response);
 }
 
 // Get a single plan by ID with all details
 export async function getPlan(planId: string): Promise<TrainingPlan> {
-  const response = await fetch(`${API_BASE}/plans/${planId}`);
+  const response = await authFetch(`${API_BASE}/plans/${planId}`);
   return handleResponse<TrainingPlan>(response);
 }
 
@@ -356,7 +386,7 @@ export async function getPlanWeek(
   planId: string,
   weekNumber: number
 ): Promise<TrainingWeek> {
-  const response = await fetch(`${API_BASE}/plans/${planId}/weeks/${weekNumber}`);
+  const response = await authFetch(`${API_BASE}/plans/${planId}/weeks/${weekNumber}`);
   return handleResponse<TrainingWeek>(response);
 }
 
@@ -364,7 +394,7 @@ export async function getPlanWeek(
 export async function createPlan(
   request: CreatePlanRequest
 ): Promise<TrainingPlan> {
-  const response = await fetch(`${API_BASE}/plans`, {
+  const response = await authFetch(`${API_BASE}/plans`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -378,7 +408,7 @@ export async function createPlan(
 export async function generatePlan(
   request: GeneratePlanRequest
 ): Promise<TrainingPlan> {
-  const response = await fetch(`${API_BASE}/plans/generate`, {
+  const response = await authFetch(`${API_BASE}/plans/generate`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -399,7 +429,7 @@ export function generatePlanStream(
 
   const fetchStream = async () => {
     try {
-      const response = await fetch(`${API_BASE}/plans/generate/stream`, {
+      const response = await authFetch(`${API_BASE}/plans/generate/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -479,7 +509,7 @@ export async function updatePlan(
   planId: string,
   request: UpdatePlanRequest
 ): Promise<TrainingPlan> {
-  const response = await fetch(`${API_BASE}/plans/${planId}`, {
+  const response = await authFetch(`${API_BASE}/plans/${planId}`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
@@ -491,7 +521,7 @@ export async function updatePlan(
 
 // Delete a plan
 export async function deletePlan(planId: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/plans/${planId}`, {
+  const response = await authFetch(`${API_BASE}/plans/${planId}`, {
     method: 'DELETE',
   });
   if (!response.ok) {
@@ -502,7 +532,7 @@ export async function deletePlan(planId: string): Promise<void> {
 
 // Activate a plan
 export async function activatePlan(planId: string): Promise<TrainingPlan> {
-  const response = await fetch(`${API_BASE}/plans/${planId}/activate`, {
+  const response = await authFetch(`${API_BASE}/plans/${planId}/activate`, {
     method: 'POST',
   });
   return handleResponse<TrainingPlan>(response);
@@ -510,7 +540,7 @@ export async function activatePlan(planId: string): Promise<TrainingPlan> {
 
 // Pause a plan
 export async function pausePlan(planId: string): Promise<TrainingPlan> {
-  const response = await fetch(`${API_BASE}/plans/${planId}/pause`, {
+  const response = await authFetch(`${API_BASE}/plans/${planId}/pause`, {
     method: 'POST',
   });
   return handleResponse<TrainingPlan>(response);
@@ -522,7 +552,7 @@ export async function updateSession(
   sessionId: string,
   request: UpdateSessionRequest
 ): Promise<TrainingSession> {
-  const response = await fetch(
+  const response = await authFetch(
     `${API_BASE}/plans/${planId}/sessions/${sessionId}`,
     {
       method: 'PATCH',
@@ -562,7 +592,7 @@ export async function skipSession(
 // Get active plan (current plan being followed)
 export async function getActivePlan(): Promise<TrainingPlan | null> {
   try {
-    const response = await fetch(`${API_BASE}/plans/active`);
+    const response = await authFetch(`${API_BASE}/plans/active`);
     if (response.status === 404) {
       return null;
     }
@@ -580,7 +610,7 @@ export async function adaptPlan(
   planId: string,
   reason?: string
 ): Promise<TrainingPlan> {
-  const response = await fetch(`${API_BASE}/plans/${planId}/adapt`, {
+  const response = await authFetch(`${API_BASE}/plans/${planId}/adapt`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -598,7 +628,7 @@ export async function adaptPlan(
 export async function generateWorkoutSuggestions(
   request: GenerateWorkoutRequest
 ): Promise<GenerateWorkoutResponse> {
-  const response = await fetch(`${API_BASE}/design/generate`, {
+  const response = await authFetch(`${API_BASE}/design/generate`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -620,7 +650,7 @@ export async function generateWorkoutSuggestions(
 export async function saveDesignedWorkout(
   request: SaveWorkoutRequest
 ): Promise<SaveWorkoutResponse> {
-  const response = await fetch(`${API_BASE}/design/workouts`, {
+  const response = await authFetch(`${API_BASE}/design/workouts`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -634,7 +664,7 @@ export async function saveDesignedWorkout(
 export async function getDesignedWorkout(
   workoutId: string
 ): Promise<DesignedWorkout> {
-  const response = await fetch(`${API_BASE}/design/workouts/${workoutId}`);
+  const response = await authFetch(`${API_BASE}/design/workouts/${workoutId}`);
   return handleResponse<DesignedWorkout>(response);
 }
 
@@ -643,7 +673,7 @@ export async function updateDesignedWorkout(
   workoutId: string,
   workout: Partial<DesignedWorkout>
 ): Promise<DesignedWorkout> {
-  const response = await fetch(`${API_BASE}/design/workouts/${workoutId}`, {
+  const response = await authFetch(`${API_BASE}/design/workouts/${workoutId}`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
@@ -655,7 +685,7 @@ export async function updateDesignedWorkout(
 
 // Delete a designed workout
 export async function deleteDesignedWorkout(workoutId: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/design/workouts/${workoutId}`, {
+  const response = await authFetch(`${API_BASE}/design/workouts/${workoutId}`, {
     method: 'DELETE',
   });
   if (!response.ok) {
@@ -666,7 +696,7 @@ export async function deleteDesignedWorkout(workoutId: string): Promise<void> {
 
 // Get all designed workouts
 export async function getDesignedWorkouts(): Promise<DesignedWorkout[]> {
-  const response = await fetch(`${API_BASE}/design/workouts`);
+  const response = await authFetch(`${API_BASE}/design/workouts`);
   return handleResponse<DesignedWorkout[]>(response);
 }
 
@@ -674,7 +704,7 @@ export async function getDesignedWorkouts(): Promise<DesignedWorkout[]> {
 export async function exportWorkoutAsFIT(
   workoutId: string
 ): Promise<FITExportResponse> {
-  const response = await fetch(`${API_BASE}/design/workouts/${workoutId}/export/fit`, {
+  const response = await authFetch(`${API_BASE}/design/workouts/${workoutId}/export/fit`, {
     method: 'POST',
   });
   return handleResponse<FITExportResponse>(response);
@@ -682,7 +712,7 @@ export async function exportWorkoutAsFIT(
 
 // Download FIT file directly (returns blob)
 export async function downloadWorkoutFIT(workoutId: string): Promise<Blob> {
-  const response = await fetch(
+  const response = await authFetch(
     `${API_BASE}/design/workouts/${workoutId}/download/fit`
   );
 
@@ -698,7 +728,7 @@ export async function downloadWorkoutFIT(workoutId: string): Promise<Blob> {
 export async function exportWorkoutToGarmin(
   workoutId: string
 ): Promise<GarminExportResponse> {
-  const response = await fetch(
+  const response = await authFetch(
     `${API_BASE}/design/workouts/${workoutId}/export/garmin`,
     {
       method: 'POST',
@@ -727,7 +757,7 @@ export async function getAthleteContext(
   const queryString = params.toString();
   const url = `${API_BASE}/athlete/context${queryString ? `?${queryString}` : ''}`;
 
-  const response = await fetch(url);
+  const response = await authFetch(url);
   return handleResponse<AthleteContext>(response);
 }
 
@@ -741,7 +771,7 @@ export async function getReadiness(
   const queryString = params.toString();
   const url = `${API_BASE}/athlete/readiness${queryString ? `?${queryString}` : ''}`;
 
-  const response = await fetch(url);
+  const response = await authFetch(url);
   return handleResponse<ReadinessResponse>(response);
 }
 
@@ -750,8 +780,19 @@ export async function getFitnessMetrics(
   days: number = 30
 ): Promise<FitnessMetricsHistory> {
   const url = `${API_BASE}/athlete/fitness-metrics?days=${days}`;
-  const response = await fetch(url);
+  const response = await authFetch(url);
   return handleResponse<FitnessMetricsHistory>(response);
+}
+
+// Get VO2 Max trend
+import type { VO2MaxTrend } from './types';
+
+export async function getVO2MaxTrend(
+  days: number = 90
+): Promise<VO2MaxTrend> {
+  const url = `${API_BASE}/athlete/vo2max-trend?days=${days}`;
+  const response = await authFetch(url);
+  return handleResponse<VO2MaxTrend>(response);
 }
 
 // ============================================
@@ -789,7 +830,7 @@ export interface GarminSyncStatus {
   notes: string[];
 }
 
-// Sync activities from Garmin Connect
+// Sync activities from Garmin Connect (legacy synchronous - may timeout on long syncs)
 export async function syncGarminActivities(
   request: GarminSyncRequest
 ): Promise<GarminSyncResponse> {
@@ -807,10 +848,199 @@ export async function syncGarminActivities(
   return handleResponse<GarminSyncResponse>(response);
 }
 
+// ============ Async Sync (prevents timeouts) ============
+
+export interface AsyncSyncResponse {
+  job_id: string;
+  status: string;
+  message: string;
+}
+
+export interface SyncJobStatus {
+  job_id: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  progress_percent: number;
+  current_step: string;
+  activities_synced: number;
+  fitness_days_synced: number;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  error: string | null;
+  result: {
+    synced_count: number;
+    new_activities: number;
+    updated_activities: number;
+    fitness_days: number;
+  } | null;
+}
+
+// Start async Garmin sync (returns immediately with job ID)
+export async function syncGarminActivitiesAsync(
+  request: GarminSyncRequest
+): Promise<AsyncSyncResponse> {
+  const response = await fetch(`${API_BASE}/garmin/sync-async`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: request.email,
+      password: request.password,
+      days: request.days ?? 30,
+    }),
+  });
+  return handleResponse<AsyncSyncResponse>(response);
+}
+
+// Poll for sync job status
+export async function getSyncJobStatus(jobId: string): Promise<SyncJobStatus> {
+  const response = await fetch(`${API_BASE}/garmin/sync-status/${jobId}`);
+  return handleResponse<SyncJobStatus>(response);
+}
+
 // Get Garmin sync status
 export async function getGarminSyncStatus(): Promise<GarminSyncStatus> {
   const response = await fetch(`${API_BASE}/garmin/status`);
   return handleResponse<GarminSyncStatus>(response);
+}
+
+// ============ Garmin Credentials Management ============
+
+export interface SaveCredentialsResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface CredentialStatusResponse {
+  connected: boolean;
+  garmin_user?: string;
+  is_valid: boolean;
+  last_validated?: string;
+}
+
+// Save Garmin credentials for future syncs
+export async function saveGarminCredentials(
+  email: string,
+  password: string
+): Promise<SaveCredentialsResponse> {
+  const response = await authFetch(`${API_BASE}/garmin/credentials`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ email, password }),
+  });
+
+  // Return failure response for 401 instead of throwing
+  if (response.status === 401) {
+    return {
+      success: false,
+      message: 'Authentication required to save credentials',
+    };
+  }
+
+  return handleResponse<SaveCredentialsResponse>(response);
+}
+
+// Delete saved Garmin credentials
+// Silently succeeds on 401 (nothing to delete if not authenticated)
+export async function deleteGarminCredentials(): Promise<void> {
+  const response = await authFetch(`${API_BASE}/garmin/credentials`, {
+    method: 'DELETE',
+  });
+
+  // 401 means not authenticated - nothing to delete, treat as success
+  if (response.status === 401) {
+    return;
+  }
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Delete failed' }));
+    throw new ApiClientError(errorData.message, response.status);
+  }
+}
+
+// Get Garmin credential status
+// Returns a "not connected" response for 401 errors (expected when not logged in)
+export async function getGarminCredentialStatus(): Promise<CredentialStatusResponse> {
+  const response = await authFetch(`${API_BASE}/garmin/credentials/status`);
+
+  // For credential status, 401 means "not connected" - don't throw
+  if (response.status === 401) {
+    return {
+      connected: false,
+      is_valid: false,
+    };
+  }
+
+  return handleResponse<CredentialStatusResponse>(response);
+}
+
+// ============ Auto-Sync Configuration ============
+
+import type {
+  GarminSyncConfig,
+  GarminSyncHistoryEntry,
+} from './types';
+
+// Get auto-sync configuration
+// Returns default config for 401 errors (not logged in)
+export async function getGarminSyncConfig(): Promise<GarminSyncConfig> {
+  const response = await authFetch(`${API_BASE}/garmin/sync-config`);
+
+  if (response.status === 401) {
+    return {
+      auto_sync_enabled: false,
+      sync_frequency: 'daily',
+      initial_sync_days: 30,
+      incremental_sync_days: 7,
+    };
+  }
+
+  return handleResponse<GarminSyncConfig>(response);
+}
+
+// Update auto-sync configuration
+export async function updateGarminSyncConfig(
+  config: Partial<GarminSyncConfig>
+): Promise<GarminSyncConfig> {
+  const response = await authFetch(`${API_BASE}/garmin/sync-config`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(config),
+  });
+  return handleResponse<GarminSyncConfig>(response);
+}
+
+// Get sync history
+// Returns empty array for 401 errors (not logged in)
+export async function getGarminSyncHistory(
+  limit: number = 10
+): Promise<GarminSyncHistoryEntry[]> {
+  const response = await authFetch(`${API_BASE}/garmin/sync-history?limit=${limit}`);
+
+  if (response.status === 401) {
+    return [];
+  }
+
+  return handleResponse<GarminSyncHistoryEntry[]>(response);
+}
+
+// Trigger manual sync (using saved credentials)
+export interface TriggerSyncResponse {
+  job_id: string;
+  status: string;
+  message: string;
+}
+
+export async function triggerManualSync(): Promise<TriggerSyncResponse> {
+  const response = await authFetch(`${API_BASE}/garmin/sync/trigger`, {
+    method: 'POST',
+  });
+  return handleResponse<TriggerSyncResponse>(response);
 }
 
 // ============================================
@@ -830,7 +1060,7 @@ export async function getActivityDetails(
   const queryString = params.toString();
   const url = `${API_BASE}/workouts/${activityId}/details${queryString ? `?${queryString}` : ''}`;
 
-  const response = await fetch(url);
+  const response = await authFetch(url);
   return handleResponse<ActivityDetailsResponse>(response);
 }
 
@@ -854,7 +1084,7 @@ export async function getExplainedReadiness(
   const queryString = params.toString();
   const url = `${API_BASE}/explain/readiness${queryString ? `?${queryString}` : ''}`;
 
-  const response = await fetch(url);
+  const response = await authFetch(url);
   return handleResponse<ExplainedReadiness>(response);
 }
 
@@ -868,7 +1098,7 @@ export async function getExplainedWorkoutRecommendation(
   const queryString = params.toString();
   const url = `${API_BASE}/explain/workout-recommendation${queryString ? `?${queryString}` : ''}`;
 
-  const response = await fetch(url);
+  const response = await authFetch(url);
   return handleResponse<ExplainedWorkout>(response);
 }
 
@@ -877,7 +1107,7 @@ export async function getExplainedSession(
   sessionId: string
 ): Promise<SessionExplanation> {
   const url = `${API_BASE}/explain/plan-session/${sessionId}`;
-  const response = await fetch(url);
+  const response = await authFetch(url);
   return handleResponse<SessionExplanation>(response);
 }
 
@@ -906,7 +1136,7 @@ export interface ChatSuggestionsResponse {
 export async function sendChatMessage(
   request: ChatMessageRequest
 ): Promise<ChatMessageResponse> {
-  const response = await fetch(`${API_BASE}/chat`, {
+  const response = await authFetch(`${API_BASE}/chat`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -922,13 +1152,13 @@ export async function sendChatMessage(
 
 // Get chat suggestions
 export async function getChatSuggestions(): Promise<ChatSuggestionsResponse> {
-  const response = await fetch(`${API_BASE}/chat/suggestions`);
+  const response = await authFetch(`${API_BASE}/chat/suggestions`);
   return handleResponse<ChatSuggestionsResponse>(response);
 }
 
 // Start a new conversation
 export async function startNewConversation(): Promise<{ conversation_id: string }> {
-  const response = await fetch(`${API_BASE}/chat/new`, {
+  const response = await authFetch(`${API_BASE}/chat/new`, {
     method: 'POST',
   });
   return handleResponse<{ conversation_id: string }>(response);
@@ -938,10 +1168,150 @@ export async function startNewConversation(): Promise<{ conversation_id: string 
 export async function clearConversation(
   conversationId: string
 ): Promise<{ cleared: boolean }> {
-  const response = await fetch(`${API_BASE}/chat/history/${conversationId}`, {
+  const response = await authFetch(`${API_BASE}/chat/history/${conversationId}`, {
     method: 'DELETE',
   });
   return handleResponse<{ cleared: boolean }>(response);
+}
+
+// ============================================
+// Gamification API
+// ============================================
+
+interface AchievementsListResponse {
+  achievements: AchievementWithStatus[];
+  total: number;
+  unlocked: number;
+}
+
+export async function getAchievements(): Promise<AchievementWithStatus[]> {
+  const response = await authFetch(`${API_BASE}/gamification/achievements`);
+  const data = await handleResponse<AchievementsListResponse>(response);
+  return data.achievements;
+}
+
+interface RecentAchievementsResponse {
+  achievements: UserAchievement[];
+  count: number;
+}
+
+export async function getRecentAchievements(): Promise<UserAchievement[]> {
+  const response = await authFetch(`${API_BASE}/gamification/achievements/recent`);
+  const data = await handleResponse<RecentAchievementsResponse>(response);
+  return data.achievements;
+}
+
+export async function getUserProgress(): Promise<UserProgress> {
+  const response = await authFetch(`${API_BASE}/gamification/progress`);
+  return handleResponse<UserProgress>(response);
+}
+
+export async function checkAchievements(): Promise<UserAchievement[]> {
+  const response = await authFetch(`${API_BASE}/gamification/check`, {
+    method: 'POST',
+  });
+  return handleResponse<UserAchievement[]>(response);
+}
+
+// ============================================
+// Strava Integration API
+// ============================================
+
+import type {
+  StravaStatus,
+  StravaPreferences,
+  StravaAuthResponse,
+} from './types';
+
+// Get Strava connection status
+export async function getStravaStatus(): Promise<StravaStatus> {
+  const response = await authFetch(`${API_BASE}/strava/status`);
+  return handleResponse<StravaStatus>(response);
+}
+
+// Get Strava OAuth authorization URL
+export async function getStravaAuthUrl(): Promise<StravaAuthResponse> {
+  const response = await authFetch(`${API_BASE}/strava/auth`);
+  return handleResponse<StravaAuthResponse>(response);
+}
+
+// Handle Strava OAuth callback
+export async function handleStravaCallback(
+  code: string,
+  scope?: string
+): Promise<StravaStatus> {
+  const response = await authFetch(`${API_BASE}/strava/callback`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ code, scope }),
+  });
+  return handleResponse<StravaStatus>(response);
+}
+
+// Disconnect Strava account
+export async function disconnectStrava(): Promise<void> {
+  const response = await authFetch(`${API_BASE}/strava/disconnect`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Disconnect failed' }));
+    throw new ApiClientError(errorData.message, response.status);
+  }
+}
+
+// Get Strava preferences
+export async function getStravaPreferences(): Promise<StravaPreferences> {
+  const response = await authFetch(`${API_BASE}/strava/preferences`);
+  return handleResponse<StravaPreferences>(response);
+}
+
+// Update Strava preferences
+export async function updateStravaPreferences(
+  prefs: Partial<StravaPreferences>
+): Promise<StravaPreferences> {
+  const response = await authFetch(`${API_BASE}/strava/preferences`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(prefs),
+  });
+  return handleResponse<StravaPreferences>(response);
+}
+
+// Sync workout analysis to Strava
+export interface StravaSyncResponse {
+  success: boolean;
+  message: string;
+  strava_activity_id?: number;
+  strava_url?: string;
+}
+
+export interface StravaSyncStatus {
+  workout_id: string;
+  synced: boolean;
+  strava_activity_id?: number;
+  strava_url?: string;
+  synced_at?: string;
+}
+
+export async function syncWorkoutToStrava(
+  workoutId: string
+): Promise<StravaSyncResponse> {
+  const response = await authFetch(`${API_BASE}/strava/sync/${workoutId}`, {
+    method: 'POST',
+  });
+  return handleResponse<StravaSyncResponse>(response);
+}
+
+// Get Strava sync status for a workout
+export async function getStravaSyncStatus(
+  workoutId: string
+): Promise<StravaSyncStatus> {
+  const response = await authFetch(`${API_BASE}/strava/sync/${workoutId}/status`);
+  return handleResponse<StravaSyncStatus>(response);
 }
 
 export { ApiClientError };

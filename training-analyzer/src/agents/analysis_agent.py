@@ -85,15 +85,27 @@ class AnalysisAgent:
     4. Returns a WorkoutAnalysisResult
     """
 
-    def __init__(self, llm_client=None):
+    def __init__(self, llm_client=None, user_id: Optional[str] = None):
         """
         Initialize the analysis agent.
 
         Args:
             llm_client: Optional LLM client (uses default if not provided)
+            user_id: Optional user ID for usage tracking and billing
         """
         self._llm_client = llm_client
+        self._user_id = user_id
         self._graph = self._build_graph()
+
+    @property
+    def user_id(self) -> Optional[str]:
+        """Get the user ID for usage tracking."""
+        return self._user_id
+
+    @user_id.setter
+    def user_id(self, value: Optional[str]) -> None:
+        """Set the user ID for usage tracking."""
+        self._user_id = value
 
     @property
     def llm_client(self):
@@ -205,6 +217,7 @@ class AnalysisAgent:
                     hr_zones=hr_zones,
                     duration_sec=int((workout_data.get("duration_min") or 0) * 60),
                     distance_km=workout_data.get("distance_km") or 0.0,
+                    activity_type=workout_data.get("activity_type"),
                 )
 
                 # Attach condensed data to workout
@@ -251,12 +264,17 @@ class AnalysisAgent:
             )
 
             # Get JSON completion using JSON mode
+            workout_id = state.get("workout_data", {}).get("activity_id")
             parsed_response = await self.llm_client.completion_json(
                 system=system_prompt,
                 user=user_prompt,
                 model=ModelType.SMART,
                 max_tokens=4000,
                 temperature=0.7,
+                user_id=self._user_id,
+                analysis_type="workout_analysis",
+                entity_type="workout",
+                entity_id=workout_id,
             )
 
             return {

@@ -30,6 +30,40 @@ from .fatigue_prediction import (
     get_fatigue_service,
 )
 
+# Strava integration
+from .strava_service import (
+    StravaService,
+    StravaPreferences,
+    StravaSyncStatus,
+    format_strava_description_simple,
+    format_strava_description_extended,
+    format_strava_description_custom,
+)
+
+# AI Agentic - Training Pattern Detection
+from .training_pattern_service import (
+    TrainingPatternService,
+    TrainingPatterns,
+    get_training_pattern_service,
+    reset_training_pattern_service,
+)
+
+# AI Agentic - Workout Query Service
+from .workout_query_service import (
+    WorkoutQueryService,
+    WorkoutSummary,
+    get_workout_query_service,
+    reset_workout_query_service,
+)
+
+# Consent service for LLM data sharing
+from .consent_service import (
+    ConsentService,
+    ConsentStatus,
+    get_consent_service,
+    reset_consent_service,
+)
+
 __all__ = [
     # Core services
     "EnrichmentService",
@@ -64,4 +98,26 @@ __all__ = [
     "RecoveryState",
     "RiskLevel",
     "get_fatigue_service",
+    # Strava integration
+    "StravaService",
+    "StravaPreferences",
+    "StravaSyncStatus",
+    "format_strava_description_simple",
+    "format_strava_description_extended",
+    "format_strava_description_custom",
+    # AI Agentic - Training Pattern Detection
+    "TrainingPatternService",
+    "TrainingPatterns",
+    "get_training_pattern_service",
+    "reset_training_pattern_service",
+    # AI Agentic - Workout Query Service
+    "WorkoutQueryService",
+    "WorkoutSummary",
+    "get_workout_query_service",
+    "reset_workout_query_service",
+    # Consent service for LLM data sharing
+    "ConsentService",
+    "ConsentStatus",
+    "get_consent_service",
+    "reset_consent_service",
 ]

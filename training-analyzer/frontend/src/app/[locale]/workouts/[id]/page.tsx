@@ -6,8 +6,8 @@ import { useWorkout, useWorkoutAnalysis } from '@/hooks/useWorkouts';
 import { WorkoutAnalysis, WorkoutAnalysisSkeleton } from '@/components/workouts/WorkoutAnalysis';
 import { WorkoutCharts } from '@/components/workout-detail/WorkoutCharts';
 import { RouteMap } from '@/components/workout-detail/RouteMap';
-import { SplitsTable } from '@/components/workout-detail/SplitsTable';
-import { getActivityDetails } from '@/lib/api-client';
+import { QuickSplitsPreview } from '@/components/workout-detail/QuickSplitsPreview';
+import { getActivityDetails, syncWorkoutToStrava, getStravaStatus, getStravaSyncStatus } from '@/lib/api-client';
 import type { ActivityDetailsResponse } from '@/types/workout-detail';
 import {
   cn,
@@ -44,6 +44,40 @@ export default function WorkoutDetailPage({ params }: WorkoutDetailPageProps) {
   // Synchronized hover state for charts and map
   const [activeHoverIndex, setActiveHoverIndex] = useState<number | null>(null);
 
+  // Strava sync state
+  const [isStravaConnected, setIsStravaConnected] = useState(false);
+  const [isSyncingToStrava, setIsSyncingToStrava] = useState(false);
+  const [stravaSyncResult, setStravaSyncResult] = useState<{
+    success: boolean;
+    message: string;
+    strava_url?: string;
+  } | null>(null);
+
+  // Check Strava connection status and sync status for this workout
+  useEffect(() => {
+    const checkStrava = async () => {
+      try {
+        const status = await getStravaStatus();
+        setIsStravaConnected(status.connected);
+
+        // If connected, also check if this workout was already synced
+        if (status.connected && workoutId) {
+          const syncStatus = await getStravaSyncStatus(workoutId);
+          if (syncStatus.synced && syncStatus.strava_url) {
+            setStravaSyncResult({
+              success: true,
+              message: 'Already synced to Strava',
+              strava_url: syncStatus.strava_url,
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Failed to check Strava status:', err);
+      }
+    };
+    checkStrava();
+  }, [workoutId]);
+
   // Fetch activity details when workout is loaded
   useEffect(() => {
     if (!workout) return;
@@ -64,6 +98,30 @@ export default function WorkoutDetailPage({ params }: WorkoutDetailPageProps) {
 
     fetchDetails();
   }, [workout, workoutId]);
+
+  // Handle Strava sync
+  const handleSyncToStrava = async () => {
+    if (!workoutId || isSyncingToStrava) return;
+
+    setIsSyncingToStrava(true);
+    setStravaSyncResult(null);
+
+    try {
+      const result = await syncWorkoutToStrava(workoutId);
+      setStravaSyncResult({
+        success: result.success,
+        message: result.message,
+        strava_url: result.strava_url,
+      });
+    } catch (err) {
+      setStravaSyncResult({
+        success: false,
+        message: err instanceof Error ? err.message : 'Failed to sync to Strava',
+      });
+    } finally {
+      setIsSyncingToStrava(false);
+    }
+  };
 
   // Determine if this is a running activity (for pace vs speed display)
   const isRunning = activityDetails?.is_running ??
@@ -206,21 +264,48 @@ export default function WorkoutDetailPage({ params }: WorkoutDetailPageProps) {
         </section>
 
         {/* Route Map + AI Analysis side by side */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          {/* Route Map - Left side (3/5 width) */}
-          <div className="lg:col-span-3">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 lg:items-start">
+          {/* Route Map + Quick Stats - Left side (3/5 width) */}
+          <div className="lg:col-span-3 space-y-4">
             {isLoadingDetails ? (
               <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 h-[500px] animate-pulse">
                 <div className="h-6 bg-gray-800 rounded w-32 mb-4"></div>
                 <div className="h-full bg-gray-800 rounded"></div>
               </div>
             ) : activityDetails ? (
-              <RouteMap
-                gpsData={activityDetails.gps_coordinates}
-                activeIndex={activeHoverIndex}
-                chartDataLength={400}
-                onHoverIndex={setActiveHoverIndex}
-              />
+              <>
+                <RouteMap
+                  gpsData={activityDetails.gps_coordinates}
+                  activeIndex={activeHoverIndex}
+                  chartDataLength={400}
+                  onHoverIndex={setActiveHoverIndex}
+                />
+                {/* Quick Splits Preview - fills space under map */}
+                {activityDetails.splits && activityDetails.splits.length > 0 && (
+                  <QuickSplitsPreview
+                    splits={activityDetails.splits}
+                    isRunning={isRunning}
+                    activeHoverIndex={activeHoverIndex}
+                    totalDataPoints={400}
+                    onSplitHover={(splitIdx) => {
+                      if (splitIdx === null) {
+                        setActiveHoverIndex(null);
+                      } else {
+                        // Calculate the hover index for the middle of the split using distance
+                        const totalDistance = activityDetails.splits.reduce((sum, s) => sum + s.distance_m, 0);
+                        let cumulativeDistance = 0;
+                        for (let i = 0; i < splitIdx; i++) {
+                          cumulativeDistance += activityDetails.splits[i].distance_m;
+                        }
+                        // Point to middle of the split
+                        cumulativeDistance += activityDetails.splits[splitIdx].distance_m / 2;
+                        const ratio = cumulativeDistance / totalDistance;
+                        setActiveHoverIndex(Math.floor(ratio * 400));
+                      }
+                    }}
+                  />
+                )}
+              </>
             ) : detailsError ? (
               <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 h-[500px] flex items-center justify-center">
                 <p className="text-gray-400">{detailsError}</p>
@@ -228,23 +313,67 @@ export default function WorkoutDetailPage({ params }: WorkoutDetailPageProps) {
             ) : null}
           </div>
 
-          {/* AI Analysis - Right side (2/5 width) */}
-          <div className="lg:col-span-2">
-            <section className="bg-gray-900 rounded-xl border border-gray-800 p-6 h-full">
+          {/* AI Analysis - Right side (2/5 width) - Sticky */}
+          <div className="lg:col-span-2 lg:sticky lg:top-6 lg:self-start">
+            <section className="bg-gray-900 rounded-xl border border-gray-800 p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-gray-100 flex items-center gap-2">
                   <SparklesIcon className="text-teal-400" />
                   AI Analysis
                 </h2>
-                {/* Regenerate button */}
+                {/* Action buttons */}
                 {analysis && !isAnalyzing && (
-                  <button
-                    onClick={() => handleAnalyze(true)}
-                    disabled={isAnalyzing}
-                    className="px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200 hover:bg-gray-800 rounded-md transition-colors"
-                  >
-                    Regenerate
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {/* Share to Strava button */}
+                    {isStravaConnected && (
+                      <button
+                        onClick={handleSyncToStrava}
+                        disabled={isSyncingToStrava}
+                        className={cn(
+                          "px-3 py-1.5 text-sm rounded-md transition-colors flex items-center gap-1.5",
+                          stravaSyncResult?.success
+                            ? "bg-green-900/50 text-green-400"
+                            : "bg-orange-600 text-white hover:bg-orange-700"
+                        )}
+                      >
+                        {isSyncingToStrava ? (
+                          <>
+                            <LoadingSpinner />
+                            Syncing...
+                          </>
+                        ) : stravaSyncResult?.success && stravaSyncResult.strava_url ? (
+                          <a
+                            href={stravaSyncResult.strava_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1.5"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <StravaIcon className="w-4 h-4" />
+                            View on Strava
+                          </a>
+                        ) : stravaSyncResult?.success ? (
+                          <>
+                            <StravaIcon className="w-4 h-4" />
+                            Synced!
+                          </>
+                        ) : (
+                          <>
+                            <StravaIcon className="w-4 h-4" />
+                            Share to Strava
+                          </>
+                        )}
+                      </button>
+                    )}
+                    {/* Regenerate button */}
+                    <button
+                      onClick={() => handleAnalyze(true)}
+                      disabled={isAnalyzing}
+                      className="px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200 hover:bg-gray-800 rounded-md transition-colors"
+                    >
+                      Regenerate
+                    </button>
+                  </div>
                 )}
                 {isAnalyzing && (
                   <span className="text-xs text-teal-400 flex items-center gap-1">
@@ -308,13 +437,6 @@ export default function WorkoutDetailPage({ params }: WorkoutDetailPageProps) {
           />
         )}
 
-        {/* Splits Table */}
-        {activityDetails?.splits && activityDetails.splits.length > 0 && (
-          <SplitsTable
-            splits={activityDetails.splits}
-            isRunning={isRunning}
-          />
-        )}
 
         {/* HR Zones and Notes */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -800,6 +922,14 @@ function LoadingSpinner() {
         fill="currentColor"
         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
       />
+    </svg>
+  );
+}
+
+function StravaIcon({ className }: { className?: string }) {
+  return (
+    <svg className={cn('w-5 h-5', className)} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
     </svg>
   );
 }

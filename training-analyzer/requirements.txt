@@ -1,13 +1,10 @@
-# Core
-rich>=13.0
-# API
-fastapi>=0.109.0
-uvicorn[standard]>=0.27.0
-pydantic>=2.5.0
-pydantic-settings>=2.1.0
-# LLM
-openai>=1.10.0
-# Garmin Connect
-garminconnect>=0.2.0
-# Utils
-python-dotenv>=1.0.0
+# This file exists for compatibility with tools that don't support pyproject.toml
+# All dependencies are defined in pyproject.toml - this file references it
+#
+# To install dependencies:
+#   pip install -e .           # Install from pyproject.toml
+#   pip install -e ".[dev]"    # Install with dev dependencies
+#
+# Or if you must use requirements.txt:
+#   pip install -e .
+-e .

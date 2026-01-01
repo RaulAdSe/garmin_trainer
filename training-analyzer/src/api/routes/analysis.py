@@ -5,10 +5,12 @@ import logging
 from datetime import date, datetime
 from typing import Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
-from ..deps import get_coach_service, get_training_db, get_workout_repository
+from ..deps import get_coach_service, get_training_db, get_workout_repository, get_current_user, CurrentUser, get_consent_service_dep
+from ..middleware.rate_limit import limiter, RATE_LIMIT_AI
+from ..middleware.quota import require_quota
 from ...db.repositories.workout_repository import WorkoutRepository
 from ...db.database import TrainingDatabase
 from ...llm.providers import get_llm_client, ModelType
@@ -115,7 +117,7 @@ def delete_analysis(db: TrainingDatabase, workout_id: str) -> bool:
 _analysis_agent: Optional[AnalysisAgent] = None
 
 
-def get_analysis_agent() -> AnalysisAgent:
+def get_analysis_agent(user_id: Optional[str] = None) -> AnalysisAgent:
     """Get the analysis agent singleton."""
     global _analysis_agent
     if _analysis_agent is None:
@@ -123,15 +125,19 @@ def get_analysis_agent() -> AnalysisAgent:
         logger = logging.getLogger(__name__)
         try:
             logger.info("Initializing AnalysisAgent...")
-            _analysis_agent = AnalysisAgent()
+            _analysis_agent = AnalysisAgent(user_id=user_id)
             logger.info("AnalysisAgent initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize AnalysisAgent: {e}")
             raise HTTPException(
                 status_code=500,
-                detail=f"Failed to initialize analysis agent: {str(e)}"
+                detail="Failed to initialize analysis agent. Please try again later."
             )
+    # Update user_id on each request (for usage tracking)
+    _analysis_agent.user_id = user_id
     return _analysis_agent
+
+
 
 
 # ============================================================================
@@ -197,14 +203,16 @@ def _build_athlete_context_from_historical(historical_context: Dict) -> Dict:
 # ============================================================================
 
 @router.post("/workout/{workout_id}", response_model=AnalysisResponse)
+@limiter.limit(RATE_LIMIT_AI)
 async def analyze_workout(
+    request_obj: Request,
     workout_id: str,
     request: Optional[AnalysisRequest] = None,
     stream: bool = Query(default=False, description="Stream the response"),
     include_details: bool = Query(default=True, description="Include detailed time-series analysis (HR dynamics, pace patterns, etc.)"),
+    current_user: CurrentUser = Depends(require_quota("workout_analysis")),
     coach_service=Depends(get_coach_service),
     training_db=Depends(get_training_db),
-    agent: AnalysisAgent = Depends(get_analysis_agent),
 ):
     """
     Analyze a workout with AI-powered insights.
@@ -235,6 +243,9 @@ async def analyze_workout(
     """
     logger.info(f"[analyze_workout] Starting analysis for workout_id={workout_id}")
 
+    # Get user_id for usage tracking
+    user_id = current_user.id
+
     try:
         # Check DB first (unless force_refresh)
         force_refresh = request.force_refresh if request else False
@@ -246,6 +257,20 @@ async def analyze_workout(
                     analysis=existing,
                     cached=True,
                 )
+
+        # =========================================================================
+        # CONSENT CHECK: Verify user has consented to LLM data sharing
+        # (Only checked when we need to generate new analysis via LLM)
+        # =========================================================================
+        consent_service = get_consent_service_dep()
+        if not consent_service.check_llm_consent(user_id):
+            raise HTTPException(
+                status_code=403,
+                detail="LLM data sharing consent required. Please accept the data sharing agreement to use AI features."
+            )
+
+        # Initialize agent after consent check
+        agent = get_analysis_agent(user_id=user_id)
 
         # Get workout data from activity metrics
         workout = training_db.get_activity_metrics(workout_id)
@@ -307,6 +332,7 @@ async def analyze_workout(
                 similar_workouts,
                 historical_context,
                 training_db,
+                user_id=user_id,
             )
 
         # Fetch detailed time-series data if requested
@@ -387,6 +413,7 @@ async def _stream_analysis(
     similar_workouts: list,
     historical_context: dict,
     training_db: TrainingDatabase,
+    user_id: Optional[str] = None,
 ):
     """Stream analysis response from LLM.
 
@@ -473,10 +500,15 @@ async def _stream_analysis(
 
     async def generate():
         full_content = ""
+        workout_id = workout_dict.get("activity_id", "")
         async for chunk in llm.stream_completion(
             system=system_prompt,
             user=user_prompt,
             model=ModelType.SMART,
+            user_id=user_id,
+            analysis_type="workout_analysis",
+            entity_type="workout",
+            entity_id=workout_id,
         ):
             full_content += chunk
             # Send SSE format that frontend expects
@@ -544,6 +576,7 @@ async def _stream_analysis(
 @router.get("/workout/{workout_id}", response_model=AnalysisResponse)
 async def get_existing_analysis(
     workout_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
     training_db=Depends(get_training_db),
 ):
     """
@@ -579,6 +612,7 @@ async def get_existing_analysis(
 async def get_recent_with_analysis(
     limit: int = Query(default=10, ge=1, le=50, description="Number of workouts to return"),
     include_summaries: bool = Query(default=True, description="Include AI summaries"),
+    current_user: CurrentUser = Depends(get_current_user),
     coach_service=Depends(get_coach_service),
     training_db=Depends(get_training_db),
 ):
@@ -594,6 +628,8 @@ async def get_recent_with_analysis(
     Returns:
         RecentWorkoutsResponse with workouts and their summaries
     """
+    user_id = current_user.id
+
     try:
         # Get recent activities
         activities = coach_service.get_recent_activities(days=30)[:limit]
@@ -604,6 +640,16 @@ async def get_recent_with_analysis(
         workouts = []
 
         if include_summaries:
+            # =========================================================================
+            # CONSENT CHECK: Verify user has consented to LLM data sharing
+            # (Only checked when generating AI summaries)
+            # =========================================================================
+            consent_service = get_consent_service_dep()
+            if not consent_service.check_llm_consent(user_id):
+                raise HTTPException(
+                    status_code=403,
+                    detail="LLM data sharing consent required. Please accept the data sharing agreement to use AI features."
+                )
             # Get athlete context once
             briefing = coach_service.get_daily_briefing(date.today())
             athlete_context = build_athlete_context_prompt(
@@ -686,21 +732,24 @@ async def get_recent_with_analysis(
         )
 
     except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to get recent workouts: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to get recent workouts: {str(e)}"
+            detail="Failed to get recent workouts. Please try again later."
         )
 
 
-@router.post("/batch", response_model=BatchAnalysisResponse)
-async def batch_analyze(
+# NOTE: batch_analyze is internal-only, not exposed via public API
+# Use for background jobs or admin tasks only
+async def batch_analyze_internal(
     request: BatchAnalysisRequest,
-    coach_service=Depends(get_coach_service),
-    training_db=Depends(get_training_db),
-    agent: AnalysisAgent = Depends(get_analysis_agent),
+    user_id: str,
+    coach_service,
+    training_db,
 ):
     """
-    Batch analyze multiple workouts.
+    Batch analyze multiple workouts (internal use only).
 
     Efficient for analyzing a week or training block.
     Skips already-analyzed workouts unless force_refresh is set.
@@ -719,6 +768,19 @@ async def batch_analyze(
     from datetime import datetime as dt
 
     logger = logging.getLogger(__name__)
+
+    # =========================================================================
+    # CONSENT CHECK: Verify user has consented to LLM data sharing
+    # =========================================================================
+    consent_service = get_consent_service_dep()
+    if not consent_service.check_llm_consent(user_id):
+        raise HTTPException(
+            status_code=403,
+            detail="LLM data sharing consent required. Please accept the data sharing agreement to use AI features."
+        )
+
+    # user_id passed directly for internal use
+    agent = get_analysis_agent(user_id=user_id)
 
     try:
         results = []
@@ -814,15 +876,18 @@ async def batch_analyze(
         )
 
     except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed batch analysis: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed batch analysis: {str(e)}"
+            detail="Failed batch analysis. Please try again later."
         )
 
 
 @router.delete("/workout/{workout_id}/analysis")
 async def delete_workout_analysis(
     workout_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
     training_db=Depends(get_training_db),
 ):
     """

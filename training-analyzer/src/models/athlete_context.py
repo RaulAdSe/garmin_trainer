@@ -1,5 +1,5 @@
 """
-Unified AthleteContext model for the Reactive Training App.
+Unified AthleteContext model for the trAIner App.
 
 This module provides a single, comprehensive AthleteContext dataclass that
 consolidates all athlete-related context needed across different modules:

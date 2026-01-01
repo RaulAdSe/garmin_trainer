@@ -534,6 +534,28 @@ export interface FitnessMetrics {
   daily_load: number;
 }
 
+// VO2 Max Types
+export interface VO2MaxDataPoint {
+  date: string;
+  vo2max_running: number | null;
+  vo2max_cycling: number | null;
+  training_status: string | null;
+}
+
+export interface VO2MaxTrend {
+  data_points: VO2MaxDataPoint[];
+  trend: 'improving' | 'stable' | 'declining' | 'unknown';
+  change_percent: number;
+  current_vo2max_running: number | null;
+  current_vo2max_cycling: number | null;
+  peak_vo2max_running: number | null;
+  peak_vo2max_cycling: number | null;
+  current_vs_peak_running: number | null;
+  current_vs_peak_cycling: number | null;
+  start_date: string;
+  end_date: string;
+}
+
 export interface Physiology {
   max_hr: number;
   rest_hr: number;
@@ -762,4 +784,140 @@ export interface SessionExplanation {
   periodization_context: string;
   weekly_context: string;
   progression_note?: string;
+}
+
+// ============================================
+// Gamification Types
+// ============================================
+
+export type AchievementCategory = 'consistency' | 'performance' | 'execution' | 'milestone';
+export type AchievementRarity = 'common' | 'rare' | 'epic' | 'legendary';
+
+export interface Achievement {
+  id: string;
+  name: string;
+  description: string;
+  category: AchievementCategory;
+  icon: string;
+  xpValue: number;
+  rarity: AchievementRarity;
+  conditionType?: string;
+  conditionValue?: string;
+  displayOrder: number;
+}
+
+export interface UserAchievement {
+  achievement: Achievement;
+  unlockedAt: string;
+  workoutId?: string;
+  isNew?: boolean;
+}
+
+export interface LevelInfo {
+  level: number;
+  xpRequired: number;
+  xpForNext: number;
+  xpInLevel: number;
+  progressPercent: number;
+}
+
+export interface StreakInfo {
+  current: number;
+  longest: number;
+  freezeTokens: number;
+  isProtected: boolean;
+  lastActivityDate?: string;
+}
+
+export interface LevelReward {
+  level: number;
+  name: string;
+  title: string;
+  unlocks: string[];
+  description: string;
+}
+
+export interface UserProgress {
+  userId?: string;
+  totalXp: number;
+  level: LevelInfo;
+  streak: StreakInfo;
+  achievementsUnlocked: number;
+  updatedAt?: string;
+  title?: string;
+  unlockedFeatures?: string[];
+  nextReward?: LevelReward;
+}
+
+export interface AchievementWithStatus {
+  achievement: Achievement;
+  unlocked: boolean;
+  unlockedAt?: string;
+  progress?: number; // 0-100 for partial progress
+}
+
+// Rarity colors
+export const RARITY_COLORS: Record<AchievementRarity, string> = {
+  common: 'text-gray-400',
+  rare: 'text-blue-400',
+  epic: 'text-purple-400',
+  legendary: 'text-amber-400',
+};
+
+export const RARITY_BG_COLORS: Record<AchievementRarity, string> = {
+  common: 'bg-gray-400/10',
+  rare: 'bg-blue-400/10',
+  epic: 'bg-purple-400/10',
+  legendary: 'bg-amber-400/10',
+};
+
+// ============================================
+// Strava Integration Types
+// ============================================
+
+export interface StravaStatus {
+  connected: boolean;
+  athlete_id?: string;
+  athlete_name?: string;
+  scope?: string;
+}
+
+export interface StravaPreferences {
+  auto_update_description: boolean;
+  include_score: boolean;
+  include_summary: boolean;
+  include_link: boolean;
+  use_extended_format: boolean;
+  custom_footer?: string;
+}
+
+export interface StravaAuthResponse {
+  authorization_url: string;
+  state: string;
+}
+
+export interface StravaCallbackRequest {
+  code: string;
+  scope?: string;
+}
+
+// ============================================
+// Garmin Auto-Sync Configuration Types
+// ============================================
+
+export interface GarminSyncConfig {
+  auto_sync_enabled: boolean;
+  sync_frequency: 'daily' | 'weekly';
+  initial_sync_days: number;
+  incremental_sync_days: number;
+}
+
+export interface GarminSyncHistoryEntry {
+  id: string;
+  sync_type: 'manual' | 'scheduled';
+  started_at: string;
+  completed_at?: string;
+  status: 'running' | 'completed' | 'failed';
+  activities_synced: number;
+  error_message?: string;
 }

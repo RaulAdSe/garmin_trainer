@@ -1,4 +1,4 @@
-# Training Analyzer
+# trAIner
 
 AI-powered workout analysis and coaching app with Garmin integration. Provides personalized training insights, plan generation, workout design with FIT file export, and a comprehensive dashboard for tracking fitness metrics.
 

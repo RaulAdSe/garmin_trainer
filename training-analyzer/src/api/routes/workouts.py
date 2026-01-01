@@ -9,7 +9,8 @@ Provides endpoints for:
 - Detailed activity data (time series, GPS, splits)
 """
 
-from datetime import date, datetime
+import logging
+from datetime import date, datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Any
 import tempfile
 import hashlib
@@ -18,11 +19,13 @@ import time
 from pathlib import Path
 from functools import lru_cache
 
+logger = logging.getLogger(__name__)
+
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
-from ..deps import get_coach_service, get_training_db, get_workout_repository
+from ..deps import get_coach_service, get_training_db, get_workout_repository, get_current_user, CurrentUser
 from ...models.workouts import (
     AthleteContext,
     IntervalType,
@@ -181,6 +184,12 @@ class CadencePoint(BaseModel):
     cadence: int  # steps/min for running, rpm for cycling
 
 
+class PowerPoint(BaseModel):
+    """Power data point (from power meter)."""
+    timestamp: int  # seconds from start
+    power: int  # watts
+
+
 class GPSCoordinate(BaseModel):
     """GPS coordinate for route mapping."""
     lat: float
@@ -207,6 +216,7 @@ class ActivityTimeSeries(BaseModel):
     pace_or_speed: List[PaceSpeedPoint] = Field(default_factory=list)
     elevation: List[ElevationPoint] = Field(default_factory=list)
     cadence: List[CadencePoint] = Field(default_factory=list)
+    power: List[PowerPoint] = Field(default_factory=list)  # Optional - only with power meters
 
 
 class BasicActivityInfo(BaseModel):
@@ -333,12 +343,12 @@ def _build_athlete_context(
 
             except Exception as e:
                 # Use default paces if calculation fails
-                print(f"Could not calculate training paces: {e}")
+                logger.warning(f"Could not calculate training paces: {e}")
 
         return context
 
     except Exception as e:
-        print(f"Error building athlete context: {e}")
+        logger.warning(f"Error building athlete context: {e}")
         # Return default context
         return AthleteContext()
 
@@ -451,6 +461,16 @@ def _parse_garmin_time_series(
                 if cadence > 0:
                     time_series.cadence.append(
                         CadencePoint(timestamp=timestamp_sec, cadence=cadence)
+                    )
+
+        # Power (from power meter - cycling or running power)
+        if "directPower" in metric_indices:
+            idx = metric_indices["directPower"]
+            if idx < len(metrics) and metrics[idx] is not None:
+                power = int(metrics[idx])
+                if power > 0:  # Sanity check - power should be positive
+                    time_series.power.append(
+                        PowerPoint(timestamp=timestamp_sec, power=power)
                     )
 
     return time_series
@@ -648,9 +668,10 @@ async def _fetch_garmin_activity_details(
                 except Exception:
                     splits = {}
             except Exception as login_error:
+                logger.error(f"Garmin login failed. Garth error: {garth_error}. Login error: {login_error}")
                 raise HTTPException(
                     status_code=401,
-                    detail=f"Garmin authentication failed. Garth error: {garth_error}. Login error: {str(login_error)}"
+                    detail="Garmin authentication failed. Please check your credentials or try again later."
                 )
 
         if not summary:
@@ -727,7 +748,7 @@ async def _fetch_garmin_activity_details(
         logger.error(traceback.format_exc())
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to fetch activity details from Garmin: {type(e).__name__}: {str(e)}"
+            detail="Failed to fetch activity details from Garmin. Please try again later."
         )
 
 
@@ -793,7 +814,9 @@ async def design_workout(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to design workout: {str(e)}")
+        import logging
+        logging.getLogger(__name__).error(f"Workout design failed: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to design workout. Please try again later.")
 
 
 # IMPORTANT: More specific routes must come BEFORE catch-all routes
@@ -913,13 +936,26 @@ async def get_workout(
         duration_sec = int((activity.duration_min or 0) * 60)
         distance_m = (activity.distance_km or 0) * 1000
 
+        # Use actual start_time if available, fallback to 08:00 for legacy data
+        start_time = activity.start_time or f"{activity.date}T08:00:00"
+        # Calculate end time based on duration
+        if activity.duration_min:
+            try:
+                start_dt = datetime.fromisoformat(start_time.replace("Z", "+00:00").split("+")[0])
+                end_dt = start_dt + timedelta(minutes=activity.duration_min)
+                end_time = end_dt.strftime("%Y-%m-%dT%H:%M:%S")
+            except (ValueError, TypeError):
+                end_time = f"{activity.date}T09:00:00"
+        else:
+            end_time = f"{activity.date}T09:00:00"
+
         return ActivityResponse(
             id=activity.activity_id,
             type=activity.activity_type or "other",
             name=activity.activity_name or f"{activity.activity_type} workout",
             date=activity.date,
-            startTime=f"{activity.date}T08:00:00",
-            endTime=f"{activity.date}T09:00:00",
+            startTime=start_time,
+            endTime=end_time,
             duration=duration_sec,
             distance=distance_m,
             metrics={
@@ -962,43 +998,66 @@ class PaginatedActivitiesResponse(BaseModel):
 async def list_workouts(
     page: int = 1,
     pageSize: int = 10,
+    activityType: Optional[str] = None,
+    current_user: CurrentUser = Depends(get_current_user),
     training_db = Depends(get_training_db),
 ):
     """
     List synced activities from Garmin with server-side pagination.
 
-    Returns activities ordered by date (newest first).
+    Uses proper SQL LIMIT/OFFSET for efficient pagination instead of
+    loading all records into memory.
+
+    Args:
+        page: Page number (1-indexed)
+        pageSize: Number of items per page (default 10)
+        activityType: Optional filter by activity type (e.g., "running", "cycling")
+
+    Returns:
+        PaginatedActivitiesResponse with activities ordered by date (newest first)
     """
     from datetime import timedelta
     import math
 
-    # Get all activities (use 5 years as practical max)
-    end_date = date.today()
-    start_date = end_date - timedelta(days=365 * 5)
-    activities = training_db.get_activities_range(
-        start_date.isoformat(),
-        end_date.isoformat()
+    user_id = current_user.id
+
+    # Use the new paginated method - efficient SQL-level pagination
+    activities, total = training_db.get_activities_paginated(
+        user_id=user_id,
+        page=page,
+        page_size=pageSize,
+        activity_type=activityType,
     )
 
-    # Calculate pagination
-    total = len(activities)
+    # Calculate total pages
     totalPages = math.ceil(total / pageSize) if total > 0 else 1
-    offset = (page - 1) * pageSize
 
-    # Apply pagination
-    paginated = activities[offset:offset + pageSize]
+    # Transform activities to response format
     items = []
-    for act in paginated:
+    for act in activities:
         duration_sec = int((act.duration_min or 0) * 60)
         distance_m = (act.distance_km or 0) * 1000
+
+        # Use actual start_time if available, fallback to 08:00 for legacy data
+        start_time = act.start_time or f"{act.date}T08:00:00"
+        # Calculate end time based on duration
+        if act.duration_min:
+            try:
+                start_dt = datetime.fromisoformat(start_time.replace("Z", "+00:00").split("+")[0])
+                end_dt = start_dt + timedelta(minutes=act.duration_min)
+                end_time = end_dt.strftime("%Y-%m-%dT%H:%M:%S")
+            except (ValueError, TypeError):
+                end_time = f"{act.date}T09:00:00"
+        else:
+            end_time = f"{act.date}T09:00:00"
 
         items.append(ActivityResponse(
             id=act.activity_id,
             type=act.activity_type or "other",
             name=act.activity_name or f"{act.activity_type} workout",
             date=act.date,
-            startTime=f"{act.date}T08:00:00",
-            endTime=f"{act.date}T09:00:00",
+            startTime=start_time,
+            endTime=end_time,
             duration=duration_sec,
             distance=distance_m,
             metrics={
@@ -1073,7 +1132,9 @@ async def download_fit(
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate FIT file: {str(e)}")
+        import logging
+        logging.getLogger(__name__).error(f"FIT file generation failed: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate FIT file. Please try again later.")
 
 
 @router.get("/{workout_id}/fit/bytes")
@@ -1105,7 +1166,9 @@ async def get_fit_bytes(
         }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate FIT bytes: {str(e)}")
+        import logging
+        logging.getLogger(__name__).error(f"FIT bytes generation failed: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate FIT bytes. Please try again later.")
 
 
 @router.post("/{workout_id}/export-garmin", response_model=ExportGarminResponse)

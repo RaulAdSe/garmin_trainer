@@ -1,4 +1,12 @@
-"""Athlete context API routes."""
+"""Athlete context API routes.
+
+All athlete context routes require authentication since they expose sensitive
+personal health data including:
+- Physiological profile (HR zones, max HR, age, weight)
+- Fitness metrics (CTL/ATL/TSB, VO2max)
+- Training readiness and recovery status
+- Race goals and predictions
+"""
 
 from datetime import date, datetime, timedelta
 from typing import Optional, List
@@ -6,7 +14,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from ..deps import get_coach_service, get_training_db
+from ..deps import get_coach_service, get_training_db, get_current_user, CurrentUser
 
 
 router = APIRouter()
@@ -81,6 +89,7 @@ class AthleteContext(BaseModel):
 @router.get("/context", response_model=AthleteContext)
 async def get_athlete_context(
     target_date: Optional[str] = None,
+    current_user: CurrentUser = Depends(get_current_user),
     coach_service = Depends(get_coach_service),
     training_db = Depends(get_training_db),
 ):
@@ -96,6 +105,8 @@ async def get_athlete_context(
 
     This context is injected into every LLM call to provide
     personalized, contextually-aware coaching.
+
+    Requires authentication (contains sensitive health data).
     """
     try:
         # Parse date
@@ -237,15 +248,21 @@ async def get_athlete_context(
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get athlete context: {str(e)}")
+        import logging
+        logging.getLogger(__name__).error(f"Failed to get athlete context: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get athlete context. Please try again later.")
 
 
 @router.get("/readiness")
 async def get_readiness(
     target_date: Optional[str] = None,
+    current_user: CurrentUser = Depends(get_current_user),
     coach_service = Depends(get_coach_service),
 ):
-    """Get today's readiness score and recommendation."""
+    """Get today's readiness score and recommendation.
+
+    Requires authentication (contains health metrics).
+    """
     try:
         if target_date:
             from datetime import datetime
@@ -262,38 +279,46 @@ async def get_readiness(
             "narrative": briefing.get("narrative"),
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get readiness: {str(e)}")
+        import logging
+        logging.getLogger(__name__).error(f"Failed to get readiness: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get readiness. Please try again later.")
 
 
 @router.get("/fitness-metrics")
 async def get_fitness_metrics(
     days: int = 30,
+    current_user: CurrentUser = Depends(get_current_user),
     coach_service = Depends(get_coach_service),
     training_db = Depends(get_training_db),
 ):
-    """Get fitness metrics history (CTL/ATL/TSB)."""
+    """Get fitness metrics history (CTL/ATL/TSB).
+
+    Requires authentication (contains fitness data).
+    """
     try:
         from datetime import timedelta
 
         end_date = date.today()
         start_date = end_date - timedelta(days=days)
 
-        # Get fitness metrics for date range
-        metrics = []
-        current = start_date
-        while current <= end_date:
-            fm = training_db.get_fitness_metrics(current.isoformat())
-            if fm:
-                metrics.append({
-                    "date": current.isoformat(),
-                    "ctl": fm.ctl,
-                    "atl": fm.atl,
-                    "tsb": fm.tsb,
-                    "acwr": fm.acwr,
-                    "daily_load": fm.daily_load,
-                    "risk_zone": fm.risk_zone,
-                })
-            current += timedelta(days=1)
+        # Get fitness metrics for date range in a single query
+        fitness_data = training_db.get_fitness_range(
+            start_date.isoformat(), end_date.isoformat()
+        )
+
+        # Convert to response format (results come ordered by date desc, reverse for chronological)
+        metrics = [
+            {
+                "date": fm.date,
+                "ctl": fm.ctl,
+                "atl": fm.atl,
+                "tsb": fm.tsb,
+                "acwr": fm.acwr,
+                "daily_load": fm.daily_load,
+                "risk_zone": fm.risk_zone,
+            }
+            for fm in reversed(fitness_data)
+        ]
 
         return {
             "start_date": start_date.isoformat(),
@@ -301,7 +326,9 @@ async def get_fitness_metrics(
             "metrics": metrics,
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get fitness metrics: {str(e)}")
+        import logging
+        logging.getLogger(__name__).error(f"Failed to get fitness metrics: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get fitness metrics. Please try again later.")
 
 
 # ============================================================================
@@ -361,6 +388,7 @@ class TrainingPacesFromVO2maxResponse(BaseModel):
 @router.get("/vo2max-trend", response_model=VO2maxTrendResponse)
 async def get_vo2max_trend(
     days: int = 90,
+    current_user: CurrentUser = Depends(get_current_user),
     training_db = Depends(get_training_db),
 ):
     """
@@ -377,6 +405,8 @@ async def get_vo2max_trend(
 
     Returns:
         VO2maxTrendResponse with trend analysis
+
+    Requires authentication (contains health metrics).
     """
     try:
         end_date = date.today()
@@ -475,11 +505,14 @@ async def get_vo2max_trend(
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get VO2max trend: {str(e)}")
+        import logging
+        logging.getLogger(__name__).error(f"Failed to get VO2max trend: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get VO2max trend. Please try again later.")
 
 
 @router.get("/race-predictions", response_model=RacePredictionsResponse)
 async def get_race_predictions(
+    current_user: CurrentUser = Depends(get_current_user),
     training_db = Depends(get_training_db),
 ):
     """
@@ -487,6 +520,8 @@ async def get_race_predictions(
 
     Returns predicted race times for 5K, 10K, Half Marathon, and Marathon
     based on current VO2max and training data.
+
+    Requires authentication (contains personal performance data).
     """
     try:
         # Get latest Garmin fitness data
@@ -517,11 +552,14 @@ async def get_race_predictions(
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get race predictions: {str(e)}")
+        import logging
+        logging.getLogger(__name__).error(f"Failed to get race predictions: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get race predictions. Please try again later.")
 
 
 @router.get("/training-paces", response_model=TrainingPacesFromVO2maxResponse)
 async def get_training_paces_from_vo2max(
+    current_user: CurrentUser = Depends(get_current_user),
     training_db = Depends(get_training_db),
 ):
     """
@@ -529,6 +567,8 @@ async def get_training_paces_from_vo2max(
 
     Uses Jack Daniels' VDOT tables to calculate optimal training paces
     for easy runs, marathon pace, threshold, interval, and repetition work.
+
+    Requires authentication (contains personal training data).
     """
     try:
         from ...analysis.goals import calculate_training_paces_from_vo2max, format_pace_from_seconds
@@ -562,11 +602,14 @@ async def get_training_paces_from_vo2max(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get training paces: {str(e)}")
+        import logging
+        logging.getLogger(__name__).error(f"Failed to get training paces: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get training paces. Please try again later.")
 
 
 @router.get("/goal-feasibility")
 async def get_goal_feasibility(
+    current_user: CurrentUser = Depends(get_current_user),
     training_db = Depends(get_training_db),
 ):
     """
@@ -574,6 +617,8 @@ async def get_goal_feasibility(
 
     Compares Garmin's race predictions to your set goals to determine
     how realistic each goal is given your current fitness level.
+
+    Requires authentication (contains personal goal and fitness data).
     """
     try:
         from ...analysis.goals import get_goal_feasibility_summary
@@ -614,4 +659,6 @@ async def get_goal_feasibility(
         }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to assess goal feasibility: {str(e)}")
+        import logging
+        logging.getLogger(__name__).error(f"Failed to assess goal feasibility: {e}")
+        raise HTTPException(status_code=500, detail="Failed to assess goal feasibility. Please try again later.")

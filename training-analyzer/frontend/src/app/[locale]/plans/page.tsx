@@ -5,7 +5,11 @@ import { Link } from '@/i18n/navigation';
 import { clsx } from 'clsx';
 import { format, parseISO } from 'date-fns';
 import { usePlansList, useDeletePlan, useActivatePlan, usePausePlan } from '@/hooks/usePlans';
+import { useUserProgress } from '@/hooks/useAchievements';
+import { LockedFeatureGate, FEATURE_UNLOCK_LEVELS } from '@/components/gamification/LockedFeatureGate';
 import type { PlanSummary, TrainingPlan } from '@/lib/types';
+
+const TRAINING_PLANS_LEVEL = FEATURE_UNLOCK_LEVELS.training_plans; // Level 10
 
 const STATUS_STYLES: Record<TrainingPlan['status'], { border: string; text: string }> = {
   draft: { border: 'border-l-gray-500', text: 'text-gray-400' },
@@ -127,33 +131,20 @@ export default function PlansPage() {
     sortBy: 'startDate',
     sortOrder: 'desc',
   });
+  const { data: userProgress, isLoading: progressLoading } = useUserProgress();
 
   const plans = data?.items || [];
+  const currentLevel = userProgress?.level.level ?? 1;
+  const currentXP = userProgress?.totalXp;
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-100">Training Plans</h1>
-        <Link href="/plans/new"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 text-white font-medium rounded-lg hover:bg-teal-500 transition-colors">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-          New Plan
-        </Link>
-      </div>
-
-      <div className="flex gap-2">
-        {(['all', 'active'] as const).map((f) => (
-          <button key={f} onClick={() => setFilter(f)}
-            className={clsx('px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-              filter === f ? 'bg-teal-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700')}>
-            {f === 'all' ? 'All Plans' : 'Active'}
-          </button>
-        ))}
-      </div>
-
-      {isLoading ? (
+  // Show loading state if progress is still loading
+  if (progressLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="h-8 w-48 skeleton rounded" />
+          <div className="h-10 w-32 skeleton rounded" />
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3].map((i) => (
             <div key={i} className="bg-gray-900 rounded-xl border border-gray-800 p-5 space-y-3">
@@ -163,17 +154,61 @@ export default function PlansPage() {
             </div>
           ))}
         </div>
-      ) : error ? (
-        <div className="bg-red-900/30 border border-red-800 rounded-xl p-6 text-center">
-          <p className="text-red-400">Failed to load plans</p>
+      </div>
+    );
+  }
+
+  return (
+    <LockedFeatureGate
+      feature="training_plans"
+      currentLevel={currentLevel}
+      requiredLevel={TRAINING_PLANS_LEVEL}
+      currentXP={currentXP}
+    >
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-gray-100">Training Plans</h1>
+          <Link href="/plans/new"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 text-white font-medium rounded-lg hover:bg-teal-500 transition-colors">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            New Plan
+          </Link>
         </div>
-      ) : plans.length === 0 ? (
-        <EmptyState />
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {plans.map((plan) => <PlanCard key={plan.id} plan={plan} />)}
+
+        <div className="flex gap-2">
+          {(['all', 'active'] as const).map((f) => (
+            <button key={f} onClick={() => setFilter(f)}
+              className={clsx('px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                filter === f ? 'bg-teal-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700')}>
+              {f === 'all' ? 'All Plans' : 'Active'}
+            </button>
+          ))}
         </div>
-      )}
-    </div>
+
+        {isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="bg-gray-900 rounded-xl border border-gray-800 p-5 space-y-3">
+                <div className="h-5 skeleton rounded w-3/4" />
+                <div className="h-6 skeleton rounded w-1/2" />
+                <div className="h-4 skeleton rounded w-2/3" />
+              </div>
+            ))}
+          </div>
+        ) : error ? (
+          <div className="bg-red-900/30 border border-red-800 rounded-xl p-6 text-center">
+            <p className="text-red-400">Failed to load plans</p>
+          </div>
+        ) : plans.length === 0 ? (
+          <EmptyState />
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {plans.map((plan) => <PlanCard key={plan.id} plan={plan} />)}
+          </div>
+        )}
+      </div>
+    </LockedFeatureGate>
   );
 }

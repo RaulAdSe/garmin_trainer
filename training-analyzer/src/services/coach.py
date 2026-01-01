@@ -215,9 +215,12 @@ class CoachService:
         Returns:
             Dictionary with ctl, atl, tsb, acwr, risk_zone
         """
+        metrics = None
         if target_date:
             metrics = self.training_db.get_fitness_metrics(target_date)
-        else:
+
+        # Fall back to latest available if no data for exact date
+        if not metrics:
             metrics = self.training_db.get_latest_fitness_metrics()
 
         if not metrics:

@@ -1,22 +1,27 @@
 {
   "navigation": {
-    "appName": "Reactive Training",
+    "appName": "trAIner",
     "appSubtitle": "AI-Powered Coach",
     "dashboard": "Dashboard",
     "workouts": "Workouts",
-    "sync": "Sync",
+    "achievements": "Achievements",
+    "connect": "Connect",
     "plans": "Plans",
     "design": "Design",
     "goals": "Goals",
+    "zones": "Zones",
+    "chat": "AI Coach",
     "version": "Version 1.0.0",
     "openMenu": "Open menu",
-    "closeMenu": "Close menu"
+    "closeMenu": "Close menu",
+    "lockedLevel": "Unlocks at Level {level}"
   },
   "dashboard": {
     "title": "Training Dashboard",
     "subtitle": "Your AI-powered training companion",
     "readinessCard": "Today's Readiness",
     "fitnessCard": "Fitness Status",
+    "todaysTraining": "Today's Training",
     "trainingPaces": "Training Paces",
     "hrZones": "HR Zones",
     "raceGoals": "Race Goals",
@@ -24,7 +29,14 @@
     "raceDate": "Race date:",
     "weeksLeft": "Weeks left:",
     "noGoals": "No race goals set",
-    "addGoal": "Add your first race goal to get personalized training recommendations"
+    "addGoal": "Add your first race goal to get personalized training recommendations",
+    "loginRequired": "Login Required",
+    "loginRequiredMessage": "Please log in to view your training dashboard.",
+    "goToLogin": "Go to Login",
+    "viewWorkouts": "View Workouts",
+    "viewProgress": "View Progress",
+    "viewGoals": "View Goals",
+    "failedToLoad": "Failed to load dashboard"
   },
   "readiness": {
     "readyForQuality": "Ready for Quality",
@@ -63,6 +75,9 @@
   "garmin": {
     "title": "Garmin Connect",
     "subtitle": "Sync your activities from Garmin",
+    "connected": "Connected",
+    "loading": "Loading...",
+    "checkingConnection": "Checking connection...",
     "emailLabel": "Garmin Email",
     "emailPlaceholder": "your@email.com",
     "passwordLabel": "Password",
@@ -76,10 +91,14 @@
     "last6months": "Last 6 months",
     "lastYear": "Last year",
     "rememberEmail": "Remember my email",
+    "rememberEmailOnly": "Remember my email only",
+    "saveCredentials": "Save credentials for automatic sync",
     "securityNote": "Your password is only used for this sync request and is not stored. We recommend using HTTPS in production.",
+    "securityNoteEncrypted": "Your credentials will be securely stored on the server to enable automatic daily syncing.",
     "error": "Please enter your Garmin Connect email and password",
     "syncing": "Syncing...",
     "syncActivities": "Sync Activities",
+    "syncNow": "Sync Now",
     "cancel": "Cancel",
     "syncComplete": "Sync Complete",
     "totalSynced": "Total Synced",
@@ -87,7 +106,14 @@
     "updated": "Updated",
     "recentActivities": "Recent Activities",
     "syncAgain": "Sync Again",
-    "done": "Done"
+    "done": "Done",
+    "disconnect": "Disconnect Garmin Account",
+    "disconnectConfirm": "Are you sure you want to disconnect your Garmin account?",
+    "disconnecting": "Disconnecting...",
+    "lastSynced": "Last synced",
+    "noSyncHistory": "No sync history",
+    "valid": "Valid",
+    "needsVerification": "Needs verification"
   },
   "sync": {
     "title": "Sync Activities",
@@ -103,6 +129,10 @@
     "activityWalking": "Walking",
     "activityHiking": "Hiking",
     "activityStrength": "Strength Training"
+  },
+  "connect": {
+    "title": "Connect Services",
+    "subtitle": "Import your workouts and share your analysis"
   },
   "plans": {
     "title": "Training Plans",
@@ -181,12 +211,22 @@
   },
   "chat": {
     "title": "AI Coach",
+    "subtitle": "Your personal AI training assistant",
     "placeholder": "Ask me anything about your training...",
     "send": "Send",
     "thinking": "Thinking...",
     "suggestions": "Suggested questions",
     "newConversation": "New conversation",
-    "clearHistory": "Clear history"
+    "clearHistory": "Clear history",
+    "emptyTitle": "Start a Conversation",
+    "emptyDescription": "Ask me about your training, fitness metrics, workout recommendations, or anything related to your athletic performance.",
+    "errorMessage": "Sorry, I encountered an error. Please try again.",
+    "locked": "Feature Locked",
+    "lockedDescription": "AI Coach Chat unlocks at Level {level}. Keep training to level up!",
+    "currentLevel": "Current Level",
+    "levelToGo": "level to go",
+    "levelsToGo": "levels to go",
+    "disclaimer": "AI responses are for informational purposes. Always consult a professional for medical advice."
   },
   "explain": {
     "title": "Why this recommendation?",
@@ -195,5 +235,298 @@
     "factors": "Key factors",
     "confidence": "Confidence",
     "sources": "Data sources"
+  },
+  "vo2max": {
+    "title": "VO2 Max",
+    "cardTitle": "Aerobic Capacity",
+    "noData": "No VO2 Max data available",
+    "syncGarmin": "Sync with Garmin to see your VO2 Max",
+    "peak": "Peak",
+    "ofPeak": "of peak",
+    "last90Days": "Last 90 days",
+    "tooltip": {
+      "title": "VO2 Max (Maximal Oxygen Uptake)",
+      "description": "The maximum amount of oxygen your body can use during intense exercise. Higher values indicate better cardiovascular fitness. Elite runners typically have 70+ ml/kg/min. Improve it with consistent aerobic training and high-intensity intervals."
+    },
+    "trend": {
+      "improving": "improving",
+      "stable": "stable",
+      "declining": "declining",
+      "unknown": ""
+    },
+    "achievements": {
+      "vo2max_first": "Baseline Set",
+      "vo2max_first_desc": "Record your first VO2 Max measurement",
+      "vo2max_up_3": "Oxygen Rising",
+      "vo2max_up_3_desc": "Improve your VO2 Max by 3% from baseline",
+      "vo2max_up_5": "Aerobic Gains",
+      "vo2max_up_5_desc": "Improve your VO2 Max by 5% from baseline",
+      "vo2max_up_10": "Cardio Transformer",
+      "vo2max_up_10_desc": "Improve your VO2 Max by 10% from baseline",
+      "vo2max_up_15": "Aerobic Legend",
+      "vo2max_up_15_desc": "Improve your VO2 Max by 15% from baseline",
+      "vo2max_trend_4w": "Rising Tide",
+      "vo2max_trend_4w_desc": "VO2 Max trending upward for 4 consecutive weeks",
+      "vo2max_trend_8w": "Steady Climber",
+      "vo2max_trend_8w_desc": "VO2 Max trending upward for 8 consecutive weeks",
+      "interval_starter": "Interval Initiate",
+      "interval_starter_desc": "Complete 5 high-intensity interval workouts",
+      "interval_master": "HIIT Hero",
+      "interval_master_desc": "Complete 20 high-intensity interval workouts",
+      "zone5_warrior": "Zone 5 Warrior",
+      "zone5_warrior_desc": "Accumulate 60 minutes in heart rate Zone 5",
+      "vo2max_pr": "New Personal Best!",
+      "vo2max_pr_desc": "Set a new personal VO2 Max record"
+    }
+  },
+  "achievements": {
+    "title": "Achievements",
+    "subtitle": "Track your progress and unlock rewards",
+    "level": "Level",
+    "toNextLevel": "to next level",
+    "dayStreak": "day streak",
+    "recentUnlocks": "Recent Unlocks",
+    "viewAll": "View all",
+    "totalXp": "Total XP",
+    "currentStreak": "Current Streak",
+    "longestStreak": "Longest Streak",
+    "days": "days",
+    "unlocked": "Unlocked",
+    "locked": "Locked",
+    "progress": "Progress",
+    "categories": {
+      "all": "All",
+      "consistency": "Consistency",
+      "performance": "Performance",
+      "execution": "Execution",
+      "milestone": "Milestone"
+    },
+    "rarity": {
+      "common": "Common",
+      "rare": "Rare",
+      "epic": "Epic",
+      "legendary": "Legendary"
+    },
+    "noAchievements": "No achievements yet",
+    "keepTraining": "Keep training to unlock your first achievement!",
+    "unlockCelebration": {
+      "title": "Feature Unlocked!",
+      "levelReached": "You've reached Level {level} and unlocked this feature!",
+      "tryNow": "Try it now",
+      "maybeLater": "Maybe later",
+      "close": "Close",
+      "newBadge": "NEW"
+    },
+    "levelRewards": {
+      "title": "Level Rewards",
+      "subtitle": "Unlock new features as you progress",
+      "nextReward": "Next Reward",
+      "unlocksAt": "Unlocks at Level",
+      "currentTitle": "Current Title",
+      "unlockedFeatures": "Unlocked Features",
+      "allUnlocked": "All features unlocked!",
+      "alwaysAvailable": "Always Available",
+      "lockedFeature": "Unlocks at Level {level}",
+      "almostUnlocked": "Almost there! {xp} XP to unlock",
+      "levelProgress": "Level {current}/{required}",
+      "newBadge": "NEW",
+      "levels": {
+        "1": {
+          "name": "Rookie",
+          "title": "Training Rookie",
+          "description": "Welcome! Start your training journey."
+        },
+        "3": {
+          "name": "Learner",
+          "title": "Eager Learner",
+          "description": "Trend analysis (7/30/90 day views) unlocked!"
+        },
+        "5": {
+          "name": "Dedicated",
+          "title": "Dedicated Athlete",
+          "description": "Advanced metrics and fatigue modeling unlocked!"
+        },
+        "8": {
+          "name": "Committed",
+          "title": "Committed Trainer",
+          "description": "AI Coach chat and personalized tips unlocked!"
+        },
+        "10": {
+          "name": "Athlete",
+          "title": "Serious Athlete",
+          "description": "Training plan generation and race predictions unlocked!"
+        },
+        "15": {
+          "name": "Advanced",
+          "title": "Advanced Performer",
+          "description": "Custom workout design with Garmin FIT export unlocked!"
+        },
+        "20": {
+          "name": "Expert",
+          "title": "Training Expert",
+          "description": "Periodization planner and peak optimization unlocked!"
+        },
+        "25": {
+          "name": "Elite",
+          "title": "Elite Performer",
+          "description": "Coach mode unlocked - help others train!"
+        },
+        "30": {
+          "name": "Master",
+          "title": "Training Master",
+          "description": "All features unlocked + early access to new features!"
+        }
+      },
+      "features": {
+        "basic_dashboard": "Basic Dashboard",
+        "workout_history": "Workout History",
+        "ai_workout_analysis": "AI Workout Analysis",
+        "garmin_sync": "Garmin Sync",
+        "trend_analysis": "Trend Analysis",
+        "advanced_metrics": "Advanced Metrics",
+        "ai_coach_chat": "AI Coach Chat",
+        "personalized_tips": "Personalized Tips",
+        "training_plan_generation": "Training Plan Generation",
+        "race_predictions": "Race Predictions",
+        "custom_workout_design": "Custom Workout Design",
+        "garmin_fit_export": "Garmin FIT Export",
+        "periodization_planner": "Periodization Planner",
+        "peak_optimization": "Peak Optimization",
+        "coach_mode": "Coach Mode",
+        "athlete_management": "Athlete Management",
+        "beta_access": "Beta Access"
+      }
+    }
+  },
+  "strava": {
+    "title": "Strava Integration",
+    "subtitle": "Share your workout analysis to Strava",
+    "pageTitle": "Strava Settings",
+    "pageSubtitle": "Connect your Strava account to automatically share workout analysis",
+    "breadcrumbHome": "Home",
+    "breadcrumbSettings": "Strava Settings",
+    "connect": "Connect to Strava",
+    "disconnect": "Disconnect",
+    "connected": "Connected to Strava",
+    "connectedAs": "Connected as {name}",
+    "notConnectedDesc": "Connect your Strava account to automatically update your activity descriptions with AI-powered workout analysis.",
+    "preferences": "Sharing Preferences",
+    "autoUpdateDescription": "Auto-update descriptions",
+    "autoUpdateDescriptionHint": "Automatically update Strava activity descriptions when workouts are analyzed",
+    "includeScore": "Include workout score",
+    "includeScoreHint": "Add the overall workout quality score to your Strava description",
+    "includeSummary": "Include summary",
+    "includeSummaryHint": "Add a one-line summary of your workout performance",
+    "includeLink": "Include analysis link",
+    "includeLinkHint": "Add a link to view the full workout analysis",
+    "useExtendedFormat": "Use extended format",
+    "useExtendedFormatHint": "Include additional details like training effect and recovery time",
+    "permissionsTitle": "Strava will request the following permissions:",
+    "permissionRead": "Read your activities and profile",
+    "permissionWrite": "Update activity descriptions",
+    "howItWorksTitle": "How it works",
+    "howItWorksStep1": "Connect your Strava account using the button above. You'll be redirected to Strava to authorize the connection.",
+    "howItWorksStep2": "After your workouts are analyzed, the analysis will be automatically added to your Strava activity description.",
+    "howItWorksStep3": "Your friends on Strava will see your workout score and a link to view the full analysis.",
+    "featuresTitle": "Features",
+    "featureAutoSync": "Auto-Sync",
+    "featureAutoSyncDesc": "Workouts are automatically detected and analyzed",
+    "featureAnalysis": "AI Analysis",
+    "featureAnalysisDesc": "Get detailed insights about your performance",
+    "featureShare": "Share Results",
+    "featureShareDesc": "Your workout analysis appears on your Strava activity",
+    "featureCustomize": "Customize",
+    "featureCustomizeDesc": "Control what information is shared",
+    "callbackConnecting": "Connecting to Strava...",
+    "callbackConnectingDesc": "Please wait while we complete the connection",
+    "callbackSuccess": "Successfully Connected!",
+    "callbackSuccessDesc": "Your Strava account is now connected",
+    "callbackSuccessWithName": "Welcome, {name}! Your Strava account is now connected.",
+    "callbackGoToSettings": "Go to Strava Settings",
+    "callbackRedirecting": "Redirecting in a few seconds...",
+    "callbackError": "Connection Failed",
+    "callbackTryAgain": "Try Again",
+    "errorAccessDenied": "You denied access to your Strava account",
+    "errorNoCode": "No authorization code received from Strava",
+    "errorUnknown": "An unexpected error occurred"
+  },
+  "zones": {
+    "title": "Training Zones",
+    "subtitle": "View your heart rate zones and training paces",
+    "errorLoading": "Error loading zones",
+    "trainingPaces": {
+      "title": "Training Paces",
+      "description": "Recommended paces for different training intensities",
+      "tooltip": "Training paces are calculated based on your race goals and current fitness level. They help you train at the right intensity for different workout types.",
+      "noPaces": "Set a race goal to see training paces"
+    },
+    "hrZones": {
+      "title": "Heart Rate Zones",
+      "description": "Intensity zones based on your max heart rate",
+      "tooltip": "Heart rate zones help you train at the right intensity. Zone 1 is easy recovery, while Zone 5 is maximum effort. Training in different zones develops different physiological adaptations.",
+      "range": "Heart Rate Range",
+      "noZones": "No heart rate zones available"
+    },
+    "physiology": {
+      "title": "Physiological Metrics",
+      "description": "Your key heart rate and performance metrics",
+      "tooltip": "These metrics are the foundation for calculating your training zones and paces. They're based on your recent training data and Garmin measurements.",
+      "maxHr": "Max HR",
+      "lthr": "Threshold HR",
+      "restHr": "Resting HR",
+      "vdot": "VDOT",
+      "vdotTooltip": "VDOT is a measure of your running fitness developed by Jack Daniels. Higher values indicate better aerobic capacity and running economy."
+    }
+  },
+  "login": {
+    "title": "Sign In",
+    "subtitle": "Welcome back! Please enter your credentials.",
+    "email": "Email",
+    "emailPlaceholder": "you@example.com",
+    "password": "Password",
+    "passwordPlaceholder": "Enter your password",
+    "signIn": "Sign In",
+    "noAccount": "Don't have an account?",
+    "createAccount": "Create one",
+    "loginFailed": "Login failed",
+    "unexpectedError": "An unexpected error occurred"
+  },
+  "register": {
+    "title": "Create Account",
+    "subtitle": "Start your training journey today!",
+    "displayName": "Display Name",
+    "displayNamePlaceholder": "John Doe (optional)",
+    "email": "Email",
+    "emailPlaceholder": "you@example.com",
+    "password": "Password",
+    "passwordPlaceholder": "Create a password",
+    "passwordHint": "Must be at least 8 characters",
+    "confirmPassword": "Confirm Password",
+    "confirmPasswordPlaceholder": "Confirm your password",
+    "createAccount": "Create Account",
+    "alreadyHaveAccount": "Already have an account?",
+    "signIn": "Sign in",
+    "passwordMismatch": "Passwords do not match",
+    "passwordTooShort": "Password must be at least 8 characters",
+    "registrationFailed": "Registration failed",
+    "unexpectedError": "An unexpected error occurred"
+  },
+  "featureGate": {
+    "locked": "Locked",
+    "unlocked": "Unlocked",
+    "new": "NEW",
+    "unlocksAtLevel": "Unlocks at Level {level}",
+    "almostThereXP": "Almost there! {xp} XP to unlock",
+    "almostThereLevel": "Almost there! Reach Level {level} to unlock",
+    "levelProgress": "Level {current}/{required}",
+    "features": {
+      "trend_analysis": "Trend Analysis",
+      "advanced_metrics": "Advanced Metrics",
+      "ai_coach_chat": "AI Coach Chat",
+      "training_plans": "Training Plans",
+      "workout_design": "Workout Design",
+      "periodization": "Periodization Planner",
+      "coach_mode": "Coach Mode"
+    }
   }
 }

@@ -1,16 +1,80 @@
 """Garmin Connect sync API routes."""
 
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Dict, Any
+from enum import Enum
+import uuid
+import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, EmailStr
 
 from ..deps import get_training_db
 from ...db.database import TrainingDatabase, ActivityMetrics, GarminFitnessData
+from ...metrics.load import calculate_hrss, calculate_trimp
 
 
 router = APIRouter()
+
+
+# ============ Async Job Infrastructure ============
+
+class SyncJobStatus(str, Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class SyncJob:
+    """In-memory sync job tracker."""
+    def __init__(self, job_id: str, days: int):
+        self.job_id = job_id
+        self.status = SyncJobStatus.PENDING
+        self.days = days
+        self.created_at = datetime.now()
+        self.started_at: Optional[datetime] = None
+        self.completed_at: Optional[datetime] = None
+        self.progress_percent = 0
+        self.current_step = "Starting..."
+        self.activities_synced = 0
+        self.fitness_days_synced = 0
+        self.error: Optional[str] = None
+        self.result: Optional[Dict[str, Any]] = None
+
+
+# In-memory job store (jobs expire after 1 hour)
+_sync_jobs: Dict[str, SyncJob] = {}
+
+
+def _cleanup_old_jobs():
+    """Remove jobs older than 1 hour."""
+    cutoff = datetime.now() - timedelta(hours=1)
+    expired = [jid for jid, job in _sync_jobs.items() if job.created_at < cutoff]
+    for jid in expired:
+        del _sync_jobs[jid]
+
+
+class SyncJobResponse(BaseModel):
+    """Response for sync job status."""
+    job_id: str
+    status: str
+    progress_percent: int = 0
+    current_step: str = ""
+    activities_synced: int = 0
+    fitness_days_synced: int = 0
+    created_at: str
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    error: Optional[str] = None
+    result: Optional[Dict[str, Any]] = None
+
+
+class AsyncSyncResponse(BaseModel):
+    """Response when starting async sync."""
+    job_id: str
+    status: str
+    message: str
 
 
 class GarminSyncRequest(BaseModel):
@@ -197,8 +261,7 @@ async def sync_garmin(
     except Exception as e:
         logger.error(f"Unhandled error in sync_garmin: {e}")
         logger.error(traceback.format_exc())
-        print(f"SYNC ERROR: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Sync failed. Please try again later.")
 
 
 async def _do_garmin_sync(request, training_db, logger):
@@ -230,9 +293,10 @@ async def _do_garmin_sync(request, training_db, logger):
                 status_code=401,
                 detail="Garmin Connect authentication failed. Please check your credentials or try again later."
             )
+        logger.error(f"Failed to connect to Garmin Connect: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to connect to Garmin Connect: {str(e)}"
+            detail="Failed to connect to Garmin Connect. Please try again later."
         )
 
     # Fetch activities with pagination (Garmin API limit is 1000 per request)
@@ -271,9 +335,10 @@ async def _do_garmin_sync(request, training_db, logger):
             start_index += BATCH_SIZE
 
     except Exception as e:
+        logger.error(f"Failed to fetch activities from Garmin: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to fetch activities from Garmin: {str(e)}"
+            detail="Failed to fetch activities from Garmin. Please try again later."
         )
 
     new_count = 0
@@ -328,14 +393,37 @@ async def _do_garmin_sync(request, training_db, logger):
             # Check if activity already exists
             existing = training_db.get_activity_metrics(activity_id)
 
+            # Calculate HRSS and TRIMP if we have required data
+            hrss = None
+            trimp = None
+            profile = training_db.get_user_profile()
+            if avg_hr and duration_min and profile and profile.max_hr and profile.rest_hr:
+                max_hr_for_calc = max_hr or profile.max_hr
+                if profile.threshold_hr:
+                    hrss = calculate_hrss(
+                        duration_min=duration_min,
+                        avg_hr=int(avg_hr),
+                        threshold_hr=profile.threshold_hr,
+                        max_hr=max_hr_for_calc,
+                        rest_hr=profile.rest_hr,
+                    )
+                trimp = calculate_trimp(
+                    duration_min=duration_min,
+                    avg_hr=int(avg_hr),
+                    rest_hr=profile.rest_hr,
+                    max_hr=max_hr_for_calc,
+                    gender=profile.gender or "male",
+                )
+
             # Create activity metrics object
             metrics = ActivityMetrics(
                 activity_id=activity_id,
                 date=activity_datetime.strftime("%Y-%m-%d"),
+                start_time=activity_datetime.strftime("%Y-%m-%dT%H:%M:%S"),
                 activity_type=mapped_type,
                 activity_name=activity_name,
-                hrss=None,  # Will be calculated by enrichment service
-                trimp=None,
+                hrss=hrss,
+                trimp=trimp,
                 avg_hr=int(avg_hr) if avg_hr else None,
                 max_hr=int(max_hr) if max_hr else None,
                 duration_min=duration_min,
@@ -371,24 +459,505 @@ async def _do_garmin_sync(request, training_db, logger):
 
         except Exception as e:
             # Log but don't fail on individual activity errors
-            print(f"Error processing activity: {e}")
+            logger.warning(f"Error processing activity: {e}")
             continue
 
     total_synced = new_count + updated_count
 
+    # Also sync fitness data (VO2max, etc.) using the same client session
+    fitness_new = 0
+    fitness_updated = 0
     try:
+        logger.info(f"Starting fitness data sync for {request.days} days...")
+        fitness_new, fitness_updated, _ = _sync_fitness_data_internal(
+            client, training_db, request.days
+        )
+        logger.info(f"Fitness sync complete: {fitness_new} new, {fitness_updated} updated")
+    except Exception as e:
+        logger.warning(f"Failed to sync fitness data: {e}", exc_info=True)
+        # Don't fail the whole sync if fitness sync fails
+
+    try:
+        fitness_msg = ""
+        if fitness_new + fitness_updated > 0:
+            fitness_msg = f", fitness data for {fitness_new + fitness_updated} days"
+
         return GarminSyncDetailedResponse(
             success=True,
             synced_count=total_synced,
             new_activities=new_count,
             updated_activities=updated_count,
-            message=f"Successfully synced {total_synced} activities ({new_count} new, {updated_count} updated)",
+            message=f"Successfully synced {total_synced} activities ({new_count} new, {updated_count} updated){fitness_msg}",
             activities=synced_activities[:50],  # Limit to 50 most recent
         )
     except Exception as e:
         logger.error(f"Error building sync response: {e}")
         logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error building response: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error building response. Please try again later.")
+
+
+class RecalculateMetricsResponse(BaseModel):
+    """Response from metrics recalculation."""
+    success: bool
+    activities_updated: int
+    fitness_days_calculated: int
+    message: str
+
+
+@router.post("/recalculate-metrics", response_model=RecalculateMetricsResponse)
+async def recalculate_metrics(
+    training_db: TrainingDatabase = Depends(get_training_db),
+):
+    """
+    Recalculate HRSS/TRIMP for all existing activities and update fitness metrics.
+
+    This endpoint:
+    1. Recalculates HRSS and TRIMP for all activities using current user profile
+    2. Recalculates CTL, ATL, TSB, and ACWR from the updated load data
+    """
+    from ...services.enrichment import EnrichmentService
+
+    profile = training_db.get_user_profile()
+    if not profile or not profile.max_hr or not profile.rest_hr or not profile.threshold_hr:
+        raise HTTPException(
+            status_code=400,
+            detail="User profile incomplete. Please set max_hr, rest_hr, and threshold_hr first."
+        )
+
+    # Get all activities
+    activities = training_db.get_all_activity_metrics()
+    updated_count = 0
+
+    for activity in activities:
+        if not activity.avg_hr or not activity.duration_min:
+            continue
+
+        max_hr_for_calc = activity.max_hr or profile.max_hr
+
+        # Calculate HRSS
+        hrss = calculate_hrss(
+            duration_min=activity.duration_min,
+            avg_hr=activity.avg_hr,
+            threshold_hr=profile.threshold_hr,
+            max_hr=max_hr_for_calc,
+            rest_hr=profile.rest_hr,
+        )
+
+        # Calculate TRIMP
+        trimp = calculate_trimp(
+            duration_min=activity.duration_min,
+            avg_hr=activity.avg_hr,
+            rest_hr=profile.rest_hr,
+            max_hr=max_hr_for_calc,
+            gender=profile.gender or "male",
+        )
+
+        # Update the activity
+        activity.hrss = hrss
+        activity.trimp = trimp
+        training_db.save_activity_metrics(activity)
+        updated_count += 1
+
+    # Recalculate fitness metrics
+    enrichment_service = EnrichmentService(training_db=training_db)
+    fitness_days = enrichment_service.calculate_fitness_from_activities(
+        days=365,  # Calculate for full year
+        load_metric="hrss",
+    )
+
+    return RecalculateMetricsResponse(
+        success=True,
+        activities_updated=updated_count,
+        fitness_days_calculated=fitness_days,
+        message=f"Updated {updated_count} activities with HRSS/TRIMP, recalculated {fitness_days} days of fitness metrics",
+    )
+
+
+# ============ Async Sync Endpoints ============
+
+@router.post("/sync-async", response_model=AsyncSyncResponse)
+async def sync_garmin_async(
+    request: GarminSyncRequest,
+    training_db: TrainingDatabase = Depends(get_training_db),
+):
+    """
+    Start an async Garmin sync and return a job ID for polling.
+
+    Use /sync-status/{job_id} to poll for progress and completion.
+    This prevents frontend timeouts on long syncs.
+    """
+    _cleanup_old_jobs()
+
+    job_id = str(uuid.uuid4())
+    job = SyncJob(job_id=job_id, days=request.days)
+    _sync_jobs[job_id] = job
+
+    # Start the sync in background
+    asyncio.create_task(
+        _do_garmin_sync_async(job, request, training_db)
+    )
+
+    return AsyncSyncResponse(
+        job_id=job_id,
+        status="pending",
+        message=f"Sync started for {request.days} days. Poll /sync-status/{job_id} for progress.",
+    )
+
+
+@router.get("/sync-status/{job_id}", response_model=SyncJobResponse)
+async def get_sync_status(job_id: str):
+    """
+    Get the status of an async sync job.
+
+    Poll this endpoint every 1-2 seconds to track progress.
+    """
+    job = _sync_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found or expired")
+
+    return SyncJobResponse(
+        job_id=job.job_id,
+        status=job.status.value,
+        progress_percent=job.progress_percent,
+        current_step=job.current_step,
+        activities_synced=job.activities_synced,
+        fitness_days_synced=job.fitness_days_synced,
+        created_at=job.created_at.isoformat(),
+        started_at=job.started_at.isoformat() if job.started_at else None,
+        completed_at=job.completed_at.isoformat() if job.completed_at else None,
+        error=job.error,
+        result=job.result,
+    )
+
+
+async def _do_garmin_sync_async(job: SyncJob, request: GarminSyncRequest, training_db: TrainingDatabase):
+    """Background task to perform the actual Garmin sync."""
+    import logging
+    import traceback
+    logger = logging.getLogger(__name__)
+
+    job.status = SyncJobStatus.RUNNING
+    job.started_at = datetime.now()
+    job.current_step = "Connecting to Garmin..."
+
+    try:
+        from garminconnect import Garmin, GarminConnectAuthenticationError
+    except ImportError:
+        job.status = SyncJobStatus.FAILED
+        job.error = "garminconnect library not installed"
+        job.completed_at = datetime.now()
+        return
+
+    try:
+        # Login (blocking call - run in thread)
+        job.current_step = "Connecting to Garmin..."
+        job.progress_percent = 2
+        await asyncio.sleep(0)  # Yield to allow polling to see progress
+
+        client = Garmin(request.email, request.password)
+
+        job.current_step = "Authenticating..."
+        job.progress_percent = 5
+        await asyncio.sleep(0)
+
+        await asyncio.to_thread(client.login)
+
+        job.current_step = "Logged in successfully"
+        job.progress_percent = 10
+        await asyncio.sleep(0)
+
+        # Fetch activities (blocking call - run in thread)
+        job.current_step = "Fetching activity list..."
+        job.progress_percent = 12
+        await asyncio.sleep(0)
+
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=request.days)
+
+        activities = await asyncio.to_thread(
+            client.get_activities_by_date,
+            start_date.strftime("%Y-%m-%d"),
+            end_date.strftime("%Y-%m-%d"),
+        )
+
+        total_activities = len(activities) if activities else 0
+        job.current_step = f"Found {total_activities} activities"
+        job.progress_percent = 15
+        await asyncio.sleep(0)
+
+        # Process activities (15-75% range = 60% for activities)
+        new_count = 0
+        updated_count = 0
+        profile = training_db.get_user_profile()
+
+        for i, activity in enumerate(activities or []):
+            # Update progress more smoothly (15-75% for activities)
+            # Use (i+1) so progress updates after processing, not before
+            progress = 15 + int(((i + 1) / max(total_activities, 1)) * 60)
+            job.progress_percent = min(progress, 75)  # Cap at 75%
+            job.current_step = f"Processing activity {i+1}/{total_activities}..."
+            job.activities_synced = new_count + updated_count
+            await asyncio.sleep(0)  # Yield to allow polling to see progress
+
+            try:
+                activity_id = str(activity.get("activityId"))
+                activity_type = activity.get("activityType", {}).get("typeKey", "unknown")
+                mapped_type = _map_garmin_activity_type(activity_type)
+
+                # Get activity details
+                start_time = activity.get("startTimeLocal")
+                activity_datetime = datetime.fromisoformat(start_time.replace("Z", "+00:00")) if start_time else datetime.now()
+                activity_name = activity.get("activityName", mapped_type.title())
+
+                # Metrics
+                avg_hr = activity.get("averageHR")
+                max_hr = activity.get("maxHR")
+                duration_sec = activity.get("duration")
+                distance_m = activity.get("distance")
+                elevation_gain = activity.get("elevationGain")
+                avg_speed = activity.get("averageSpeed")
+
+                # Convert units
+                distance_km = distance_m / 1000 if distance_m else None
+                duration_min = duration_sec / 60 if duration_sec else None
+                pace_sec_per_km = _calculate_pace(distance_m, duration_sec)
+                avg_speed_kmh = avg_speed * 3.6 if avg_speed else None
+
+                # Check existing
+                existing = training_db.get_activity_metrics(activity_id)
+
+                # Calculate HRSS/TRIMP
+                hrss = None
+                trimp = None
+                if avg_hr and duration_min and profile and profile.max_hr and profile.rest_hr:
+                    max_hr_for_calc = max_hr or profile.max_hr
+                    if profile.threshold_hr:
+                        hrss = calculate_hrss(
+                            duration_min=duration_min,
+                            avg_hr=int(avg_hr),
+                            threshold_hr=profile.threshold_hr,
+                            max_hr=max_hr_for_calc,
+                            rest_hr=profile.rest_hr,
+                        )
+                    trimp = calculate_trimp(
+                        duration_min=duration_min,
+                        avg_hr=int(avg_hr),
+                        rest_hr=profile.rest_hr,
+                        max_hr=max_hr_for_calc,
+                        gender=profile.gender or "male",
+                    )
+
+                # Save
+                metrics = ActivityMetrics(
+                    activity_id=activity_id,
+                    date=activity_datetime.strftime("%Y-%m-%d"),
+                    activity_type=mapped_type,
+                    activity_name=activity_name,
+                    hrss=hrss,
+                    trimp=trimp,
+                    avg_hr=int(avg_hr) if avg_hr else None,
+                    max_hr=int(max_hr) if max_hr else None,
+                    duration_min=duration_min,
+                    distance_km=distance_km,
+                    pace_sec_per_km=pace_sec_per_km,
+                    zone1_pct=None,  # Zone data not available from simple API
+                    zone2_pct=None,
+                    zone3_pct=None,
+                    zone4_pct=None,
+                    zone5_pct=None,
+                    start_time=activity_datetime.strftime("%Y-%m-%dT%H:%M:%S"),
+                    sport_type=activity_type,
+                    avg_speed_kmh=avg_speed_kmh,
+                    elevation_gain_m=elevation_gain,
+                )
+                await asyncio.to_thread(training_db.save_activity_metrics, metrics)
+
+                if existing:
+                    updated_count += 1
+                else:
+                    new_count += 1
+
+            except Exception as e:
+                logger.warning(f"Error processing activity: {e}")
+                continue
+
+        job.activities_synced = new_count + updated_count
+
+        # Sync fitness data (75-95%)
+        job.current_step = "Fetching fitness metrics..."
+        job.progress_percent = 78
+        await asyncio.sleep(0)  # Yield to allow polling to see progress
+
+        try:
+            job.current_step = "Syncing VO2 Max data..."
+            job.progress_percent = 82
+            await asyncio.sleep(0)
+
+            # Run fitness sync in thread (it uses blocking Garmin API calls)
+            fitness_new, fitness_updated, _ = await asyncio.to_thread(
+                _sync_fitness_data_internal,
+                client, training_db, request.days
+            )
+            job.fitness_days_synced = fitness_new + fitness_updated
+
+            job.current_step = "Fitness data synced"
+            job.progress_percent = 95
+            await asyncio.sleep(0)
+        except Exception as e:
+            logger.warning(f"Failed to sync fitness data: {e}")
+
+        # Complete
+        job.current_step = "Finishing up..."
+        job.progress_percent = 98
+        await asyncio.sleep(0)
+
+        job.progress_percent = 100
+        job.current_step = "Sync complete!"
+        job.status = SyncJobStatus.COMPLETED
+        job.completed_at = datetime.now()
+        job.result = {
+            "synced_count": new_count + updated_count,
+            "new_activities": new_count,
+            "updated_activities": updated_count,
+            "fitness_days": job.fitness_days_synced,
+        }
+
+    except GarminConnectAuthenticationError:
+        job.status = SyncJobStatus.FAILED
+        job.error = "Invalid Garmin Connect credentials"
+        job.completed_at = datetime.now()
+    except Exception as e:
+        logger.error(f"Async sync failed: {e}")
+        logger.error(traceback.format_exc())
+        job.status = SyncJobStatus.FAILED
+        job.error = str(e)
+        job.completed_at = datetime.now()
+
+
+class BackfillStartTimeResponse(BaseModel):
+    """Response from start_time backfill operation."""
+    success: bool
+    updated_count: int
+    message: str
+
+
+@router.post("/backfill-start-time", response_model=BackfillStartTimeResponse)
+async def backfill_start_time(
+    request: GarminSyncRequest,
+    training_db: TrainingDatabase = Depends(get_training_db),
+):
+    """
+    Backfill start_time for existing activities by re-fetching from Garmin.
+
+    This endpoint fetches activities from Garmin and updates the start_time
+    field for activities that already exist in the database.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    try:
+        from garminconnect import Garmin, GarminConnectAuthenticationError
+    except ImportError:
+        raise HTTPException(
+            status_code=500,
+            detail="garminconnect library not installed"
+        )
+
+    # Authenticate with Garmin
+    try:
+        client = Garmin(request.email, request.password)
+        client.login()
+    except GarminConnectAuthenticationError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid Garmin Connect credentials"
+        )
+    except Exception as e:
+        logger.error(f"Failed to connect to Garmin: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to connect to Garmin. Please try again later."
+        )
+
+    # Fetch activities
+    BATCH_SIZE = 100
+    cutoff_date = datetime.now() - timedelta(days=request.days)
+    activities = []
+    start_index = 0
+
+    try:
+        while True:
+            batch = client.get_activities(start_index, BATCH_SIZE)
+            if not batch:
+                break
+
+            last_activity = batch[-1]
+            last_date_str = last_activity.get("startTimeLocal", "")
+            if last_date_str:
+                try:
+                    last_date = datetime.fromisoformat(last_date_str.replace("Z", "+00:00"))
+                    if last_date.replace(tzinfo=None) < cutoff_date:
+                        activities.extend(batch)
+                        break
+                except ValueError:
+                    pass
+
+            activities.extend(batch)
+
+            if len(batch) < BATCH_SIZE:
+                break
+
+            start_index += BATCH_SIZE
+    except Exception as e:
+        logger.error(f"Failed to fetch activities from Garmin: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch activities from Garmin. Please try again later."
+        )
+
+    # Update start_time for existing activities
+    updated_count = 0
+
+    with training_db._get_connection() as conn:
+        for activity in activities:
+            try:
+                activity_id = str(activity.get("activityId", ""))
+                activity_date_str = activity.get("startTimeLocal", "")
+
+                if not activity_id or not activity_date_str:
+                    continue
+
+                # Parse the datetime
+                try:
+                    activity_datetime = datetime.fromisoformat(activity_date_str.replace("Z", "+00:00"))
+                except ValueError:
+                    try:
+                        activity_datetime = datetime.strptime(activity_date_str[:19], "%Y-%m-%d %H:%M:%S")
+                    except ValueError:
+                        continue
+
+                start_time = activity_datetime.strftime("%Y-%m-%dT%H:%M:%S")
+
+                # Update only the start_time field
+                cursor = conn.execute(
+                    "UPDATE activity_metrics SET start_time = ? WHERE activity_id = ?",
+                    (start_time, activity_id)
+                )
+
+                if cursor.rowcount > 0:
+                    updated_count += 1
+
+            except Exception as e:
+                logger.warning(f"Error updating activity {activity.get('activityId')}: {e}")
+                continue
+
+        conn.commit()
+
+    return BackfillStartTimeResponse(
+        success=True,
+        updated_count=updated_count,
+        message=f"Updated start_time for {updated_count} activities"
+    )
 
 
 class SyncedWellnessDay(BaseModel):
@@ -418,6 +987,9 @@ async def sync_wellness(request: GarminSyncRequest):
     Syncs sleep, HRV, stress/body battery, and daily activity data
     to the wellness.db database for the whoop-dashboard.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
     try:
         from garminconnect import Garmin, GarminConnectAuthenticationError
     except ImportError:
@@ -436,9 +1008,10 @@ async def sync_wellness(request: GarminSyncRequest):
             detail="Invalid Garmin Connect credentials"
         )
     except Exception as e:
+        logger.error(f"Failed to connect to Garmin: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to connect: {str(e)}"
+            detail="Failed to connect. Please try again later."
         )
 
     # Get wellness.db path
@@ -451,7 +1024,7 @@ async def sync_wellness(request: GarminSyncRequest):
     if not wellness_db_path.exists():
         raise HTTPException(
             status_code=500,
-            detail=f"Wellness database not found at {wellness_db_path}"
+            detail="Wellness database not found. Please contact support."
         )
 
     conn = sqlite3.connect(str(wellness_db_path))
@@ -799,6 +1372,82 @@ class FitnessSyncResponse(BaseModel):
     synced_days: list[SyncedFitnessDay] = []
 
 
+def _sync_fitness_data_internal(client, training_db: TrainingDatabase, days: int) -> tuple:
+    """
+    Internal helper to sync fitness data from Garmin.
+    Returns (new_days, updated_days, synced_days_list).
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    end_date = datetime.now().date()
+    synced_days = []
+    new_days = 0
+    updated_days = 0
+
+    for i in range(days):
+        date = (end_date - timedelta(days=i)).isoformat()
+
+        # Check if we already have data for this date
+        existing = training_db.get_garmin_fitness_data(date)
+
+        # Initialize data with defaults
+        fitness_data = GarminFitnessData(date=date)
+
+        # Fetch VO2max and fitness age from max metrics
+        try:
+            max_metrics = client.get_max_metrics(date)
+            logger.debug(f"Fetched max_metrics for {date}")
+            if max_metrics:
+                if isinstance(max_metrics, list) and len(max_metrics) > 0:
+                    metric = max_metrics[0]
+                elif isinstance(max_metrics, dict):
+                    metric = max_metrics
+                else:
+                    metric = None
+
+                if metric:
+                    # VO2 Max data is nested inside 'generic' key
+                    generic = metric.get('generic') or {}
+                    vo2_precise = generic.get('vo2MaxPreciseValue')
+                    vo2_value = generic.get('vo2MaxValue')
+                    fitness_data.vo2max_running = vo2_precise or vo2_value
+                    logger.debug(f"Extracted VO2max for {date}: {fitness_data.vo2max_running}")
+
+                    # Cycling VO2 max is in separate 'cycling' key
+                    cycling = metric.get('cycling') or {}
+                    cycling_vo2 = cycling.get('vo2MaxPreciseValue') or cycling.get('vo2MaxValue')
+                    if cycling_vo2:
+                        fitness_data.vo2max_cycling = cycling_vo2
+
+                    fitness_data.fitness_age = generic.get('fitnessAge')
+        except Exception as e:
+            logger.warning(f"Error fetching max metrics for {date}: {e}")
+
+        # Only save if we got at least some data
+        has_data = fitness_data.vo2max_running is not None
+
+        if has_data:
+            training_db.save_garmin_fitness_data(fitness_data)
+
+            if existing:
+                updated_days += 1
+            else:
+                new_days += 1
+
+            synced_days.append(SyncedFitnessDay(
+                date=date,
+                vo2max_running=fitness_data.vo2max_running,
+                vo2max_cycling=fitness_data.vo2max_cycling,
+                fitness_age=fitness_data.fitness_age,
+                training_status=fitness_data.training_status,
+                training_readiness_score=fitness_data.training_readiness_score,
+                has_race_predictions=fitness_data.race_time_5k is not None,
+            ))
+
+    return new_days, updated_days, synced_days
+
+
 class RacePrediction(BaseModel):
     """Race prediction times."""
     distance: str
@@ -856,6 +1505,9 @@ async def sync_fitness(
     **Note:** This stores one record per day to track how these metrics
     change over time.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
     try:
         from garminconnect import Garmin, GarminConnectAuthenticationError
     except ImportError:
@@ -874,9 +1526,10 @@ async def sync_fitness(
             detail="Invalid Garmin Connect credentials"
         )
     except Exception as e:
+        logger.error(f"Failed to connect to Garmin Connect: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to connect to Garmin Connect: {str(e)}"
+            detail="Failed to connect to Garmin Connect. Please try again later."
         )
 
     end_date = datetime.now().date()
@@ -919,7 +1572,7 @@ async def sync_fitness(
                     # Fitness age
                     fitness_data.fitness_age = metric.get('fitnessAge')
         except Exception as e:
-            print(f"Error fetching max metrics for {date}: {e}")
+            logger.warning(f"Error fetching max metrics for {date}: {e}")
 
         # Fetch race predictions
         try:
@@ -948,7 +1601,7 @@ async def sync_fitness(
                     fitness_data.race_time_half = pred.get('timeHalfMarathon')
                     fitness_data.race_time_marathon = pred.get('timeMarathon')
         except Exception as e:
-            print(f"Error fetching race predictions for {date}: {e}")
+            logger.warning(f"Error fetching race predictions for {date}: {e}")
 
         # Fetch training status
         try:
@@ -967,7 +1620,7 @@ async def sync_fitness(
                     fitness_data.acwr_percent = acute_load.get('acwrPercent')
                     fitness_data.acwr_status = acute_load.get('acwrStatus')
         except Exception as e:
-            print(f"Error fetching training status for {date}: {e}")
+            logger.warning(f"Error fetching training status for {date}: {e}")
 
         # Fetch training readiness
         try:
@@ -976,7 +1629,7 @@ async def sync_fitness(
                 fitness_data.training_readiness_score = readiness.get('score')
                 fitness_data.training_readiness_level = readiness.get('level')
         except Exception as e:
-            print(f"Error fetching training readiness for {date}: {e}")
+            logger.warning(f"Error fetching training readiness for {date}: {e}")
 
         # Only save if we got at least some data
         has_data = (

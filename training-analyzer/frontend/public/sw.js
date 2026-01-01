@@ -9,7 +9,7 @@
  * - Network-first for API data with fallback
  */
 
-const CACHE_NAME = 'training-analyzer-v1';
+const CACHE_NAME = 'trainer-v1';
 const STATIC_CACHE = 'static-v1';
 const DYNAMIC_CACHE = 'dynamic-v1';
 const WORKOUT_CACHE = 'workouts-v1';
@@ -251,7 +251,7 @@ async function syncActivities() {
  */
 function openDatabase() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open('training-analyzer', 1);
+    const request = indexedDB.open('trainer', 1);
     
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve(request.result);
@@ -300,7 +300,7 @@ self.addEventListener('push', (event) => {
   };
   
   event.waitUntil(
-    self.registration.showNotification(data.title || 'Training Analyzer', options)
+    self.registration.showNotification(data.title || 'trAIner', options)
   );
 });
 

@@ -7,7 +7,7 @@ import json
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 
-from ..deps import get_coach_service, get_training_db, get_plan_repository
+from ..deps import get_coach_service, get_training_db, get_plan_repository, get_consent_service_dep, get_current_user, CurrentUser
 from ...models.plans import (
     TrainingPlan,
     TrainingWeek,
@@ -197,6 +197,7 @@ def _get_athlete_context(coach_service, training_db) -> AthleteContext:
 @router.post("/generate", response_model=PlanOutput)
 async def generate_plan(
     request: GeneratePlanRequest,
+    current_user: CurrentUser = Depends(get_current_user),
     coach_service=Depends(get_coach_service),
     training_db=Depends(get_training_db),
     plan_repo: PlanRepository = Depends(get_plan_repository),
@@ -212,6 +213,17 @@ async def generate_plan(
     Uses LangGraph-based PlanAgent with GPT for intelligent plan structure
     and session generation. Plans are persisted in SQLite for durability.
     """
+    # =========================================================================
+    # CONSENT CHECK: Verify user has consented to LLM data sharing
+    # =========================================================================
+    user_id = current_user.id
+    consent_service = get_consent_service_dep()
+    if not consent_service.check_llm_consent(user_id):
+        raise HTTPException(
+            status_code=403,
+            detail="LLM data sharing consent required. Please accept the data sharing agreement to use AI features."
+        )
+
     try:
         # Parse goal
         race_date = datetime.strptime(request.goal.race_date, "%Y-%m-%d").date()
@@ -280,15 +292,19 @@ async def generate_plan(
         return plan.to_dict()
 
     except PlanGenerationError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        import logging
+        logging.getLogger(__name__).error(f"Plan generation failed: {e}")
+        raise HTTPException(status_code=500, detail="Plan generation failed. Please try again later.")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to generate plan: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to generate plan: {str(e)}"
+            detail="Failed to generate plan. Please try again later."
         )
 
 
@@ -496,6 +512,7 @@ async def activate_plan(
 async def adapt_plan(
     plan_id: str,
     request: AdaptPlanRequest,
+    current_user: CurrentUser = Depends(get_current_user),
     coach_service=Depends(get_coach_service),
     training_db=Depends(get_training_db),
     plan_repo: PlanRepository = Depends(get_plan_repository),
@@ -512,6 +529,17 @@ async def adapt_plan(
         plan_id: The plan to adapt
         request: Adaptation parameters
     """
+    # =========================================================================
+    # CONSENT CHECK: Verify user has consented to LLM data sharing
+    # =========================================================================
+    user_id = current_user.id
+    consent_service = get_consent_service_dep()
+    if not consent_service.check_llm_consent(user_id):
+        raise HTTPException(
+            status_code=403,
+            detail="LLM data sharing consent required. Please accept the data sharing agreement to use AI features."
+        )
+
     plan = plan_repo.get(plan_id)
     if not plan:
         raise HTTPException(status_code=404, detail=f"Plan {plan_id} not found")
@@ -534,11 +562,15 @@ async def adapt_plan(
         return adapted_plan.to_dict()
 
     except PlanGenerationError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        import logging
+        logging.getLogger(__name__).error(f"Plan adaptation failed: {e}")
+        raise HTTPException(status_code=500, detail="Plan adaptation failed. Please try again later.")
     except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to adapt plan: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to adapt plan: {str(e)}"
+            detail="Failed to adapt plan. Please try again later."
         )
 
 
@@ -812,9 +844,11 @@ async def check_deviation(
             if a.get("activity_type", "").lower() in ("running", "run")
         ]
     except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to fetch recent activities: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to fetch recent activities: {str(e)}"
+            detail="Failed to fetch recent activities. Please try again later."
         )
 
     # Detect deviations
@@ -843,6 +877,7 @@ async def check_deviation(
 async def auto_adapt_plan(
     plan_id: str,
     request: Optional[Dict[str, Any]] = None,
+    current_user: CurrentUser = Depends(get_current_user),
     coach_service=Depends(get_coach_service),
     training_db=Depends(get_training_db),
     plan_repo: PlanRepository = Depends(get_plan_repository),
@@ -867,6 +902,17 @@ async def auto_adapt_plan(
     Returns:
         Adaptation suggestions or confirmation of applied changes
     """
+    # =========================================================================
+    # CONSENT CHECK: Verify user has consented to LLM data sharing
+    # =========================================================================
+    user_id = current_user.id
+    consent_service = get_consent_service_dep()
+    if not consent_service.check_llm_consent(user_id):
+        raise HTTPException(
+            status_code=403,
+            detail="LLM data sharing consent required. Please accept the data sharing agreement to use AI features."
+        )
+
     from ...services.deviation_detection import (
         get_deviation_service,
         WorkoutData,
@@ -897,9 +943,11 @@ async def auto_adapt_plan(
             if a.get("activity_type", "").lower() in ("running", "run")
         ]
     except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to fetch recent activities: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to fetch recent activities: {str(e)}"
+            detail="Failed to fetch recent activities. Please try again later."
         )
 
     deviation_service = get_deviation_service()

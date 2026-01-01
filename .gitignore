@@ -1,6 +1,8 @@
 # Environment and secrets
 .env
-.env.*
+.env.local
+.env.*.local
+!.env.example
 
 # Garth tokens (OAuth cache)
 .garth_tokens/

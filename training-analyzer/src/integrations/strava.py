@@ -6,13 +6,17 @@ Implements:
 - Activity listing and download
 - Segment effort tracking
 - Webhook support for real-time sync
+- Activity description updates
 """
 
+import asyncio
 import urllib.parse
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
+
+import httpx
 
 from .base import (
     AuthenticationError,
@@ -22,6 +26,18 @@ from .base import (
     OAuthFlow,
     RateLimitError,
 )
+
+
+class ActivityNotFoundError(IntegrationError):
+    """Activity not found on Strava."""
+
+    def __init__(self, activity_id: int):
+        self.activity_id = activity_id
+        super().__init__(f"Activity {activity_id} not found", "strava", "not_found")
+
+
+# Scopes required for full integration including description updates
+STRAVA_SCOPES = ["read", "activity:read_all", "activity:write"]
 
 
 class StravaSport(str, Enum):
@@ -72,7 +88,10 @@ class StravaActivity:
     trainer: bool = False
     commute: bool = False
     manual: bool = False
-    
+
+    # Description (important for update_activity)
+    description: Optional[str] = None
+
     def to_dict(self) -> dict:
         return {
             "id": self.id,
@@ -94,6 +113,7 @@ class StravaActivity:
             "suffer_score": self.suffer_score,
             "trainer": self.trainer,
             "commute": self.commute,
+            "description": self.description,
         }
     
     @classmethod
@@ -137,6 +157,7 @@ class StravaActivity:
             trainer=data.get("trainer", False),
             commute=data.get("commute", False),
             manual=data.get("manual", False),
+            description=data.get("description"),
         )
 
 
@@ -240,12 +261,22 @@ class StravaSegmentEffort:
 class StravaOAuthFlow(OAuthFlow):
     """
     OAuth 2.0 flow for Strava.
+
+    Usage:
+        oauth = StravaOAuthFlow(
+            client_id="your_client_id",
+            client_secret="your_client_secret",
+            redirect_uri="http://localhost:3000/auth/strava/callback",
+        )
+        auth_url = oauth.get_authorization_url()
+        # After user authorizes, exchange the code:
+        credentials = await oauth.exchange_code(code)
     """
-    
+
     provider = "strava"
     authorize_url = "https://www.strava.com/oauth/authorize"
     token_url = "https://www.strava.com/oauth/token"
-    
+
     # Strava scopes
     SCOPE_READ = "read"
     SCOPE_READ_ALL = "read_all"
@@ -253,9 +284,10 @@ class StravaOAuthFlow(OAuthFlow):
     SCOPE_ACTIVITY_READ = "activity:read"
     SCOPE_ACTIVITY_READ_ALL = "activity:read_all"
     SCOPE_ACTIVITY_WRITE = "activity:write"
-    
-    DEFAULT_SCOPE = "read_all,activity:read_all,profile:read_all"
-    
+
+    # Default scope for full integration (read activities + update descriptions)
+    DEFAULT_SCOPE = "read,activity:read_all,activity:write"
+
     def __init__(
         self,
         client_id: str,
@@ -264,11 +296,16 @@ class StravaOAuthFlow(OAuthFlow):
         scope: Optional[str] = None,
     ):
         super().__init__(client_id, client_secret, redirect_uri, scope or self.DEFAULT_SCOPE)
-    
+
     def get_authorization_url(self) -> str:
-        """Get the Strava authorization URL."""
+        """
+        Get the Strava authorization URL.
+
+        Returns:
+            Full authorization URL to redirect the user to.
+        """
         state = self.generate_state()
-        
+
         params = {
             "client_id": self.client_id,
             "redirect_uri": self.redirect_uri,
@@ -277,41 +314,46 @@ class StravaOAuthFlow(OAuthFlow):
             "state": state,
             "approval_prompt": "auto",
         }
-        
+
         query = urllib.parse.urlencode(params)
         return f"{self.authorize_url}?{query}"
-    
+
     async def exchange_code(self, code: str) -> OAuthCredentials:
         """
         Exchange authorization code for access token.
-        
+
         Args:
             code: Authorization code from callback
-        
+
         Returns:
-            OAuth credentials
+            OAuth credentials with access and refresh tokens
+
+        Raises:
+            AuthenticationError: If code exchange fails
         """
-        # In production, use httpx:
-        # response = await httpx.post(self.token_url, data={
-        #     "client_id": self.client_id,
-        #     "client_secret": self.client_secret,
-        #     "code": code,
-        #     "grant_type": "authorization_code",
-        # })
-        # data = response.json()
-        
-        # Placeholder for structure
-        data = {
-            "access_token": "placeholder_access_token",
-            "refresh_token": "placeholder_refresh_token",
-            "expires_at": int((datetime.now() + timedelta(hours=6)).timestamp()),
-            "athlete": {
-                "id": 12345,
-                "firstname": "Test",
-                "lastname": "Athlete",
-            },
-        }
-        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                self.token_url,
+                data={
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
+                    "code": code,
+                    "grant_type": "authorization_code",
+                },
+            )
+
+            if response.status_code != 200:
+                error_data = response.json() if response.content else {}
+                error_msg = error_data.get("message", f"Token exchange failed: {response.status_code}")
+                raise AuthenticationError(error_msg, "strava")
+
+            data = response.json()
+
+        athlete = data.get("athlete", {})
+        firstname = athlete.get("firstname", "")
+        lastname = athlete.get("lastname", "")
+        user_name = f"{firstname} {lastname}".strip() if firstname or lastname else None
+
         return OAuthCredentials(
             provider=self.provider,
             access_token=data["access_token"],
@@ -319,80 +361,248 @@ class StravaOAuthFlow(OAuthFlow):
             expires_at=datetime.fromtimestamp(data["expires_at"]) if data.get("expires_at") else None,
             token_type="Bearer",
             scope=self.scope,
-            user_id=str(data.get("athlete", {}).get("id")),
-            user_name=f"{data.get('athlete', {}).get('firstname', '')} {data.get('athlete', {}).get('lastname', '')}".strip(),
+            user_id=str(athlete.get("id")) if athlete.get("id") else None,
+            user_name=user_name,
         )
-    
+
     async def refresh_token(self, credentials: OAuthCredentials) -> OAuthCredentials:
-        """Refresh an expired access token."""
+        """
+        Refresh an expired access token.
+
+        Args:
+            credentials: Existing credentials with refresh token
+
+        Returns:
+            Updated credentials with new access token
+
+        Raises:
+            AuthenticationError: If no refresh token or refresh fails
+        """
         if not credentials.refresh_token:
             raise AuthenticationError("No refresh token available", "strava")
-        
-        # In production, use httpx:
-        # response = await httpx.post(self.token_url, data={
-        #     "client_id": self.client_id,
-        #     "client_secret": self.client_secret,
-        #     "refresh_token": credentials.refresh_token,
-        #     "grant_type": "refresh_token",
-        # })
-        
-        # Return updated credentials
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                self.token_url,
+                data={
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
+                    "refresh_token": credentials.refresh_token,
+                    "grant_type": "refresh_token",
+                },
+            )
+
+            if response.status_code != 200:
+                error_data = response.json() if response.content else {}
+                error_msg = error_data.get("message", f"Token refresh failed: {response.status_code}")
+                raise AuthenticationError(error_msg, "strava")
+
+            data = response.json()
+
         return OAuthCredentials(
             provider=self.provider,
-            access_token="refreshed_access_token",
-            refresh_token=credentials.refresh_token,
-            expires_at=datetime.now() + timedelta(hours=6),
+            access_token=data["access_token"],
+            refresh_token=data.get("refresh_token", credentials.refresh_token),
+            expires_at=datetime.fromtimestamp(data["expires_at"]) if data.get("expires_at") else None,
             token_type="Bearer",
             scope=credentials.scope,
             user_id=credentials.user_id,
             user_name=credentials.user_name,
+            created_at=credentials.created_at,
+            updated_at=datetime.now(),
         )
 
 
 class StravaClient(IntegrationClient):
     """
     Client for Strava API v3.
-    
+
     Features:
     - Activity listing and details
+    - Activity updates (name, description)
     - Segment exploration
     - Athlete stats
     - Route downloads
+
+    Rate limits (Strava API):
+    - 15-minute limit: 200 requests
+    - Daily limit: 2,000 requests
+
+    Usage:
+        credentials = await oauth_flow.exchange_code(code)
+        client = StravaClient(credentials)
+        activities = await client.get_activities(after=datetime.now() - timedelta(days=7))
     """
-    
+
     provider = "strava"
     base_url = "https://www.strava.com/api/v3"
-    
+
+    # Rate limit tracking
+    _rate_limit_15min: int = 200
+    _rate_limit_daily: int = 2000
+    _rate_limit_usage_15min: int = 0
+    _rate_limit_usage_daily: int = 0
+
     def __init__(self, credentials: OAuthCredentials):
         if credentials.provider != "strava":
             raise ValueError("Credentials must be for Strava")
         super().__init__(credentials)
-    
+        self._http_client: Optional[httpx.AsyncClient] = None
+
+    async def _get_client(self) -> httpx.AsyncClient:
+        """Get or create the HTTP client."""
+        if self._http_client is None or self._http_client.is_closed:
+            self._http_client = httpx.AsyncClient(timeout=30.0)
+        return self._http_client
+
+    async def close(self) -> None:
+        """Close the HTTP client."""
+        if self._http_client is not None and not self._http_client.is_closed:
+            await self._http_client.aclose()
+            self._http_client = None
+
+    async def __aenter__(self) -> "StravaClient":
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        await self.close()
+
     async def _request(
         self,
         method: str,
         endpoint: str,
         params: Optional[Dict[str, Any]] = None,
         json_data: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        """Make an API request."""
+        max_retries: int = 3,
+    ) -> Any:
+        """
+        Make an API request with rate limit handling.
+
+        Args:
+            method: HTTP method (GET, POST, PUT, DELETE)
+            endpoint: API endpoint (e.g., "/athlete/activities")
+            params: Query parameters
+            json_data: JSON body data
+            max_retries: Maximum retries for rate limit errors
+
+        Returns:
+            Response data (dict or list)
+
+        Raises:
+            AuthenticationError: If token is expired or invalid
+            RateLimitError: If rate limit exceeded after retries
+            ActivityNotFoundError: If activity not found (404)
+            IntegrationError: For other API errors
+        """
         url = f"{self.base_url}{endpoint}"
         headers = self.get_auth_headers()
-        
-        # In production, use httpx:
-        # response = await httpx.request(
-        #     method, url, headers=headers, params=params, json=json_data
-        # )
-        # 
-        # if response.status_code == 401:
-        #     raise AuthenticationError("Token expired", "strava")
-        # if response.status_code == 429:
-        #     retry_after = int(response.headers.get("X-RateLimit-Reset", 900))
-        #     raise RateLimitError("Rate limit exceeded", "strava", retry_after)
-        # 
-        # return response.json()
-        
-        return {}  # Placeholder
+
+        client = await self._get_client()
+
+        for attempt in range(max_retries):
+            response = await client.request(
+                method,
+                url,
+                headers=headers,
+                params=params,
+                json=json_data,
+            )
+
+            # Update rate limit tracking from response headers
+            self._update_rate_limits(response)
+
+            # Handle response status
+            if response.status_code == 200:
+                return response.json()
+
+            if response.status_code == 201:
+                # Created (for POST requests)
+                return response.json()
+
+            if response.status_code == 204:
+                # No content (for DELETE)
+                return {}
+
+            if response.status_code == 401:
+                raise AuthenticationError(
+                    "Token expired or invalid. Please re-authenticate.",
+                    "strava",
+                )
+
+            if response.status_code == 404:
+                # Check if it's an activity endpoint
+                if "/activities/" in endpoint:
+                    activity_id = int(endpoint.split("/activities/")[1].split("/")[0])
+                    raise ActivityNotFoundError(activity_id)
+                raise IntegrationError(f"Resource not found: {endpoint}", "strava", "not_found")
+
+            if response.status_code == 429:
+                # Rate limit exceeded
+                retry_after = self._get_retry_after(response)
+                if attempt < max_retries - 1:
+                    # Wait and retry
+                    await asyncio.sleep(min(retry_after, 60))  # Cap at 60 seconds
+                    continue
+                raise RateLimitError(
+                    "Strava rate limit exceeded. Please wait before retrying.",
+                    "strava",
+                    retry_after,
+                )
+
+            # Other errors
+            try:
+                error_data = response.json()
+                error_msg = error_data.get("message", str(error_data))
+            except Exception:
+                error_msg = response.text or f"HTTP {response.status_code}"
+
+            raise IntegrationError(
+                f"Strava API error: {error_msg}",
+                "strava",
+                str(response.status_code),
+            )
+
+        # Should not reach here, but just in case
+        raise IntegrationError("Max retries exceeded", "strava")
+
+    def _update_rate_limits(self, response: httpx.Response) -> None:
+        """Update rate limit tracking from response headers."""
+        # Strava returns: X-RateLimit-Limit, X-RateLimit-Usage
+        # Format: "15min_limit,daily_limit" and "15min_usage,daily_usage"
+        limit_header = response.headers.get("X-RateLimit-Limit", "")
+        usage_header = response.headers.get("X-RateLimit-Usage", "")
+
+        if limit_header:
+            parts = limit_header.split(",")
+            if len(parts) >= 2:
+                self._rate_limit_15min = int(parts[0])
+                self._rate_limit_daily = int(parts[1])
+
+        if usage_header:
+            parts = usage_header.split(",")
+            if len(parts) >= 2:
+                self._rate_limit_usage_15min = int(parts[0])
+                self._rate_limit_usage_daily = int(parts[1])
+
+    def _get_retry_after(self, response: httpx.Response) -> int:
+        """Get retry-after time from rate limit response."""
+        # Try standard header first
+        retry_after = response.headers.get("Retry-After")
+        if retry_after:
+            return int(retry_after)
+
+        # Fallback to 15 minutes if header not present
+        return 900
+
+    @property
+    def rate_limit_remaining_15min(self) -> int:
+        """Get remaining requests in 15-minute window."""
+        return max(0, self._rate_limit_15min - self._rate_limit_usage_15min)
+
+    @property
+    def rate_limit_remaining_daily(self) -> int:
+        """Get remaining requests in daily window."""
+        return max(0, self._rate_limit_daily - self._rate_limit_usage_daily)
     
     async def get_user_profile(self) -> Dict[str, Any]:
         """Get authenticated athlete profile."""
@@ -579,8 +789,121 @@ class StravaClient(IntegrationClient):
                 segments.append(StravaSegment.from_api_response(seg_data))
             except (KeyError, ValueError):
                 continue
-        
+
         return segments
+
+    # -------------------------------------------------------------------------
+    # Activity Update Methods
+    # -------------------------------------------------------------------------
+
+    async def update_activity(
+        self,
+        activity_id: int,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        sport_type: Optional[str] = None,
+        gear_id: Optional[str] = None,
+        trainer: Optional[bool] = None,
+        commute: Optional[bool] = None,
+    ) -> StravaActivity:
+        """
+        Update an activity owned by the authenticated athlete.
+
+        Args:
+            activity_id: ID of the activity to update
+            name: New name for the activity
+            description: New description (replaces existing)
+            sport_type: New sport type
+            gear_id: Gear ID to associate with activity
+            trainer: Whether this is a trainer activity
+            commute: Whether this is a commute
+
+        Returns:
+            Updated StravaActivity
+
+        Raises:
+            ActivityNotFoundError: If activity doesn't exist
+            AuthenticationError: If not authorized to update
+        """
+        data: Dict[str, Any] = {}
+
+        if name is not None:
+            data["name"] = name
+        if description is not None:
+            data["description"] = description
+        if sport_type is not None:
+            data["sport_type"] = sport_type
+        if gear_id is not None:
+            data["gear_id"] = gear_id
+        if trainer is not None:
+            data["trainer"] = trainer
+        if commute is not None:
+            data["commute"] = commute
+
+        if not data:
+            # Nothing to update, just return current activity
+            return await self.get_activity(activity_id)
+
+        response = await self._request(
+            "PUT",
+            f"/activities/{activity_id}",
+            json_data=data,
+        )
+        return StravaActivity.from_api_response(response)
+
+    async def update_activity_description(
+        self,
+        activity_id: int,
+        analysis_content: str,
+    ) -> StravaActivity:
+        """
+        Update activity description, APPENDING to existing content.
+
+        This method is designed to add analysis content to an activity without
+        destroying any existing user-written description.
+
+        Args:
+            activity_id: ID of the activity to update
+            analysis_content: The analysis content to append
+
+        Returns:
+            Updated StravaActivity
+
+        Raises:
+            ActivityNotFoundError: If activity doesn't exist
+            AuthenticationError: If not authorized to update
+
+        Example:
+            # If existing description is "My morning run in the park"
+            # and analysis_content is "Score: 85/100 - Great pace consistency!"
+            # Result will be:
+            # "My morning run in the park
+            #
+            # Score: 85/100 - Great pace consistency!"
+        """
+        # 1. Get current activity to check existing description
+        current = await self.get_activity(activity_id)
+        existing_desc = current.description or ""
+
+        # 2. Build new description (append, don't replace)
+        if existing_desc.strip():
+            new_description = f"{existing_desc}\n\n{analysis_content}"
+        else:
+            new_description = analysis_content
+
+        # 3. Update the activity
+        return await self.update_activity(activity_id, description=new_description)
+
+    async def get_athlete(self) -> Dict[str, Any]:
+        """
+        Get authenticated athlete info.
+
+        Alias for get_user_profile() for API consistency.
+
+        Returns:
+            Athlete profile data
+        """
+        return await self.get_user_profile()
 
 
 # Tuple is already imported at the top

@@ -1,7 +1,7 @@
 """
 Base agent class for LangGraph agents.
 
-Provides common functionality for all agents in the Reactive Training App.
+Provides common functionality for all agents in the trAIner App.
 """
 
 from abc import ABC, abstractmethod
@@ -63,12 +63,14 @@ class BaseAgent(ABC, Generic[StateT]):
     - Metrics collection
     - Common utility methods
     - Graph building structure
+    - User ID tracking for usage billing
     """
 
     def __init__(
         self,
         llm_client: Optional[LLMClient] = None,
         model_type: ModelType = ModelType.SMART,
+        user_id: Optional[str] = None,
     ):
         """
         Initialize the base agent.
@@ -76,9 +78,11 @@ class BaseAgent(ABC, Generic[StateT]):
         Args:
             llm_client: Optional LLM client. If not provided, uses default.
             model_type: Default model type for this agent (FAST or SMART).
+            user_id: Optional user ID for usage tracking and billing.
         """
         self._llm_client = llm_client
         self._model_type = model_type
+        self._user_id = user_id
         self._graph: Optional[StateGraph] = None
         self._metrics = AgentMetrics()
 
@@ -88,6 +92,16 @@ class BaseAgent(ABC, Generic[StateT]):
         if self._llm_client is None:
             self._llm_client = get_llm_client()
         return self._llm_client
+
+    @property
+    def user_id(self) -> Optional[str]:
+        """Get the user ID for usage tracking."""
+        return self._user_id
+
+    @user_id.setter
+    def user_id(self, value: Optional[str]) -> None:
+        """Set the user ID for usage tracking."""
+        self._user_id = value
 
     @property
     def metrics(self) -> AgentMetrics:

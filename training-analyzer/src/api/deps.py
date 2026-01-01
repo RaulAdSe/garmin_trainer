@@ -4,10 +4,22 @@ from functools import lru_cache
 
 from ..config import get_settings
 from ..services.coach import CoachService
+from ..services.auth_service import AuthService, get_auth_service
+from ..services.feature_gate import FeatureGateService, get_feature_gate_service
 from ..db.database import TrainingDatabase
 from ..db.repositories.workout_repository import WorkoutRepository
 from ..db.repositories.plan_repository import PlanRepository
 from ..db.repositories.analysis_cache_repository import AnalysisCacheRepository
+from ..services.consent_service import ConsentService, get_consent_service
+
+# Re-export auth dependencies for convenient imports
+from .middleware.auth import (
+    CurrentUser,
+    get_current_user,
+    get_optional_user,
+    require_admin,
+    get_require_subscription,
+)
 
 
 @lru_cache
@@ -57,3 +69,12 @@ def get_analysis_cache_repository() -> AnalysisCacheRepository:
     if db_path and db_path.exists():
         return AnalysisCacheRepository(str(db_path))
     return AnalysisCacheRepository()
+
+
+def get_consent_service_dep() -> ConsentService:
+    """Get the consent service instance for dependency injection."""
+    settings = get_settings()
+    db_path = settings.training_db_path
+    if db_path and db_path.exists():
+        return get_consent_service(str(db_path))
+    return get_consent_service()

@@ -29,5 +29,9 @@ export const appRoutes = [
   '/plans/:path*',
   '/design',
   '/goals',
-  '/sync',
+  '/connect',
+  '/settings',
+  '/settings/:path*',
+  '/auth',
+  '/auth/:path*',
 ] as const;

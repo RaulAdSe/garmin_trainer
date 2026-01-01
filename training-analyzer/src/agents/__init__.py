@@ -1,4 +1,4 @@
-"""LangGraph agents for the Reactive Training App."""
+"""LangGraph agents for the trAIner App."""
 
 from .base import (
     BaseAgent,
@@ -62,6 +62,16 @@ from .orchestrator import (
     get_orchestrator,
 )
 
+from .langchain_agent import (
+    LangChainCoachAgent,
+    get_langchain_agent,
+    reset_langchain_agent,
+    SYSTEM_PROMPT as LANGCHAIN_SYSTEM_PROMPT,
+    StreamEvent,
+    StreamEventType,
+    TOOL_MESSAGES,
+)
+
 __all__ = [
     # Base Agent
     "BaseAgent",
@@ -107,4 +117,13 @@ __all__ = [
     "OrchestratorResponse",
     "TaskType",
     "get_orchestrator",
+    # LangChain Agent (Agentic)
+    "LangChainCoachAgent",
+    "get_langchain_agent",
+    "reset_langchain_agent",
+    "LANGCHAIN_SYSTEM_PROMPT",
+    # Streaming
+    "StreamEvent",
+    "StreamEventType",
+    "TOOL_MESSAGES",
 ]

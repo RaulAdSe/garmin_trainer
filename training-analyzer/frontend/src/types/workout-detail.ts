@@ -20,6 +20,11 @@ export interface CadencePoint {
   cadence: number;    // steps/min for running, rpm for cycling
 }
 
+export interface PowerPoint {
+  timestamp: number;  // seconds from start
+  power: number;      // watts
+}
+
 export interface GPSCoordinate {
   lat: number;
   lon: number;
@@ -43,6 +48,7 @@ export interface ActivityTimeSeries {
   pace_or_speed: PaceSpeedPoint[];
   elevation: ElevationPoint[];
   cadence: CadencePoint[];
+  power?: PowerPoint[];  // Optional - only available with power meters
 }
 
 export interface BasicActivityInfo {

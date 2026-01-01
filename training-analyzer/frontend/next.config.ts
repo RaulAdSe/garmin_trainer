@@ -5,8 +5,17 @@ import { defaultLocale, appRoutes } from './src/i18n/config';
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 
 const nextConfig: NextConfig = {
+  // Disable trailing slash redirect for API routes (prevents auth header loss)
+  skipTrailingSlashRedirect: true,
+
   async rewrites() {
     return [
+      // Handle API routes with trailing slash
+      {
+        source: '/api/v1/:path*/',
+        destination: 'http://localhost:8000/api/v1/:path*/',
+      },
+      // Handle API routes without trailing slash
       {
         source: '/api/v1/:path*',
         destination: 'http://localhost:8000/api/v1/:path*',

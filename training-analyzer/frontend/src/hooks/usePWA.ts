@@ -211,7 +211,7 @@ export function usePWA(): UsePWAReturn {
 
     try {
       // Get VAPID public key from server
-      const response = await fetch('/api/push/vapid-public-key');
+      const response = await fetch('/api/v1/push/vapid-public-key');
       const { publicKey } = await response.json();
 
       const keyArray = urlBase64ToUint8Array(publicKey);
@@ -221,7 +221,7 @@ export function usePWA(): UsePWAReturn {
       });
 
       // Send subscription to server
-      await fetch('/api/push/subscribe', {
+      await fetch('/api/v1/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(subscription),
@@ -321,7 +321,7 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 
 async function getFromCache<T>(key: string): Promise<T | null> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open('training-analyzer', 1);
+    const request = indexedDB.open('trainer', 1);
     
     request.onerror = () => reject(request.error);
     
@@ -352,7 +352,7 @@ async function getFromCache<T>(key: string): Promise<T | null> {
 
 async function saveToCache<T>(key: string, data: T): Promise<void> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open('training-analyzer', 1);
+    const request = indexedDB.open('trainer', 1);
     
     request.onerror = () => reject(request.error);
     

@@ -21,6 +21,7 @@ from ..llm.prompts import (
     CHAT_INTENT_USER,
 )
 from ..llm.context_builder import build_athlete_context_prompt
+from ..analysis.condensation import condense_workout_data
 
 
 # ============================================================================
@@ -82,6 +83,7 @@ class ChatAgent:
         llm_client=None,
         coach_service=None,
         training_db=None,
+        user_id: Optional[str] = None,
     ):
         """
         Initialize the chat agent.
@@ -90,11 +92,23 @@ class ChatAgent:
             llm_client: Optional LLM client (uses default if not provided)
             coach_service: Optional CoachService for athlete context
             training_db: Optional TrainingDatabase for data queries
+            user_id: Optional user ID for usage tracking and billing
         """
         self._llm_client = llm_client
         self._coach_service = coach_service
         self._training_db = training_db
+        self._user_id = user_id
         self._graph = self._build_graph()
+
+    @property
+    def user_id(self) -> Optional[str]:
+        """Get the user ID for usage tracking."""
+        return self._user_id
+
+    @user_id.setter
+    def user_id(self, value: Optional[str]) -> None:
+        """Set the user ID for usage tracking."""
+        self._user_id = value
 
     @property
     def llm_client(self):
@@ -146,6 +160,8 @@ class ChatAgent:
                 user=CHAT_INTENT_USER.format(question=message),
                 model=ModelType.FAST,
                 max_tokens=500,
+                user_id=self._user_id,
+                analysis_type="intent_classification",
             )
 
             intent = intent_response.get("intent", "general")
@@ -228,7 +244,7 @@ class ChatAgent:
 
             elif intent == "workout_detail":
                 training_data = await self._fetch_workout_details(intent_data)
-                data_sources.append("workouts")
+                data_sources.extend(["workouts", "workout_analysis"])
 
             elif intent == "recommendation":
                 training_data = await self._fetch_recommendation_data()
@@ -313,6 +329,8 @@ You MUST respond entirely in {language_name}. All responses, explanations, recom
                 model=ModelType.SMART,
                 max_tokens=1500,
                 temperature=0.7,
+                user_id=self._user_id,
+                analysis_type="chat",
             )
 
             return {
@@ -465,7 +483,7 @@ You MUST respond entirely in {language_name}. All responses, explanations, recom
         self,
         intent_data: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Fetch details about specific workouts."""
+        """Fetch details about specific workouts with rich analysis context."""
         data = {}
 
         specific_date = intent_data.get("specific_date")
@@ -482,6 +500,29 @@ You MUST respond entirely in {language_name}. All responses, explanations, recom
             else:
                 # Get most recent activities
                 data["workouts"] = self._coach_service.get_recent_activities(days=7)
+
+            # Enrich workouts with stored analysis data
+            if data.get("workouts") and self._training_db:
+                enriched_workouts = []
+                for workout in data["workouts"]:
+                    workout_id = workout.get("activity_id")
+                    if workout_id:
+                        # Try to get stored workout analysis from DB
+                        analysis = self._training_db.get_workout_analysis(workout_id)
+                        if analysis:
+                            workout["analysis"] = {
+                                "summary": analysis.get("summary"),
+                                "what_went_well": analysis.get("what_went_well", []),
+                                "improvements": analysis.get("improvements", []),
+                                "training_context": analysis.get("training_context"),
+                                "execution_rating": analysis.get("execution_rating"),
+                                "overall_score": analysis.get("overall_score"),
+                                "training_effect_score": analysis.get("training_effect_score"),
+                                "load_score": analysis.get("load_score"),
+                                "recovery_hours": analysis.get("recovery_hours"),
+                            }
+                    enriched_workouts.append(workout)
+                data["workouts"] = enriched_workouts
 
         return data
 
@@ -627,6 +668,76 @@ You MUST respond entirely in {language_name}. All responses, explanations, recom
             parts.append(f"  Last Week: Load {lw.get('total_load', 0):.0f}, "
                         f"{lw.get('workout_count', 0)} workouts")
             parts.append("")
+
+        # Format detailed workouts with analysis (for workout_detail intent)
+        workouts = data.get("workouts", [])
+        if workouts:
+            parts.append("WORKOUT DETAILS:")
+            for w in workouts[:5]:  # Limit to 5 workouts
+                w_type = w.get("activity_type", "workout")
+                w_name = w.get("activity_name", "")
+                w_date = w.get("date", "")
+                w_dist = w.get("distance_km", 0) or 0
+                w_dur = w.get("duration_min", 0) or 0
+                w_hr = w.get("avg_hr", "N/A")
+                w_max_hr = w.get("max_hr", "N/A")
+                w_load = w.get("hrss") or w.get("trimp", 0) or 0
+                w_pace = w.get("pace_sec_per_km")
+
+                parts.append(f"  --- {w_date}: {w_name or w_type} ---")
+                parts.append(f"    Type: {w_type}")
+                parts.append(f"    Distance: {w_dist:.2f} km | Duration: {w_dur:.0f} min")
+
+                if w_pace:
+                    pace_min = int(w_pace // 60)
+                    pace_sec = int(w_pace % 60)
+                    parts.append(f"    Pace: {pace_min}:{pace_sec:02d}/km")
+
+                parts.append(f"    HR: Avg {w_hr} bpm, Max {w_max_hr} bpm")
+                parts.append(f"    Training Load: {w_load:.0f}")
+
+                # Zone distribution
+                z1 = w.get("zone1_pct", 0) or 0
+                z2 = w.get("zone2_pct", 0) or 0
+                z3 = w.get("zone3_pct", 0) or 0
+                z4 = w.get("zone4_pct", 0) or 0
+                z5 = w.get("zone5_pct", 0) or 0
+                if any([z1, z2, z3, z4, z5]):
+                    parts.append(f"    Zone Distribution: Z1:{z1:.0f}% Z2:{z2:.0f}% Z3:{z3:.0f}% Z4:{z4:.0f}% Z5:{z5:.0f}%")
+
+                # Include AI analysis if available
+                analysis = w.get("analysis")
+                if analysis:
+                    parts.append("    AI ANALYSIS:")
+                    if analysis.get("summary"):
+                        parts.append(f"      Summary: {analysis['summary']}")
+                    if analysis.get("execution_rating"):
+                        parts.append(f"      Execution: {analysis['execution_rating']}")
+                    if analysis.get("overall_score"):
+                        parts.append(f"      Overall Score: {analysis['overall_score']}/100")
+                    if analysis.get("training_effect_score"):
+                        parts.append(f"      Training Effect: {analysis['training_effect_score']:.1f}/5.0")
+                    if analysis.get("recovery_hours"):
+                        parts.append(f"      Recovery Time: {analysis['recovery_hours']} hours")
+
+                    # What went well
+                    went_well = analysis.get("what_went_well", [])
+                    if went_well:
+                        parts.append("      What Went Well:")
+                        for item in went_well[:3]:  # Limit to 3
+                            parts.append(f"        - {item}")
+
+                    # Areas for improvement
+                    improvements = analysis.get("improvements", [])
+                    if improvements:
+                        parts.append("      Areas to Improve:")
+                        for item in improvements[:3]:  # Limit to 3
+                            parts.append(f"        - {item}")
+
+                    if analysis.get("training_context"):
+                        parts.append(f"      Context: {analysis['training_context']}")
+
+                parts.append("")
 
         return "\n".join(parts) if parts else "Limited training data available."
 

@@ -6,8 +6,11 @@ athlete context, training paces, and workout goals.
 """
 
 import json
+import logging
 import re
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 from ..models.workouts import (
     AthleteContext,
@@ -141,7 +144,7 @@ class WorkoutDesignAgent:
 
         except Exception as e:
             # Fallback to rule-based design
-            print(f"LLM workout design failed: {e}, falling back to rules")
+            logger.warning(f"LLM workout design failed: {e}, falling back to rules")
             return self.design_workout(request, athlete_context)
 
     def _format_training_paces(self, context: AthleteContext) -> str:

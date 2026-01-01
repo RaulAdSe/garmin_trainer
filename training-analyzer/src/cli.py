@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """
-Training Analyzer CLI.
+trAIner CLI.
 
 AI-powered workout analysis with training load and fitness metrics.
 
 Usage:
-    training-analyzer setup --max-hr 185 --rest-hr 50
-    training-analyzer enrich --days 30
-    training-analyzer fitness --days 7
-    training-analyzer status
-    training-analyzer today           # Get today's training recommendation
-    training-analyzer summary --days 7    # Weekly training summary
-    training-analyzer why             # Explain today's recommendation
-    training-analyzer trends --weeks 4    # Show fitness trends
-    training-analyzer week --weeks 1      # Detailed weekly analysis
-    training-analyzer goal             # Show/set race goals
-    training-analyzer dashboard        # Complete training dashboard
+    trainer setup --max-hr 185 --rest-hr 50
+    trainer enrich --days 30
+    trainer fitness --days 7
+    trainer status
+    trainer today           # Get today's training recommendation
+    trainer summary --days 7    # Weekly training summary
+    trainer why             # Explain today's recommendation
+    trainer trends --weeks 4    # Show fitness trends
+    trainer week --weeks 1      # Detailed weekly analysis
+    trainer goal             # Show/set race goals
+    trainer dashboard        # Complete training dashboard
 """
 
 import argparse
@@ -103,7 +103,7 @@ def format_tsb_rich(tsb: float) -> Text:
 def cmd_setup(args, db: TrainingDatabase):
     """Configure user profile for personalized metrics."""
     console.print()
-    console.print(Panel("[bold]Training Analyzer - Profile Setup[/bold]"))
+    console.print(Panel("[bold]trAIner - Profile Setup[/bold]"))
     console.print()
 
     # Get current profile
@@ -124,7 +124,7 @@ def cmd_setup(args, db: TrainingDatabase):
         console.print(table)
         console.print()
         console.print("To update, use options like:")
-        console.print("  training-analyzer setup --max-hr 185 --rest-hr 50 --age 35")
+        console.print("  trainer setup --max-hr 185 --rest-hr 50 --age 35")
         return
 
     # Update profile with provided values
@@ -182,7 +182,7 @@ def cmd_setup(args, db: TrainingDatabase):
 def cmd_enrich(args, db: TrainingDatabase):
     """Enrich activities with training metrics (HRSS, TRIMP, zones)."""
     console.print()
-    console.print(Panel("[bold]Training Analyzer - Enrichment[/bold]"))
+    console.print(Panel("[bold]trAIner - Enrichment[/bold]"))
     console.print()
 
     service = EnrichmentService(training_db=db)
@@ -228,7 +228,7 @@ def cmd_enrich(args, db: TrainingDatabase):
 
         if result['activities_enriched'] > 0:
             console.print("[green]Enrichment complete![/green]")
-            console.print("Run 'training-analyzer fitness' to see your fitness metrics.")
+            console.print("Run 'trainer fitness' to see your fitness metrics.")
         else:
             console.print("[yellow]No activities enriched.[/yellow]")
             console.print("Make sure you have activities in the n8n raw_activities table.")
@@ -243,7 +243,7 @@ def cmd_enrich(args, db: TrainingDatabase):
 def cmd_fitness(args, db: TrainingDatabase):
     """Show fitness metrics (CTL, ATL, TSB, ACWR)."""
     console.print()
-    console.print(Panel("[bold]Training Analyzer - Fitness Metrics[/bold]"))
+    console.print(Panel("[bold]trAIner - Fitness Metrics[/bold]"))
     console.print()
 
     # Get date range
@@ -254,7 +254,7 @@ def cmd_fitness(args, db: TrainingDatabase):
 
     if not metrics:
         console.print("No fitness data available.")
-        console.print("Run 'training-analyzer enrich' first to calculate metrics.")
+        console.print("Run 'trainer enrich' first to calculate metrics.")
         console.print()
         return
 
@@ -301,7 +301,7 @@ def cmd_fitness(args, db: TrainingDatabase):
 def cmd_status(args, db: TrainingDatabase):
     """Show current training status and risk zone."""
     console.print()
-    console.print(Panel("[bold]Training Analyzer - Status[/bold]"))
+    console.print(Panel("[bold]trAIner - Status[/bold]"))
     console.print()
 
     # Get latest fitness metrics
@@ -311,8 +311,8 @@ def cmd_status(args, db: TrainingDatabase):
         console.print("No fitness data available yet.")
         console.print()
         console.print("To get started:")
-        console.print("  1. Setup your profile: training-analyzer setup --max-hr 185 --rest-hr 50")
-        console.print("  2. Enrich activities:  training-analyzer enrich --days 30")
+        console.print("  1. Setup your profile: trainer setup --max-hr 185 --rest-hr 50")
+        console.print("  2. Enrich activities:  trainer enrich --days 30")
         console.print()
         return
 
@@ -368,7 +368,7 @@ def cmd_stats(args, db: TrainingDatabase):
     stats = db.get_stats()
 
     console.print()
-    console.print(Panel("[bold]Training Analyzer - Database Stats[/bold]"))
+    console.print(Panel("[bold]trAIner - Database Stats[/bold]"))
     console.print()
 
     table = Table(box=box.ROUNDED)
@@ -398,7 +398,7 @@ def cmd_stats(args, db: TrainingDatabase):
 def cmd_today(args, db: TrainingDatabase):
     """Get today's training recommendation."""
     console.print()
-    console.print(Panel("[bold]Training Analyzer - Today's Briefing[/bold]"))
+    console.print(Panel("[bold]trAIner - Today's Briefing[/bold]"))
     console.print()
 
     coach = CoachService(training_db=db)
@@ -421,7 +421,7 @@ def cmd_today(args, db: TrainingDatabase):
     if not sources["wellness_available"] and not sources["fitness_available"]:
         console.print("[yellow]Limited data available.[/yellow]")
         console.print("For better recommendations:")
-        console.print("  - Run 'training-analyzer enrich' for training load data")
+        console.print("  - Run 'trainer enrich' for training load data")
         console.print("  - Set WELLNESS_DB_PATH for recovery data")
         console.print()
 
@@ -486,7 +486,7 @@ def cmd_today(args, db: TrainingDatabase):
 def cmd_summary(args, db: TrainingDatabase):
     """Show weekly training summary."""
     console.print()
-    console.print(Panel("[bold]Training Analyzer - Weekly Summary[/bold]"))
+    console.print(Panel("[bold]trAIner - Weekly Summary[/bold]"))
     console.print()
 
     coach = CoachService(training_db=db)
@@ -561,7 +561,7 @@ def cmd_summary(args, db: TrainingDatabase):
 def cmd_why(args, db: TrainingDatabase):
     """Explain why today's workout was recommended."""
     console.print()
-    console.print(Panel("[bold]Training Analyzer - Recommendation Explained[/bold]"))
+    console.print(Panel("[bold]trAIner - Recommendation Explained[/bold]"))
     console.print()
 
     coach = CoachService(training_db=db)
@@ -579,7 +579,7 @@ def cmd_why(args, db: TrainingDatabase):
 def cmd_trends(args, db: TrainingDatabase):
     """Show fitness trends over time."""
     console.print()
-    console.print(Panel("[bold]Training Analyzer - Fitness Trends[/bold]"))
+    console.print(Panel("[bold]trAIner - Fitness Trends[/bold]"))
     console.print()
 
     # Get fitness history
@@ -590,7 +590,7 @@ def cmd_trends(args, db: TrainingDatabase):
 
     if not fitness_data:
         console.print("No fitness data available for trend analysis.")
-        console.print("Run 'training-analyzer enrich' first.")
+        console.print("Run 'trainer enrich' first.")
         console.print()
         return
 
@@ -668,7 +668,7 @@ def cmd_trends(args, db: TrainingDatabase):
 def cmd_week(args, db: TrainingDatabase):
     """Show detailed weekly analysis."""
     console.print()
-    console.print(Panel("[bold]Training Analyzer - Weekly Analysis[/bold]"))
+    console.print(Panel("[bold]trAIner - Weekly Analysis[/bold]"))
     console.print()
 
     # Calculate week dates
@@ -711,7 +711,7 @@ def cmd_week(args, db: TrainingDatabase):
 def cmd_goal(args, db: TrainingDatabase):
     """Set or show race goals."""
     console.print()
-    console.print(Panel("[bold]Training Analyzer - Race Goals[/bold]"))
+    console.print(Panel("[bold]trAIner - Race Goals[/bold]"))
     console.print()
 
     # If setting a new goal
@@ -781,7 +781,7 @@ def cmd_goal(args, db: TrainingDatabase):
             console.print("No upcoming race goals set.")
             console.print()
             console.print("To set a goal:")
-            console.print("  training-analyzer goal --distance half --target 1:45:00 --date 2025-04-15")
+            console.print("  trainer goal --distance half --target 1:45:00 --date 2025-04-15")
             console.print()
             return
 
@@ -822,7 +822,7 @@ def cmd_goal(args, db: TrainingDatabase):
 def cmd_dashboard(args, db: TrainingDatabase):
     """Show complete training dashboard."""
     console.print()
-    console.print(Panel("[bold]Training Analyzer - Dashboard[/bold]", style="cyan"))
+    console.print(Panel("[bold]trAIner - Dashboard[/bold]", style="cyan"))
     console.print()
 
     coach = CoachService(training_db=db)
@@ -901,21 +901,21 @@ Workouts: {wl['workout_count']}
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
-        description="Training Analyzer - AI-powered workout analysis",
+        description="trAIner - AI-powered workout analysis",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  training-analyzer setup --max-hr 185 --rest-hr 50 --age 35
-  training-analyzer enrich --days 30
-  training-analyzer fitness --days 7
-  training-analyzer status
-  training-analyzer today
-  training-analyzer summary --days 7
-  training-analyzer why
-  training-analyzer trends --weeks 4
-  training-analyzer week --weeks 1
-  training-analyzer goal --distance half --target 1:45:00 --date 2025-04-15
-  training-analyzer dashboard
+  trainer setup --max-hr 185 --rest-hr 50 --age 35
+  trainer enrich --days 30
+  trainer fitness --days 7
+  trainer status
+  trainer today
+  trainer summary --days 7
+  trainer why
+  trainer trends --weeks 4
+  trainer week --weeks 1
+  trainer goal --distance half --target 1:45:00 --date 2025-04-15
+  trainer dashboard
         """,
     )
 

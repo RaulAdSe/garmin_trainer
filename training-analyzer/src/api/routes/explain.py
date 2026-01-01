@@ -162,9 +162,11 @@ async def get_explained_readiness(
         )
 
     except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to get explained readiness: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to get explained readiness: {str(e)}"
+            detail="Failed to get explained readiness. Please try again later."
         )
 
 
@@ -248,9 +250,11 @@ async def get_explained_workout_recommendation(
         )
 
     except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to get explained workout recommendation: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to get explained workout recommendation: {str(e)}"
+            detail="Failed to get explained workout recommendation. Please try again later."
         )
 
 
@@ -360,9 +364,11 @@ async def get_explained_plan_session(
     except HTTPException:
         raise
     except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to explain session: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to explain session: {str(e)}"
+            detail="Failed to explain session. Please try again later."
         )
 
 

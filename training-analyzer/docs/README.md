@@ -1,6 +1,6 @@
-# Training Analyzer Documentation
+# trAIner Documentation
 
-Welcome to the Training Analyzer documentation. This folder contains comprehensive guides for understanding, setting up, and using the application.
+Welcome to the trAIner documentation. This folder contains comprehensive guides for understanding, setting up, and using the application.
 
 ---
 
@@ -28,7 +28,7 @@ New to the project? Start here:
 
 ## Project Overview
 
-Training Analyzer is an **AI-powered coaching application** that transforms Garmin training data into actionable insights using a multi-agent LLM system.
+trAIner is an **AI-powered coaching application** that transforms Garmin training data into actionable insights using a multi-agent LLM system.
 
 ### Core Features
 

@@ -1,6 +1,6 @@
 # Getting Started
 
-This guide will help you set up and run the Training Analyzer locally.
+This guide will help you set up and run trAIner locally.
 
 ---
 
@@ -119,7 +119,7 @@ curl -X POST http://localhost:8000/api/v1/garmin/sync \
 
 ## Using the CLI
 
-The Training Analyzer includes a powerful CLI for quick access:
+trAIner includes a powerful CLI for quick access:
 
 ```bash
 # Check current training status

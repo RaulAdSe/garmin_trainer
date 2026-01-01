@@ -1,40 +1,56 @@
 [project]
-name = "training-analyzer"
+name = "trainer"
 version = "0.1.0"
-description = "AI-powered workout analysis and coaching from Garmin data"
+description = "trAIner - AI-powered workout analysis and coaching from Garmin data"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     # Core
-    "rich>=13.0",
+    "rich>=13.0,<14.0.0",
     # API
-    "fastapi>=0.109.0",
-    "uvicorn[standard]>=0.27.0",
-    "pydantic>=2.5.0",
-    "pydantic-settings>=2.1.0",
+    "fastapi>=0.109.0,<1.0.0",
+    "uvicorn[standard]>=0.27.0,<1.0.0",
+    "pydantic>=2.5.0,<3.0.0",
+    "pydantic-settings>=2.1.0,<3.0.0",
     # LLM
-    "openai>=1.10.0",
-    "langgraph>=0.0.25",
-    "langchain-openai>=0.0.5",
+    "openai>=1.50.0,<2.0.0",
+    "langgraph>=0.0.25,<1.0.0",
+    "langchain-openai>=0.0.5,<1.0.0",
+    "langchain>=0.3.0,<1.0.0",
+    "langchain-anthropic>=0.3.0,<1.0.0",
+    "langchain-core>=0.3.0,<1.0.0",
+    "langfuse>=2.0.0,<3.0.0",
+    "tiktoken>=0.5.0,<1.0.0",
     # Utils
-    "python-dotenv>=1.0.0",
+    "python-dotenv>=1.0.0,<2.0.0",
     # FIT export
-    "fit-tool>=0.9.13",
+    "fit-tool>=0.9.13,<1.0.0",
     # Garmin Connect
-    "garminconnect>=0.2.0",
+    "garminconnect>=0.2.0,<1.0.0",
+    # Authentication
+    "PyJWT>=2.8.0,<3.0.0",
+    "bcrypt>=4.1.0,<5.0.0",
+    # Encryption (for Garmin credential storage)
+    "cryptography>=41.0.0,<46.0.0",
+    # Scheduling (for Garmin auto-sync)
+    "APScheduler>=3.10.0,<4.0.0",
+    # Rate limiting
+    "slowapi>=0.1.9,<1.0.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.4.0",
-    "pytest-cov>=4.0",
-    "pytest-asyncio>=0.23.0",
-    "httpx>=0.26.0",
-    "ruff>=0.1.0",
+    "pytest>=7.4.0,<9.0.0",
+    "pytest-cov>=4.0,<6.0.0",
+    "pytest-asyncio>=0.23.0,<1.0.0",
+    "httpx>=0.26.0,<1.0.0",
+    "ruff>=0.1.0,<1.0.0",
 ]
+# Note: agent dependencies (langchain, langchain-anthropic, langchain-core,
+# langfuse, tiktoken) are now in main dependencies as they're required for core functionality
 
 [project.scripts]
-training-analyzer = "src.cli:main"
+trainer = "src.cli:main"
 
 [build-system]
 requires = ["hatchling"]

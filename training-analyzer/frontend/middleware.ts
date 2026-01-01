@@ -21,9 +21,23 @@ const intlMiddleware = createMiddleware(routing);
 export default function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Skip API routes, static files, and Next.js internals
+  // For API routes, forward the Authorization header to the backend
+  if (pathname.startsWith('/api')) {
+    const requestHeaders = new Headers(request.headers);
+    // Ensure Authorization header is preserved through the rewrite
+    const authHeader = request.headers.get('Authorization');
+    if (authHeader) {
+      requestHeaders.set('Authorization', authHeader);
+    }
+    return NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
+  }
+
+  // Skip static files and Next.js internals
   if (
-    pathname.startsWith('/api') ||
     pathname.startsWith('/_next') ||
     pathname.startsWith('/_vercel') ||
     pathname.includes('.')
@@ -48,5 +62,6 @@ export default function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!api|_next|_vercel|.*\\..*).*)', '/'],
+  // Include API routes for header forwarding, exclude static files
+  matcher: ['/((?!_next|_vercel|.*\\..*).*)', '/'],
 };

@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS fitness_metrics (
 CREATE TABLE IF NOT EXISTS activity_metrics (
     activity_id TEXT PRIMARY KEY,
     date TEXT NOT NULL,
+    start_time TEXT,  -- Full ISO timestamp (e.g., "2024-01-15T07:30:00")
     activity_type TEXT,
     activity_name TEXT,
     hrss REAL,
@@ -61,6 +62,9 @@ CREATE TABLE IF NOT EXISTS activity_metrics (
 CREATE INDEX IF NOT EXISTS idx_activity_metrics_date ON activity_metrics(date);
 CREATE INDEX IF NOT EXISTS idx_fitness_metrics_date ON fitness_metrics(date);
 CREATE INDEX IF NOT EXISTS idx_activity_metrics_sport_type ON activity_metrics(sport_type);
+
+-- Composite indexes for common query patterns
+CREATE INDEX IF NOT EXISTS idx_activity_metrics_date_type ON activity_metrics(date, activity_type);
 
 -- =============================================================================
 -- Phase 2: Multi-sport Extensions - Power Zones Table
@@ -277,6 +281,278 @@ CREATE INDEX IF NOT EXISTS idx_garmin_fitness_date ON garmin_fitness_data(date);
 -- Insert default profile if not exists (using INSERT OR IGNORE)
 INSERT OR IGNORE INTO user_profile (id, max_hr, rest_hr, threshold_hr, age, gender)
 VALUES (1, 185, 55, 165, 30, 'male');
+
+-- =============================================================================
+-- Gamification System Tables
+-- =============================================================================
+
+-- Achievement definitions
+CREATE TABLE IF NOT EXISTS achievements (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL,
+    category TEXT NOT NULL,
+    icon TEXT NOT NULL,
+    xp_value INTEGER NOT NULL DEFAULT 25,
+    rarity TEXT DEFAULT 'common',
+    condition_type TEXT,
+    condition_value TEXT,
+    display_order INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- User achievement unlocks
+CREATE TABLE IF NOT EXISTS user_achievements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    achievement_id TEXT NOT NULL,
+    unlocked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    workout_id TEXT,
+    metadata_json TEXT,
+    FOREIGN KEY (achievement_id) REFERENCES achievements(id),
+    UNIQUE(achievement_id)
+);
+
+-- User progress tracking
+CREATE TABLE IF NOT EXISTS user_progress (
+    user_id TEXT PRIMARY KEY DEFAULT 'default',
+    total_xp INTEGER DEFAULT 0,
+    current_level INTEGER DEFAULT 1,
+    current_streak INTEGER DEFAULT 0,
+    longest_streak INTEGER DEFAULT 0,
+    streak_freeze_tokens INTEGER DEFAULT 0,
+    last_activity_date TEXT,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create indexes for gamification tables
+CREATE INDEX IF NOT EXISTS idx_user_achievements_unlocked ON user_achievements(unlocked_at);
+CREATE INDEX IF NOT EXISTS idx_achievements_category ON achievements(category);
+CREATE INDEX IF NOT EXISTS idx_user_progress_user_updated ON user_progress(user_id, updated_at);
+
+-- =============================================================================
+-- Strava Integration Tables
+-- =============================================================================
+
+-- Strava OAuth credentials storage
+CREATE TABLE IF NOT EXISTS strava_credentials (
+    user_id TEXT PRIMARY KEY DEFAULT 'default',
+    access_token TEXT NOT NULL,
+    refresh_token TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    athlete_id TEXT,
+    athlete_name TEXT,
+    scope TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- User preferences for Strava integration
+CREATE TABLE IF NOT EXISTS strava_preferences (
+    user_id TEXT PRIMARY KEY DEFAULT 'default',
+    auto_update_description BOOLEAN DEFAULT TRUE,
+    include_score BOOLEAN DEFAULT TRUE,
+    include_summary BOOLEAN DEFAULT TRUE,
+    include_link BOOLEAN DEFAULT TRUE,
+    use_extended_format BOOLEAN DEFAULT FALSE,
+    custom_footer TEXT,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Activity mapping (local activity <-> Strava activity)
+CREATE TABLE IF NOT EXISTS strava_activity_sync (
+    local_activity_id TEXT PRIMARY KEY,
+    strava_activity_id INTEGER NOT NULL,
+    sync_status TEXT DEFAULT 'pending',
+    last_synced_at TEXT,
+    description_updated BOOLEAN DEFAULT FALSE,
+    error_message TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- OAuth state tokens for CSRF protection (database-backed for multi-instance support)
+CREATE TABLE IF NOT EXISTS oauth_states (
+    state TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create indexes for Strava tables
+CREATE INDEX IF NOT EXISTS idx_strava_sync_status ON strava_activity_sync(sync_status);
+CREATE INDEX IF NOT EXISTS idx_strava_activity ON strava_activity_sync(strava_activity_id);
+CREATE INDEX IF NOT EXISTS idx_oauth_states_created ON oauth_states(created_at);
+
+-- =============================================================================
+-- Multi-User Authentication & Authorization Tables
+-- =============================================================================
+
+-- Core users table for multi-user support
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,                    -- UUID
+    email TEXT UNIQUE NOT NULL,
+    display_name TEXT,
+    avatar_url TEXT,
+    timezone TEXT DEFAULT 'UTC',
+    is_active INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create index for user lookups
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
+-- User sessions for session-based authentication
+CREATE TABLE IF NOT EXISTS user_sessions (
+    id TEXT PRIMARY KEY,                    -- Session token
+    user_id TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    user_agent TEXT,
+    ip_address TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Create indexes for session lookups
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON user_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires ON user_sessions(expires_at);
+
+-- =============================================================================
+-- Subscription & Billing Tables
+-- =============================================================================
+
+-- Subscription plan definitions
+CREATE TABLE IF NOT EXISTS subscription_plans (
+    id TEXT PRIMARY KEY,                    -- 'free', 'pro'
+    name TEXT NOT NULL,
+    price_cents INTEGER DEFAULT 0,          -- 0 for free, 999 for $9.99
+    stripe_price_id TEXT,                   -- Stripe Price ID
+    ai_analyses_per_month INTEGER,          -- NULL = unlimited
+    ai_plans_limit INTEGER,
+    ai_chat_messages_per_day INTEGER,
+    ai_workouts_per_month INTEGER,
+    history_days INTEGER,                   -- NULL = unlimited
+    is_active INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- User subscriptions linking users to plans
+CREATE TABLE IF NOT EXISTS user_subscriptions (
+    id TEXT PRIMARY KEY,                    -- UUID
+    user_id TEXT NOT NULL UNIQUE,
+    plan_id TEXT NOT NULL DEFAULT 'free',
+    status TEXT DEFAULT 'active',           -- 'active', 'canceled', 'past_due', 'trialing'
+    stripe_customer_id TEXT UNIQUE,
+    stripe_subscription_id TEXT UNIQUE,
+    current_period_start TEXT,
+    current_period_end TEXT,
+    cancel_at_period_end INTEGER DEFAULT 0,
+    trial_end TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (plan_id) REFERENCES subscription_plans(id)
+);
+
+-- Create indexes for subscription lookups
+CREATE INDEX IF NOT EXISTS idx_subscriptions_user ON user_subscriptions(user_id);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON user_subscriptions(status);
+
+-- User usage tracking per billing period
+CREATE TABLE IF NOT EXISTS user_usage (
+    id TEXT PRIMARY KEY,                    -- UUID
+    user_id TEXT NOT NULL,
+    period_start TEXT NOT NULL,             -- Start of billing period
+    period_end TEXT NOT NULL,               -- End of billing period
+    ai_analyses_used INTEGER DEFAULT 0,
+    ai_chat_messages_used INTEGER DEFAULT 0,
+    ai_workouts_generated INTEGER DEFAULT 0,
+    ai_tokens_used INTEGER DEFAULT 0,
+    ai_cost_cents INTEGER DEFAULT 0,        -- Cost tracking for analytics
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE(user_id, period_start)
+);
+
+-- Create index for usage lookups
+CREATE INDEX IF NOT EXISTS idx_user_usage_period ON user_usage(user_id, period_start DESC);
+
+-- =============================================================================
+-- Garmin Credential Storage & Sync Tables
+-- =============================================================================
+
+-- Encrypted Garmin credentials for auto-sync
+CREATE TABLE IF NOT EXISTS garmin_credentials (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL UNIQUE,
+    encrypted_email TEXT NOT NULL,
+    encrypted_password TEXT NOT NULL,
+    encryption_key_id TEXT NOT NULL,        -- Reference for key rotation
+    garmin_user_id TEXT,
+    garmin_display_name TEXT,
+    is_valid INTEGER DEFAULT 1,
+    last_validation_at TEXT,
+    validation_error TEXT,
+    failed_validation_count INTEGER DEFAULT 0,  -- Track failed validation attempts for security
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Create index for garmin credentials lookup
+CREATE INDEX IF NOT EXISTS idx_garmin_creds_user ON garmin_credentials(user_id);
+
+-- Garmin sync configuration per user
+CREATE TABLE IF NOT EXISTS garmin_sync_config (
+    user_id TEXT PRIMARY KEY,
+    auto_sync_enabled INTEGER DEFAULT 1,
+    sync_frequency TEXT DEFAULT 'daily',    -- 'hourly', 'daily', 'weekly'
+    sync_time TEXT DEFAULT '06:00',         -- Preferred sync time (UTC)
+    sync_activities INTEGER DEFAULT 1,
+    sync_wellness INTEGER DEFAULT 1,
+    sync_fitness_metrics INTEGER DEFAULT 1,
+    initial_sync_days INTEGER DEFAULT 365,  -- First sync: 1 year back
+    incremental_sync_days INTEGER DEFAULT 7,-- Subsequent: 7 days back
+    min_sync_interval_minutes INTEGER DEFAULT 60,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Garmin sync history/audit log
+CREATE TABLE IF NOT EXISTS garmin_sync_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    sync_type TEXT NOT NULL,                -- 'manual', 'scheduled', 'webhook'
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    duration_seconds INTEGER,
+    status TEXT DEFAULT 'running',          -- 'running', 'completed', 'failed', 'partial'
+    activities_synced INTEGER DEFAULT 0,
+    wellness_days_synced INTEGER DEFAULT 0,
+    fitness_days_synced INTEGER DEFAULT 0,
+    sync_from_date TEXT,
+    sync_to_date TEXT,
+    error_message TEXT,
+    retry_count INTEGER DEFAULT 0,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Create indexes for sync history
+CREATE INDEX IF NOT EXISTS idx_sync_history_user ON garmin_sync_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_sync_history_started ON garmin_sync_history(started_at DESC);
+
+-- =============================================================================
+-- User Consent Tracking
+-- =============================================================================
+
+-- User consent for LLM data sharing and privacy preferences
+CREATE TABLE IF NOT EXISTS user_consent (
+    user_id TEXT PRIMARY KEY,
+    llm_data_sharing_consent INTEGER DEFAULT 0,  -- 0 = not consented, 1 = consented
+    consent_date TEXT,                           -- ISO timestamp when consent was given/withdrawn
+    consent_version TEXT DEFAULT 'v1',           -- Version of consent terms
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create index for consent lookups
+CREATE INDEX IF NOT EXISTS idx_user_consent_date ON user_consent(consent_date);
 """
 
 # Separate schema for updating user profile

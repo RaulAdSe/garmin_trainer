@@ -169,7 +169,9 @@ async def export_to_fit(request: ExportWorkoutRequest):
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate FIT file: {str(e)}")
+        import logging
+        logging.getLogger(__name__).error(f"Failed to generate FIT file: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate FIT file. Please try again later.")
 
 
 @router.post("/fit/download")
@@ -207,7 +209,9 @@ async def export_to_fit_download(
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate FIT file: {str(e)}")
+        import logging
+        logging.getLogger(__name__).error(f"Failed to generate FIT file: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate FIT file. Please try again later.")
 
 
 @router.post("/fit/batch", response_model=BatchExportResponse)
@@ -245,7 +249,9 @@ async def export_batch_to_fit(request: BatchExportRequest):
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate FIT files: {str(e)}")
+        import logging
+        logging.getLogger(__name__).error(f"Failed to generate FIT files: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate FIT files. Please try again later.")
 
 
 @router.post("/validate")

@@ -209,25 +209,37 @@ Respond with ONLY the intent name (e.g., "WORKOUT_REQUEST"). No explanation."""
 class ConversationalCoach:
     """
     AI-powered conversational coach for personalized training guidance.
-    
+
     Features:
     - Context-aware recommendations
     - Natural language workout requests
     - Post-workout coaching feedback
     - Adaptive training advice
     """
-    
+
     def __init__(
         self,
         llm_client: Optional[LLMClient] = None,
         fatigue_service: Optional[FatiguePredictionService] = None,
         adaptation_engine: Optional[WorkoutAdaptationEngine] = None,
+        user_id: Optional[str] = None,
     ):
         """Initialize the conversational coach."""
         self._llm_client = llm_client
         self._fatigue_service = fatigue_service or get_fatigue_service()
         self._adaptation_engine = adaptation_engine or get_adaptation_engine()
+        self._user_id = user_id
         self._conversation_history: List[Dict[str, str]] = []
+
+    @property
+    def user_id(self) -> Optional[str]:
+        """Get the user ID for usage tracking."""
+        return self._user_id
+
+    @user_id.setter
+    def user_id(self, value: Optional[str]) -> None:
+        """Set the user ID for usage tracking."""
+        self._user_id = value
     
     @property
     def llm(self) -> LLMClient:
@@ -303,6 +315,8 @@ class ConversationalCoach:
                 model=ModelType.FAST,
                 temperature=0.0,
                 max_tokens=50,
+                user_id=self._user_id,
+                analysis_type="intent_classification",
             )
             
             intent_str = response.strip().upper()
@@ -408,8 +422,10 @@ Keep your response conversational but specific."""
                 model=ModelType.SMART,
                 temperature=0.7,
                 max_tokens=500,
+                user_id=self._user_id,
+                analysis_type="coach_response",
             )
-            
+
             # Determine recommended intensity from context
             if context.current_fatigue_level in ["exhausted", "fatigued"]:
                 intensity = "easy"
@@ -455,8 +471,10 @@ Be specific about intensity recommendations."""
                 model=ModelType.SMART,
                 temperature=0.7,
                 max_tokens=400,
+                user_id=self._user_id,
+                analysis_type="coach_response",
             )
-            
+
             return CoachingResponse(
                 intent=CoachingIntent.ADVICE_REQUEST,
                 message=response,
@@ -486,8 +504,10 @@ Acknowledge what went well and provide suggestions for improvement."""
                 model=ModelType.SMART,
                 temperature=0.7,
                 max_tokens=400,
+                user_id=self._user_id,
+                analysis_type="coach_response",
             )
-            
+
             return CoachingResponse(
                 intent=CoachingIntent.FEEDBACK_REQUEST,
                 message=response,
@@ -530,8 +550,10 @@ Consider their current fatigue and any upcoming races."""
                 model=ModelType.SMART,
                 temperature=0.7,
                 max_tokens=500,
+                user_id=self._user_id,
+                analysis_type="plan_generation",
             )
-            
+
             return CoachingResponse(
                 intent=CoachingIntent.PLAN_QUESTION,
                 message=response,
@@ -609,8 +631,10 @@ Be specific and actionable where possible."""
                 model=ModelType.SMART,
                 temperature=0.7,
                 max_tokens=500,
+                user_id=self._user_id,
+                analysis_type="coach_response",
             )
-            
+
             return CoachingResponse(
                 intent=CoachingIntent.GENERAL_QUESTION,
                 message=response,

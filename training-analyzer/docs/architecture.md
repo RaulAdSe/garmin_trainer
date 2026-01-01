@@ -1,12 +1,12 @@
-# Training Analyzer Architecture
+# trAIner Architecture
 
-This document explains the technical architecture and data flow of the Training Analyzer application.
+This document explains the technical architecture and data flow of the trAIner application.
 
 ---
 
 ## Overview
 
-Training Analyzer is an **AI-powered coaching application** that combines Garmin training data with a multi-agent LLM system to provide personalized workout analysis, training plan generation, and structured workout design.
+trAIner is an **AI-powered coaching application** that combines Garmin training data with a multi-agent LLM system to provide personalized workout analysis, training plan generation, and structured workout design.
 
 ```
 ┌──────────────────────┐     ┌───────────────────┐     ┌───────────────────┐

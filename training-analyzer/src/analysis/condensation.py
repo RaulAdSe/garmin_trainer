@@ -248,6 +248,80 @@ class SplitsSummary:
 
 
 @dataclass
+class CadenceSummary:
+    """Condensed cadence time-series summary for running/cycling."""
+
+    # Central tendency
+    mean: float = 0.0  # steps/min for running, rpm for cycling
+    std_dev: float = 0.0
+    cv: float = 0.0  # Coefficient of variation (%)
+
+    # Temporal patterns
+    trend: TrendDirection = TrendDirection.STEADY
+    trend_slope: float = 0.0  # change per minute (positive = increasing)
+
+    # Peak/low analysis
+    peak_cadence: int = 0
+    min_cadence: int = 0
+    peak_time_pct: float = 0.0  # When peak occurred (% of workout)
+
+    # Zone analysis (for running: optimal is typically 170-180 spm)
+    time_in_optimal_pct: float = 0.0  # % time in optimal cadence zone
+    optimal_zone: tuple = (170, 185)  # Default running optimal zone
+
+    # Form indicators
+    cadence_drop_pct: float = 0.0  # Drop from first 25% to last 25%
+    is_consistent: bool = True  # CV < 8%
+
+    # Activity type (determines interpretation)
+    is_running: bool = True  # True = spm, False = rpm
+
+    def to_prompt_text(self) -> str:
+        """Format as concise text for LLM prompt."""
+        if self.mean == 0:
+            return ""
+
+        lines = []
+        unit = "spm" if self.is_running else "rpm"
+
+        # Consistency indicator
+        if self.cv < 5:
+            stability = "very consistent"
+        elif self.cv < 8:
+            stability = "consistent"
+        elif self.cv < 12:
+            stability = "moderate variability"
+        else:
+            stability = "high variability"
+
+        lines.append(f"Cadence: avg {self.mean:.0f} {unit}, {stability} (CV={self.cv:.1f}%)")
+
+        # Trend analysis
+        if self.trend != TrendDirection.STEADY:
+            if self.trend == TrendDirection.DECELERATING:
+                lines.append(f"Cadence trend: decreasing (form fatigue indicator)")
+            elif self.trend == TrendDirection.ACCELERATING:
+                lines.append(f"Cadence trend: increasing")
+
+        # Cadence drop (indicator of fatigue)
+        if self.cadence_drop_pct > 5:
+            lines.append(f"Cadence dropped {self.cadence_drop_pct:.0f}% in final quarter (fatigue sign)")
+        elif self.cadence_drop_pct < -5:
+            lines.append(f"Cadence increased {-self.cadence_drop_pct:.0f}% in final quarter (strong finish)")
+
+        # Optimal zone time (running only - 170-185 spm is generally optimal)
+        if self.is_running and self.time_in_optimal_pct > 0:
+            if self.time_in_optimal_pct >= 80:
+                lines.append(f"Optimal cadence zone: {self.time_in_optimal_pct:.0f}% (excellent form)")
+            elif self.time_in_optimal_pct >= 50:
+                lines.append(f"Optimal cadence zone: {self.time_in_optimal_pct:.0f}%")
+            elif self.mean < 165:
+                lines.append(f"Low cadence ({self.mean:.0f} spm) - consider increasing turnover")
+
+        return " | ".join(lines)
+
+
+@dataclass
 class CondensedWorkoutData:
     """Complete condensed workout data for LLM consumption."""
 
@@ -255,6 +329,7 @@ class CondensedWorkoutData:
     pace_summary: Optional[PaceSummary] = None
     elevation_summary: Optional[ElevationSummary] = None
     splits_summary: Optional[SplitsSummary] = None
+    cadence_summary: Optional[CadenceSummary] = None
 
     # Quick insights (pre-computed coaching observations)
     insights: List[str] = field(default_factory=list)
@@ -278,6 +353,9 @@ class CondensedWorkoutData:
 
         if self.splits_summary and self.splits_summary.total_splits > 0:
             sections.append(self.splits_summary.to_prompt_text())
+
+        if self.cadence_summary and self.cadence_summary.mean > 0:
+            sections.append(self.cadence_summary.to_prompt_text())
 
         # Add insights
         if self.insights:
@@ -623,11 +701,98 @@ def calculate_splits_summary(splits: List[Dict[str, Any]]) -> SplitsSummary:
     return summary
 
 
+def calculate_cadence_summary(
+    cadence_points: List[Dict[str, Any]],
+    is_running: bool = True,
+    duration_sec: int = 0
+) -> CadenceSummary:
+    """
+    Calculate condensed cadence summary from time-series data.
+
+    Args:
+        cadence_points: List of {timestamp, cadence} dicts
+        is_running: True for running (spm), False for cycling (rpm)
+        duration_sec: Total workout duration in seconds
+
+    Returns:
+        CadenceSummary with statistics and coaching insights
+    """
+    summary = CadenceSummary(is_running=is_running)
+
+    if not cadence_points or len(cadence_points) < 2:
+        return summary
+
+    # Extract cadence values
+    cadences = [p.get("cadence", 0) for p in cadence_points if p.get("cadence", 0) > 0]
+
+    if not cadences:
+        return summary
+
+    # Calculate basic statistics
+    summary.mean = statistics.mean(cadences)
+    summary.std_dev = statistics.stdev(cadences) if len(cadences) > 1 else 0.0
+    summary.cv = (summary.std_dev / summary.mean * 100) if summary.mean > 0 else 0.0
+    summary.is_consistent = summary.cv < 8
+
+    # Peak/min values
+    summary.peak_cadence = max(cadences)
+    summary.min_cadence = min(cadences)
+
+    # Find when peak occurred (as % of workout)
+    peak_idx = cadences.index(summary.peak_cadence)
+    summary.peak_time_pct = (peak_idx / len(cadences)) * 100 if cadences else 0
+
+    # Cadence drop analysis (first 25% vs last 25%)
+    n = len(cadences)
+    quarter = max(1, n // 4)
+    first_quarter_avg = statistics.mean(cadences[:quarter])
+    last_quarter_avg = statistics.mean(cadences[-quarter:])
+
+    if first_quarter_avg > 0:
+        summary.cadence_drop_pct = ((first_quarter_avg - last_quarter_avg) / first_quarter_avg) * 100
+
+    # Trend analysis using linear regression slope
+    if n >= 5:
+        x_mean = (n - 1) / 2
+        y_mean = summary.mean
+
+        numerator = sum((i - x_mean) * (c - y_mean) for i, c in enumerate(cadences))
+        denominator = sum((i - x_mean) ** 2 for i in range(n))
+
+        if denominator > 0:
+            # Slope in cadence per sample
+            slope = numerator / denominator
+            # Convert to meaningful units (per minute if we have duration)
+            if duration_sec > 0 and n > 1:
+                samples_per_minute = n / (duration_sec / 60)
+                summary.trend_slope = slope * samples_per_minute
+            else:
+                summary.trend_slope = slope
+
+            # Determine trend direction
+            if abs(summary.trend_slope) < 0.5:
+                summary.trend = TrendDirection.STEADY
+            elif summary.trend_slope > 0.5:
+                summary.trend = TrendDirection.ACCELERATING
+            else:
+                summary.trend = TrendDirection.DECELERATING
+
+    # Optimal zone analysis (for running: 170-185 spm is generally optimal)
+    if is_running:
+        optimal_min, optimal_max = 170, 185
+        summary.optimal_zone = (optimal_min, optimal_max)
+        in_optimal = sum(1 for c in cadences if optimal_min <= c <= optimal_max)
+        summary.time_in_optimal_pct = (in_optimal / len(cadences)) * 100 if cadences else 0
+
+    return summary
+
+
 def extract_insights(
     hr_summary: Optional[HRSummary],
     pace_summary: Optional[PaceSummary],
     elevation_summary: Optional[ElevationSummary],
-    splits_summary: Optional[SplitsSummary]
+    splits_summary: Optional[SplitsSummary],
+    cadence_summary: Optional[CadenceSummary] = None
 ) -> List[str]:
     """
     Extract coaching-relevant insights from summaries.
@@ -680,6 +845,30 @@ def extract_insights(
         elif splits_summary.fastest_split == splits_summary.total_splits:
             insights.append("Fastest km was last - strong finishing kick")
 
+    # Cadence insights
+    if cadence_summary and cadence_summary.mean > 0:
+        if cadence_summary.is_running:
+            # Running cadence insights
+            if cadence_summary.mean < 160:
+                insights.append(f"Low running cadence ({cadence_summary.mean:.0f} spm) - consider increasing turnover")
+            elif cadence_summary.mean >= 180:
+                insights.append(f"Excellent running cadence ({cadence_summary.mean:.0f} spm)")
+
+            if cadence_summary.cadence_drop_pct > 8:
+                insights.append(f"Cadence dropped {cadence_summary.cadence_drop_pct:.0f}% in final quarter (fatigue sign)")
+
+            if cadence_summary.time_in_optimal_pct >= 85:
+                insights.append("Cadence consistently in optimal zone (170-185 spm)")
+        else:
+            # Cycling cadence insights
+            if cadence_summary.mean < 80:
+                insights.append(f"Low cycling cadence ({cadence_summary.mean:.0f} rpm) - consider higher gear")
+            elif cadence_summary.mean > 100:
+                insights.append(f"High cycling cadence ({cadence_summary.mean:.0f} rpm)")
+
+        if cadence_summary.cv > 15:
+            insights.append("High cadence variability - possible interval workout")
+
     return insights
 
 
@@ -688,7 +877,8 @@ def condense_workout_data(
     splits: Optional[List[Dict[str, Any]]] = None,
     hr_zones: Optional[Dict[int, Tuple[int, int]]] = None,
     duration_sec: int = 0,
-    distance_km: float = 0.0
+    distance_km: float = 0.0,
+    activity_type: Optional[str] = None
 ) -> CondensedWorkoutData:
     """
     Main function to condense all workout time-series data.
@@ -699,11 +889,16 @@ def condense_workout_data(
         hr_zones: Dict of zone -> (min_hr, max_hr)
         duration_sec: Total workout duration in seconds
         distance_km: Total distance in km
+        activity_type: Activity type (e.g., "running", "cycling") for cadence interpretation
 
     Returns:
         CondensedWorkoutData ready for LLM consumption
     """
     condensed = CondensedWorkoutData()
+
+    # Determine if this is a running activity for cadence interpretation
+    activity_type_lower = (activity_type or "").lower()
+    is_running = "run" in activity_type_lower or "walk" in activity_type_lower
 
     if time_series:
         # HR summary
@@ -720,6 +915,13 @@ def condense_workout_data(
         if elevation_points:
             condensed.elevation_summary = calculate_elevation_summary(elevation_points, distance_km)
 
+        # Cadence summary
+        cadence_points = time_series.get("cadence", [])
+        if cadence_points:
+            condensed.cadence_summary = calculate_cadence_summary(
+                cadence_points, is_running=is_running, duration_sec=duration_sec
+            )
+
     # Splits summary
     if splits:
         condensed.splits_summary = calculate_splits_summary(splits)
@@ -733,7 +935,8 @@ def condense_workout_data(
         condensed.hr_summary,
         condensed.pace_summary,
         condensed.elevation_summary,
-        condensed.splits_summary
+        condensed.splits_summary,
+        condensed.cadence_summary
     )
 
     return condensed

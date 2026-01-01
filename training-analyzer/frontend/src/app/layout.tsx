@@ -2,8 +2,12 @@ import type { Metadata, Viewport } from "next";
 import "@/styles/globals.css";
 
 export const metadata: Metadata = {
-  title: "Reactive Training",
+  title: "trAIner",
   description: "AI-powered training analysis and coaching",
+  icons: {
+    icon: "/icons/logo.png",
+    apple: "/icons/logo.png",
+  },
 };
 
 export const viewport: Viewport = {

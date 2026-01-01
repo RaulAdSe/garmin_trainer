@@ -1,5 +1,5 @@
 """
-Multi-Agent Orchestrator for the Reactive Training App.
+Multi-Agent Orchestrator for the trAIner App.
 
 Coordinates between different agents to handle complex multi-step tasks
 that require analysis, planning, and workout design.
