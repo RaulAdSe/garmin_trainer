@@ -783,5 +783,209 @@
       "rest": "Rest Day",
       "fullRecovery": "Full Rest"
     }
+  },
+  "runWalk": {
+    "title": "Run/Walk Intervals",
+    "subtitle": "Couch-to-5K style interval training",
+    "run": "Run",
+    "walk": "Walk",
+    "ready": "Ready",
+    "repetitions": "reps",
+    "minutes": "min",
+    "minutesTotal": "minutes total",
+    "continuousRun": "Continuous running - no walk breaks",
+    "templatesTitle": "Choose Your Program",
+    "templatesSubtitle": "Progressive run/walk intervals to build your endurance",
+    "startWorkout": "Start {name} Workout",
+    "builderTitle": "Custom Intervals",
+    "builderSubtitle": "Create your own run/walk workout",
+    "runDuration": "Run Duration",
+    "walkDuration": "Walk Duration",
+    "noWalk": "No walk (continuous)",
+    "repetitionsLabel": "Number of Repetitions",
+    "totalWorkout": "Total Workout Time",
+    "totalRun": "Total Running",
+    "totalWalk": "Total Walking",
+    "workoutPreview": "Workout Structure Preview",
+    "previewNote": "{intervals} intervals across {reps} repetitions",
+    "startCustomWorkout": "Start Custom Workout",
+    "saveAsTemplate": "Save as Template",
+    "saveTemplateTitle": "Save Custom Template",
+    "saveTemplateSubtitle": "Give your workout a name to save it for later",
+    "templateNameLabel": "Template Name",
+    "templateNamePlaceholder": "e.g., My 5K Prep",
+    "cancel": "Cancel",
+    "saveTemplate": "Save Template",
+    "getReady": "Get Ready!",
+    "workoutSummary": "{run} run / {walk} walk x {reps} intervals",
+    "startTimer": "Start Timer",
+    "remaining": "remaining",
+    "intervalProgress": "Interval {current} of {total}",
+    "resume": "Resume",
+    "pause": "Pause",
+    "skip": "Skip",
+    "stop": "Stop",
+    "stopConfirmTitle": "Stop Workout?",
+    "stopConfirmMessage": "Are you sure you want to stop? Your progress will be lost.",
+    "continueWorkout": "Keep Going",
+    "stopWorkout": "Stop Workout",
+    "workoutComplete": "Workout Complete!",
+    "greatJob": "Great job! You crushed it!",
+    "duration": "Duration",
+    "intervalsCompleted": "intervals",
+    "startAgain": "Start Again",
+    "templates": {
+      "week-1": {
+        "name": "Week 1",
+        "description": "1 min run, 1.5 min walk"
+      },
+      "week-2": {
+        "name": "Week 2",
+        "description": "1.5 min run, 1.5 min walk"
+      },
+      "week-3": {
+        "name": "Week 3",
+        "description": "2 min run, 2 min walk"
+      },
+      "week-4": {
+        "name": "Week 4",
+        "description": "3 min run, 1.5 min walk"
+      },
+      "week-5": {
+        "name": "Week 5",
+        "description": "5 min run, 1 min walk"
+      },
+      "week-6": {
+        "name": "Week 6",
+        "description": "8 min run, 1 min walk"
+      },
+      "week-7": {
+        "name": "Week 7",
+        "description": "10 min run, 1 min walk"
+      },
+      "week-8": {
+        "name": "Week 8",
+        "description": "15 min continuous"
+      }
+    }
+  },
+  "rpe": {
+    "title": "Rate of Perceived Exertion",
+    "rpeValue": "RPE {value}",
+    "selectHint": "Tap a number to see details about that effort level",
+    "description": "Description",
+    "breathing": "Breathing",
+    "talkTest": "Talk Test",
+    "levels": {
+      "veryLight": "Very Light",
+      "light": "Light",
+      "moderate": "Moderate",
+      "hard": "Hard",
+      "maximum": "Maximum"
+    },
+    "descriptions": {
+      "barelyMoving": "Barely moving",
+      "easyEffort": "Easy effort",
+      "comfortable": "Comfortable",
+      "challenging": "Challenging",
+      "allOut": "All-out"
+    },
+    "breathingLevels": {
+      "normal": "Normal",
+      "slightlyElevated": "Slightly elevated",
+      "noticeable": "Noticeable",
+      "heavy": "Heavy",
+      "gasping": "Gasping"
+    },
+    "talkTestLevels": {
+      "fullConversation": "Full conversation",
+      "sentences": "Can speak in sentences",
+      "phrases": "Can speak in phrases",
+      "fewWords": "Few words only",
+      "cantTalk": "Can't talk"
+    }
+  },
+  "manualWorkout": {
+    "title": "Log Workout",
+    "subtitle": "Record your workout without a device",
+    "name": "Workout Name",
+    "namePlaceholder": "e.g., Morning Run",
+    "nameHint": "Optional - auto-generated if left blank",
+    "date": "Date",
+    "activityType": "Activity Type",
+    "duration": "Duration (min)",
+    "durationPlaceholder": "45",
+    "durationHint": "How long did you exercise?",
+    "distance": "Distance (km)",
+    "distancePlaceholder": "5.0",
+    "distanceHint": "Optional",
+    "rpe": "How hard was it?",
+    "notes": "Notes",
+    "notesPlaceholder": "How did the workout feel? Any observations?",
+    "notesHint": "Optional notes about your workout",
+    "estimatedLoad": "Estimated Training Load",
+    "loadUnits": "TSS",
+    "loadExplanation": "Based on duration and effort (session-RPE method)",
+    "submit": "Log Workout",
+    "submitting": "Saving...",
+    "activityTypes": {
+      "running": "Running",
+      "cycling": "Cycling",
+      "swimming": "Swimming",
+      "walking": "Walking",
+      "hiking": "Hiking",
+      "strength": "Strength Training",
+      "yoga": "Yoga",
+      "other": "Other"
+    },
+    "errors": {
+      "dateRequired": "Date is required",
+      "durationRequired": "Duration is required",
+      "durationTooShort": "Duration must be at least 1 minute",
+      "durationTooLong": "Duration cannot exceed 720 minutes",
+      "distanceInvalid": "Distance must be a positive number",
+      "distanceTooLong": "Distance cannot exceed 500 km",
+      "rpeRequired": "Please select your perceived effort",
+      "activityTypeRequired": "Please select an activity type"
+    },
+    "success": {
+      "title": "Workout Logged!",
+      "message": "Your {activityType} has been saved with an estimated load of {load}."
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Customize your experience",
+    "beginner": {
+      "title": "Beginner Mode",
+      "subtitle": "Simplified interface for new runners",
+      "toggleLabel": "Enable Beginner Mode",
+      "statusEnabled": "On - Showing simplified metrics",
+      "statusDisabled": "Off - Showing all metrics",
+      "benefitsTitle": "What Beginner Mode does:",
+      "benefit1": "Simplifies the dashboard with only essential metrics",
+      "benefit2": "Shows RPE (perceived effort) instead of complex heart rate data",
+      "benefit3": "Provides guided explanations for key concepts",
+      "benefit4": "Gradually reveals advanced features as you progress",
+      "infoTitle": "Perfect for new runners",
+      "infoDescription": "Beginner mode helps you focus on building consistency without being overwhelmed by numbers. You can disable it anytime to see advanced metrics.",
+      "confirmDisableTitle": "Disable Beginner Mode?",
+      "confirmDisableMessage": "This will show all advanced metrics like CTL, ATL, TSB, and detailed heart rate zones. You can always re-enable it later.",
+      "confirmDisableButton": "Show All Metrics",
+      "errorToggle": "Failed to update beginner mode. Please try again."
+    },
+    "preferences": {
+      "title": "Display Preferences",
+      "showHRMetrics": "Show Heart Rate Metrics",
+      "showHRMetricsHint": "Display heart rate zones and HR-based training data",
+      "showAdvancedMetrics": "Show Advanced Metrics",
+      "showAdvancedMetricsHint": "Display CTL, ATL, TSB, and other training load metrics",
+      "preferredScale": "Preferred Intensity Scale",
+      "scaleHR": "Heart Rate Zones",
+      "scaleRPE": "Rate of Perceived Exertion",
+      "scalePace": "Pace Zones",
+      "weeklyMileageCap": "Weekly Mileage Cap Warnings",
+      "weeklyMileageCapHint": "Get alerts when approaching 10% weekly increase limit"
+    }
   }
 }

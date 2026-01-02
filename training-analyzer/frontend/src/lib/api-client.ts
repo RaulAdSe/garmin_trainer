@@ -1314,4 +1314,139 @@ export async function getStravaSyncStatus(
   return handleResponse<StravaSyncStatus>(response);
 }
 
+// ============================================
+// Mileage Cap API (10% Rule)
+// ============================================
+
+import type {
+  MileageCapData,
+  PlannedRunCheckData,
+  WeeklyComparisonData,
+  TenPercentRuleInfo,
+} from './types';
+
+// Get current mileage cap status
+export async function getMileageCap(
+  targetDate?: string
+): Promise<MileageCapData> {
+  const params = new URLSearchParams();
+  if (targetDate) params.set('target_date', targetDate);
+
+  const queryString = params.toString();
+  const url = `${API_BASE}/athlete/mileage-cap${queryString ? `?${queryString}` : ''}`;
+
+  const response = await authFetch(url);
+  return handleResponse<MileageCapData>(response);
+}
+
+// Check if a planned run would exceed the cap
+export async function checkPlannedRun(
+  plannedKm: number,
+  targetDate?: string
+): Promise<PlannedRunCheckData> {
+  const params = new URLSearchParams();
+  if (targetDate) params.set('target_date', targetDate);
+
+  const queryString = params.toString();
+  const url = `${API_BASE}/athlete/mileage-cap/check${queryString ? `?${queryString}` : ''}`;
+
+  const response = await authFetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ plannedKm }),
+  });
+  return handleResponse<PlannedRunCheckData>(response);
+}
+
+// Get weekly mileage comparison
+export async function getWeeklyComparison(
+  targetDate?: string
+): Promise<WeeklyComparisonData> {
+  const params = new URLSearchParams();
+  if (targetDate) params.set('target_date', targetDate);
+
+  const queryString = params.toString();
+  const url = `${API_BASE}/athlete/mileage-cap/comparison${queryString ? `?${queryString}` : ''}`;
+
+  const response = await authFetch(url);
+  return handleResponse<WeeklyComparisonData>(response);
+}
+
+// Get information about the 10% rule (no auth required)
+export async function getTenPercentRuleInfo(): Promise<TenPercentRuleInfo> {
+  const response = await fetch(`${API_BASE}/athlete/mileage-cap/info`);
+  return handleResponse<TenPercentRuleInfo>(response);
+}
+
+// ============================================
+// User Preferences API (Beginner Mode)
+// ============================================
+
+import type {
+  UserPreferences,
+  UpdatePreferencesRequest,
+  ToggleBeginnerModeResponse,
+  BeginnerModeStatus,
+} from './types';
+
+// Get user preferences
+export async function getUserPreferences(): Promise<UserPreferences> {
+  const response = await authFetch(`${API_BASE}/preferences`);
+
+  // Return default preferences for 401 errors (not logged in)
+  if (response.status === 401) {
+    return {
+      user_id: '',
+      beginner_mode_enabled: false,
+      beginner_mode_start_date: null,
+      show_hr_metrics: true,
+      show_advanced_metrics: true,
+      preferred_intensity_scale: 'hr',
+      weekly_mileage_cap_enabled: false,
+    };
+  }
+
+  return handleResponse<UserPreferences>(response);
+}
+
+// Update user preferences
+export async function updateUserPreferences(
+  prefs: UpdatePreferencesRequest
+): Promise<UserPreferences> {
+  const response = await authFetch(`${API_BASE}/preferences`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(prefs),
+  });
+  return handleResponse<UserPreferences>(response);
+}
+
+// Toggle beginner mode
+export async function toggleBeginnerMode(): Promise<ToggleBeginnerModeResponse> {
+  const response = await authFetch(`${API_BASE}/preferences/toggle-beginner-mode`, {
+    method: 'POST',
+  });
+  return handleResponse<ToggleBeginnerModeResponse>(response);
+}
+
+// Get beginner mode status
+export async function getBeginnerModeStatus(): Promise<BeginnerModeStatus> {
+  const response = await authFetch(`${API_BASE}/preferences/beginner-mode-status`);
+
+  // Return default status for 401 errors (not logged in)
+  if (response.status === 401) {
+    return {
+      enabled: false,
+      days_in_beginner_mode: null,
+      start_date: null,
+    };
+  }
+
+  return handleResponse<BeginnerModeStatus>(response);
+}
+
 export { ApiClientError };

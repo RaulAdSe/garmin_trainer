@@ -52,6 +52,23 @@ from .swim import (
     analyze_swim_session,
     estimate_css_from_race_times,
 )
+from .vdot import (
+    # Core VDOT calculations
+    calculate_vdot,
+    get_pace_zones,
+    predict_race_times,
+    calculate_vdot_from_race,
+    calculate_equivalent_performances,
+    parse_race_time,
+    # Data classes
+    PaceZone,
+    VDOTCalculation,
+    RaceDistance as VDOTRaceDistance,
+    # Utilities
+    pace_km_to_mile,
+    pace_mile_to_km,
+    format_pace_per_mile,
+)
 
 __all__ = [
     # Load calculations
@@ -100,4 +117,17 @@ __all__ = [
     "analyze_stroke_efficiency",
     "analyze_swim_session",
     "estimate_css_from_race_times",
+    # VDOT calculations
+    "calculate_vdot",
+    "get_pace_zones",
+    "predict_race_times",
+    "calculate_vdot_from_race",
+    "calculate_equivalent_performances",
+    "parse_race_time",
+    "PaceZone",
+    "VDOTCalculation",
+    "VDOTRaceDistance",
+    "pace_km_to_mile",
+    "pace_mile_to_km",
+    "format_pace_per_mile",
 ]

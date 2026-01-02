@@ -783,5 +783,174 @@
       "rest": "Dia de Descanso",
       "fullRecovery": "Descanso Total"
     }
+  },
+  "runWalk": {
+    "title": "Intervalos Correr/Caminar",
+    "subtitle": "Entrenamiento por intervalos estilo Couch-to-5K",
+    "run": "Correr",
+    "walk": "Caminar",
+    "ready": "Listo",
+    "repetitions": "reps",
+    "minutes": "min",
+    "minutesTotal": "minutos en total",
+    "continuousRun": "Carrera continua - sin pausas para caminar",
+    "templatesTitle": "Elige Tu Programa",
+    "templatesSubtitle": "Intervalos progresivos de correr/caminar para aumentar tu resistencia",
+    "startWorkout": "Iniciar Entrenamiento {name}",
+    "builderTitle": "Intervalos Personalizados",
+    "builderSubtitle": "Crea tu propio entrenamiento de correr/caminar",
+    "runDuration": "Duracion de Carrera",
+    "walkDuration": "Duracion de Caminata",
+    "noWalk": "Sin caminar (continuo)",
+    "repetitionsLabel": "Numero de Repeticiones",
+    "totalWorkout": "Tiempo Total del Entrenamiento",
+    "totalRun": "Total Corriendo",
+    "totalWalk": "Total Caminando",
+    "workoutPreview": "Vista Previa de la Estructura",
+    "previewNote": "{intervals} intervalos en {reps} repeticiones",
+    "startCustomWorkout": "Iniciar Entrenamiento Personalizado",
+    "saveAsTemplate": "Guardar como Plantilla",
+    "saveTemplateTitle": "Guardar Plantilla Personalizada",
+    "saveTemplateSubtitle": "Dale un nombre a tu entrenamiento para guardarlo",
+    "templateNameLabel": "Nombre de la Plantilla",
+    "templateNamePlaceholder": "ej., Mi Preparacion 5K",
+    "cancel": "Cancelar",
+    "saveTemplate": "Guardar Plantilla",
+    "getReady": "Preparate!",
+    "workoutSummary": "{run} correr / {walk} caminar x {reps} intervalos",
+    "startTimer": "Iniciar Temporizador",
+    "remaining": "restante",
+    "intervalProgress": "Intervalo {current} de {total}",
+    "resume": "Continuar",
+    "pause": "Pausar",
+    "skip": "Saltar",
+    "stop": "Parar",
+    "stopConfirmTitle": "Parar Entrenamiento?",
+    "stopConfirmMessage": "Estas seguro de que quieres parar? Se perdera tu progreso.",
+    "continueWorkout": "Seguir",
+    "stopWorkout": "Parar Entrenamiento",
+    "workoutComplete": "Entrenamiento Completado!",
+    "greatJob": "Excelente trabajo! Lo lograste!",
+    "duration": "Duracion",
+    "intervalsCompleted": "intervalos",
+    "startAgain": "Empezar de Nuevo",
+    "templates": {
+      "week-1": {
+        "name": "Semana 1",
+        "description": "1 min correr, 1.5 min caminar"
+      },
+      "week-2": {
+        "name": "Semana 2",
+        "description": "1.5 min correr, 1.5 min caminar"
+      },
+      "week-3": {
+        "name": "Semana 3",
+        "description": "2 min correr, 2 min caminar"
+      },
+      "week-4": {
+        "name": "Semana 4",
+        "description": "3 min correr, 1.5 min caminar"
+      },
+      "week-5": {
+        "name": "Semana 5",
+        "description": "5 min correr, 1 min caminar"
+      },
+      "week-6": {
+        "name": "Semana 6",
+        "description": "8 min correr, 1 min caminar"
+      },
+      "week-7": {
+        "name": "Semana 7",
+        "description": "10 min correr, 1 min caminar"
+      },
+      "week-8": {
+        "name": "Semana 8",
+        "description": "15 min continuo"
+      }
+    }
+  },
+  "rpe": {
+    "title": "Escala de Esfuerzo Percibido",
+    "rpeValue": "RPE {value}",
+    "selectHint": "Toca un numero para ver detalles sobre ese nivel de esfuerzo",
+    "description": "Descripcion",
+    "breathing": "Respiracion",
+    "talkTest": "Test del Habla",
+    "levels": {
+      "veryLight": "Muy Suave",
+      "light": "Suave",
+      "moderate": "Moderado",
+      "hard": "Duro",
+      "maximum": "Maximo"
+    },
+    "descriptions": {
+      "barelyMoving": "Apenas moviendose",
+      "easyEffort": "Esfuerzo facil",
+      "comfortable": "Comodo",
+      "challenging": "Desafiante",
+      "allOut": "Maximo esfuerzo"
+    },
+    "breathingLevels": {
+      "normal": "Normal",
+      "slightlyElevated": "Ligeramente elevada",
+      "noticeable": "Notable",
+      "heavy": "Pesada",
+      "gasping": "Jadeando"
+    },
+    "talkTestLevels": {
+      "fullConversation": "Conversacion completa",
+      "sentences": "Puede hablar en oraciones",
+      "phrases": "Puede hablar en frases",
+      "fewWords": "Solo pocas palabras",
+      "cantTalk": "No puede hablar"
+    }
+  },
+  "manualWorkout": {
+    "title": "Registrar Entrenamiento",
+    "subtitle": "Registra tu entrenamiento sin dispositivo",
+    "name": "Nombre del Entrenamiento",
+    "namePlaceholder": "ej., Carrera Matutina",
+    "nameHint": "Opcional - se genera automaticamente si se deja en blanco",
+    "date": "Fecha",
+    "activityType": "Tipo de Actividad",
+    "duration": "Duracion (min)",
+    "durationPlaceholder": "45",
+    "durationHint": "Cuanto tiempo hiciste ejercicio?",
+    "distance": "Distancia (km)",
+    "distancePlaceholder": "5.0",
+    "distanceHint": "Opcional",
+    "rpe": "Que tan duro fue?",
+    "notes": "Notas",
+    "notesPlaceholder": "Como te sentiste durante el entrenamiento? Alguna observacion?",
+    "notesHint": "Notas opcionales sobre tu entrenamiento",
+    "estimatedLoad": "Carga de Entrenamiento Estimada",
+    "loadUnits": "TSS",
+    "loadExplanation": "Basado en duracion y esfuerzo (metodo session-RPE)",
+    "submit": "Registrar Entrenamiento",
+    "submitting": "Guardando...",
+    "activityTypes": {
+      "running": "Carrera",
+      "cycling": "Ciclismo",
+      "swimming": "Natacion",
+      "walking": "Caminata",
+      "hiking": "Senderismo",
+      "strength": "Entrenamiento de Fuerza",
+      "yoga": "Yoga",
+      "other": "Otro"
+    },
+    "errors": {
+      "dateRequired": "La fecha es requerida",
+      "durationRequired": "La duracion es requerida",
+      "durationTooShort": "La duracion debe ser al menos 1 minuto",
+      "durationTooLong": "La duracion no puede exceder 720 minutos",
+      "distanceInvalid": "La distancia debe ser un numero positivo",
+      "distanceTooLong": "La distancia no puede exceder 500 km",
+      "rpeRequired": "Por favor selecciona tu esfuerzo percibido",
+      "activityTypeRequired": "Por favor selecciona un tipo de actividad"
+    },
+    "success": {
+      "title": "Entrenamiento Registrado!",
+      "message": "Tu {activityType} ha sido guardado con una carga estimada de {load}."
+    }
   }
 }

@@ -921,3 +921,171 @@ export interface GarminSyncHistoryEntry {
   activities_synced: number;
   error_message?: string;
 }
+
+// ============================================
+// Run/Walk Interval Types (Couch-to-5K style)
+// ============================================
+
+export interface RunWalkInterval {
+  runSeconds: number;
+  walkSeconds: number;
+  repetitions: number;
+}
+
+export interface RunWalkTemplate {
+  id: string;
+  name: string;
+  runSec: number;
+  walkSec: number;
+  reps: number;
+  description: string;
+  weekNumber?: number;
+}
+
+export interface RunWalkSession {
+  id: string;
+  template?: string;
+  intervals: RunWalkInterval;
+  startedAt: string;
+  completedAt?: string;
+  actualDurationSec: number;
+  completedIntervals: number;
+  paused: boolean;
+}
+
+export type RunWalkPhase = 'run' | 'walk' | 'idle';
+
+export interface RunWalkTimerState {
+  phase: RunWalkPhase;
+  currentInterval: number;
+  timeRemaining: number;
+  totalElapsed: number;
+  isRunning: boolean;
+  isPaused: boolean;
+  isComplete: boolean;
+}
+
+// ============================================
+// Mileage Cap Types (10% Rule)
+// ============================================
+
+export type MileageCapStatus = 'safe' | 'warning' | 'near_limit' | 'exceeded';
+
+export interface MileageCapData {
+  currentWeekKm: number;
+  previousWeekKm: number;
+  weeklyLimitKm: number;
+  remainingKm: number;
+  isExceeded: boolean;
+  percentageUsed: number;
+  status: MileageCapStatus;
+  recommendation: string;
+  baseKm: number;
+  allowedIncreaseKm: number;
+  currentWeekStart: string;
+  previousWeekStart: string;
+}
+
+export interface PlannedRunCheckData {
+  plannedKm: number;
+  currentWeekKm: number;
+  projectedTotalKm: number;
+  weeklyLimitKm: number;
+  wouldExceed: boolean;
+  excessKm: number;
+  safeDistanceKm: number;
+  suggestion: string;
+}
+
+export interface WeeklyMileageData {
+  weekStart: string;
+  weekEnd: string;
+  totalKm: number;
+  runCount: number;
+  avgRunKm: number;
+  longestRunKm: number;
+}
+
+export interface WeeklyComparisonData {
+  currentWeek: WeeklyMileageData;
+  previousWeek: WeeklyMileageData;
+  changePct: number;
+  changeKm: number;
+}
+
+export interface TenPercentRuleInfo {
+  title: string;
+  description: string;
+  benefits: string[];
+  tips: string[];
+}
+
+// Mileage cap status colors
+export const MILEAGE_CAP_COLORS: Record<MileageCapStatus, {
+  bg: string;
+  text: string;
+  fill: string;
+  border: string;
+}> = {
+  safe: {
+    bg: 'bg-green-500/10',
+    text: 'text-green-400',
+    fill: '#22c55e',
+    border: 'border-green-500/30',
+  },
+  warning: {
+    bg: 'bg-yellow-500/10',
+    text: 'text-yellow-400',
+    fill: '#eab308',
+    border: 'border-yellow-500/30',
+  },
+  near_limit: {
+    bg: 'bg-orange-500/10',
+    text: 'text-orange-400',
+    fill: '#f97316',
+    border: 'border-orange-500/30',
+  },
+  exceeded: {
+    bg: 'bg-red-500/10',
+    text: 'text-red-400',
+    fill: '#ef4444',
+    border: 'border-red-500/30',
+  },
+};
+
+// ============================================
+// User Preferences Types (Beginner Mode)
+// ============================================
+
+export type IntensityScale = 'hr' | 'rpe' | 'pace';
+
+export interface UserPreferences {
+  user_id: string;
+  beginner_mode_enabled: boolean;
+  beginner_mode_start_date: string | null;
+  show_hr_metrics: boolean;
+  show_advanced_metrics: boolean;
+  preferred_intensity_scale: IntensityScale;
+  weekly_mileage_cap_enabled: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface UpdatePreferencesRequest {
+  beginner_mode_enabled?: boolean;
+  show_hr_metrics?: boolean;
+  show_advanced_metrics?: boolean;
+  preferred_intensity_scale?: IntensityScale;
+  weekly_mileage_cap_enabled?: boolean;
+}
+
+export interface ToggleBeginnerModeResponse {
+  beginner_mode_enabled: boolean;
+  message: string;
+}
+
+export interface BeginnerModeStatus {
+  enabled: boolean;
+  days_in_beginner_mode: number | null;
+  start_date: string | null;
+}

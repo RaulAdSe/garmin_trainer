@@ -553,6 +553,55 @@ CREATE TABLE IF NOT EXISTS user_consent (
 
 -- Create index for consent lookups
 CREATE INDEX IF NOT EXISTS idx_user_consent_date ON user_consent(consent_date);
+
+-- =============================================================================
+-- Manual Workouts (RPE-based logging without device)
+-- =============================================================================
+
+-- Manual workouts logged via RPE without device data
+CREATE TABLE IF NOT EXISTS manual_workouts (
+    activity_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    activity_type TEXT DEFAULT 'running',
+    date TEXT NOT NULL,
+    duration_min INTEGER NOT NULL,
+    distance_km REAL,
+    rpe INTEGER NOT NULL CHECK (rpe >= 1 AND rpe <= 10),
+    avg_hr INTEGER,
+    max_hr INTEGER,
+    estimated_load REAL NOT NULL,
+    notes TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Create indexes for manual workouts
+CREATE INDEX IF NOT EXISTS idx_manual_workouts_user ON manual_workouts(user_id);
+CREATE INDEX IF NOT EXISTS idx_manual_workouts_date ON manual_workouts(date);
+CREATE INDEX IF NOT EXISTS idx_manual_workouts_user_date ON manual_workouts(user_id, date);
+
+-- =============================================================================
+-- User Preferences (Beginner Mode, UI Settings)
+-- =============================================================================
+
+-- User preferences for UI customization and beginner mode
+CREATE TABLE IF NOT EXISTS user_preferences (
+    user_id TEXT PRIMARY KEY,
+    beginner_mode_enabled INTEGER DEFAULT 0,          -- 0 = disabled, 1 = enabled
+    beginner_mode_start_date TEXT,                    -- ISO timestamp when beginner mode was enabled
+    show_hr_metrics INTEGER DEFAULT 1,                -- Show heart rate metrics
+    show_advanced_metrics INTEGER DEFAULT 1,          -- Show advanced metrics (CTL, ATL, TSB)
+    preferred_intensity_scale TEXT DEFAULT 'hr',      -- 'hr', 'rpe', or 'pace'
+    weekly_mileage_cap_enabled INTEGER DEFAULT 0,     -- Enable weekly mileage cap warnings
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Create index for preferences lookups
+CREATE INDEX IF NOT EXISTS idx_user_preferences_user ON user_preferences(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_preferences_beginner ON user_preferences(beginner_mode_enabled);
 """
 
 # Separate schema for updating user profile

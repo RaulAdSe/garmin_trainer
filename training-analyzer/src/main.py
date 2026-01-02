@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 
 from .config import get_settings
-from .api.routes import athlete, analysis, plans, workouts, export, garmin, chat, explain, gamification, strava, garmin_credentials, usage, stripe_webhook, admin, auth, safety
+from .api.routes import athlete, analysis, plans, workouts, export, garmin, chat, explain, gamification, strava, garmin_credentials, usage, stripe_webhook, admin, auth, safety, mileage_cap, preferences, pace_zones, manual_workouts
 from .api.exception_handlers import register_exception_handlers
 from .api.middleware.rate_limit import limiter
 from .api.middleware.security_headers import SecurityHeadersMiddleware
@@ -203,6 +203,10 @@ app.include_router(stripe_webhook.router, prefix="/api/v1", tags=["stripe"])
 app.include_router(admin.router, prefix="/api/v1", tags=["admin"])
 app.include_router(auth.router, prefix="/api/v1", tags=["auth"])
 app.include_router(safety.router, prefix="/api/v1/safety", tags=["safety"])
+app.include_router(mileage_cap.router, prefix="/api/v1/athlete/mileage-cap", tags=["mileage-cap"])
+app.include_router(preferences.router, prefix="/api/v1", tags=["preferences"])
+app.include_router(pace_zones.router, prefix="/api/v1/pace-zones", tags=["pace-zones"])
+app.include_router(manual_workouts.router, prefix="/api/v1/workouts/manual", tags=["manual-workouts"])
 
 
 @app.get("/")
