@@ -12,7 +12,7 @@ interface AchievementCardProps {
 
 const rarityColors: Record<AchievementRarity, { text: string; bg: string; border: string }> = {
   common: {
-    text: 'text-gray-400',
+    text: 'text-gray-300',
     bg: 'bg-gray-700/50',
     border: 'border-gray-600',
   },

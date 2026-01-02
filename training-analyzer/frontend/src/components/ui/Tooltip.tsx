@@ -198,10 +198,10 @@ export function MetricWithTooltip({
 }: MetricWithTooltipProps) {
   return (
     <div className={cn('flex items-center gap-1', className)}>
-      <span className="text-gray-400 text-sm">{label}:</span>
+      <span className="text-gray-300 text-sm">{label}:</span>
       <span className="text-gray-100 font-medium">
         {value}
-        {unit && <span className="text-gray-400 text-sm ml-0.5">{unit}</span>}
+        {unit && <span className="text-gray-300 text-sm ml-0.5">{unit}</span>}
       </span>
       <InfoTooltip content={explanation} />
     </div>

@@ -94,7 +94,7 @@ export function EmptyState({
       {description && (
         <p
           className={clsx(
-            'mt-2 text-gray-400 max-w-md',
+            'mt-2 text-gray-300 max-w-md',
             styles.description
           )}
         >

@@ -6,6 +6,7 @@ import { Link, usePathname } from '@/i18n/navigation';
 import { clsx } from 'clsx';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { useUserProgress } from '@/hooks/useAchievements';
+import { BottomNavigation } from './BottomNavigation';
 
 // Feature unlock levels based on gamification system
 const FEATURE_UNLOCK_LEVELS: Record<string, number> = {
@@ -303,28 +304,7 @@ export function Navigation() {
       </div>
 
       {/* Mobile Bottom Navigation */}
-      <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-gray-900/95 backdrop-blur-sm border-t border-gray-800 safe-area-inset-bottom"
-        role="navigation"
-        aria-label="Bottom navigation"
-      >
-        <div className="flex items-center justify-around h-16 px-1">
-          {navItems.slice(0, 6).map((item) => {
-            const { isLocked, requiredLevel } = getFeatureLockInfo(item.href, userLevel);
-            return (
-              <BottomNavLink
-                key={item.href}
-                href={item.href}
-                icon={item.icon}
-                label={t(item.labelKey)}
-                isActive={isActive(item.href)}
-                isLocked={isLocked}
-                requiredLevel={requiredLevel}
-              />
-            );
-          })}
-        </div>
-      </nav>
+      <BottomNavigation />
 
       {/* Spacer for mobile header */}
       <div className="md:hidden h-14 shrink-0" />
@@ -354,7 +334,7 @@ function NavLink({
       <span className={clsx(isLocked && 'opacity-50')}>{icon}</span>
       <span className={clsx('flex-1', isLocked && 'opacity-50')}>{children}</span>
       {isLocked && (
-        <span className="flex items-center gap-1 text-xs text-gray-500" title={lockLabel}>
+        <span className="flex items-center gap-1 text-xs text-gray-400" title={lockLabel} aria-hidden="true">
           <LockIcon className="w-3.5 h-3.5" />
           <span className="text-[10px] font-medium">Lvl {requiredLevel}</span>
         </span>
@@ -365,8 +345,11 @@ function NavLink({
   if (isLocked) {
     return (
       <div
-        className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-500 cursor-not-allowed"
+        className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 cursor-not-allowed"
         title={lockLabel}
+        aria-disabled="true"
+        aria-label={`${children} - ${lockLabel}`}
+        role="link"
       >
         {content}
       </div>
@@ -413,7 +396,7 @@ function MobileNavLink({
       <span className={clsx('w-6 h-6', isLocked && 'opacity-50')}>{icon}</span>
       <span className={clsx('text-lg flex-1', isLocked && 'opacity-50')}>{children}</span>
       {isLocked && (
-        <span className="flex items-center gap-1.5 text-gray-500">
+        <span className="flex items-center gap-1.5 text-gray-400" aria-hidden="true">
           <LockIcon className="w-4 h-4" />
           <span className="text-xs font-medium">Lvl {requiredLevel}</span>
         </span>
@@ -424,8 +407,11 @@ function MobileNavLink({
   if (isLocked) {
     return (
       <div
-        className="flex items-center gap-4 px-4 py-4 rounded-xl min-h-[56px] text-gray-500 cursor-not-allowed"
+        className="flex items-center gap-4 px-4 py-4 rounded-xl min-h-[56px] text-gray-400 cursor-not-allowed"
         title={lockLabel}
+        aria-disabled="true"
+        aria-label={`${children} - ${lockLabel}`}
+        role="link"
       >
         {content}
       </div>
@@ -443,66 +429,6 @@ function MobileNavLink({
           : 'text-gray-300 hover:bg-gray-800 active:bg-gray-700'
       )}
       aria-current={isActive ? 'page' : undefined}
-    >
-      {content}
-    </Link>
-  );
-}
-
-function BottomNavLink({
-  href,
-  icon,
-  label,
-  isActive,
-  isLocked = false,
-  requiredLevel = 0,
-}: {
-  href: string;
-  icon: React.ReactNode;
-  label: string;
-  isActive: boolean;
-  isLocked?: boolean;
-  requiredLevel?: number;
-}) {
-  const content = (
-    <>
-      <div className="relative">
-        <span className={clsx(isLocked && 'opacity-40')}>{icon}</span>
-        {isLocked && (
-          <LockIcon className="w-2.5 h-2.5 absolute -top-0.5 -right-1 text-gray-500" />
-        )}
-      </div>
-      <span className={clsx(
-        'text-[10px] font-medium truncate max-w-full',
-        isLocked && 'opacity-40'
-      )}>
-        {isLocked ? `Lvl ${requiredLevel}` : label}
-      </span>
-    </>
-  );
-
-  if (isLocked) {
-    return (
-      <div
-        className="flex flex-col items-center justify-center gap-1 min-w-[64px] min-h-[48px] px-3 py-2 rounded-lg text-gray-500 cursor-not-allowed"
-        aria-label={`${label} - Unlocks at Level ${requiredLevel}`}
-      >
-        {content}
-      </div>
-    );
-  }
-
-  return (
-    <Link
-      href={href}
-      className={clsx(
-        'flex flex-col items-center justify-center gap-1 min-w-[64px] min-h-[48px] px-3 py-2 rounded-lg transition-colors touch-manipulation',
-        isActive
-          ? 'text-teal-400'
-          : 'text-gray-400 hover:text-gray-200 active:text-teal-400'
-      )}
-      aria-current={isActive ? 'page' : undefined}
-      aria-label={label}
     >
       {content}
     </Link>

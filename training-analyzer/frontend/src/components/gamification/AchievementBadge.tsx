@@ -2,6 +2,7 @@
 
 import { cn } from '@/lib/utils';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { getDecorativeIconProps, getLockedElementProps } from '@/lib/accessibility';
 
 export type AchievementRarity = 'common' | 'rare' | 'epic' | 'legendary';
 
@@ -79,6 +80,11 @@ export function AchievementBadge({
   const isLocked = locked ?? !achievement.unlocked;
   const rarityStyles = rarityConfig[achievement.rarity];
 
+  const lockedProps = getLockedElementProps({
+    isLocked,
+    lockedMessage: `${achievement.name} achievement - locked. ${achievement.description}`,
+  });
+
   const badge = (
     <div
       className={cn(
@@ -90,6 +96,8 @@ export function AchievementBadge({
         !isLocked && 'hover:scale-105',
         className
       )}
+      {...(isLocked ? lockedProps : {})}
+      aria-label={isLocked ? `${achievement.name} - locked` : `${achievement.name} - ${achievement.rarity} achievement`}
     >
       {/* Icon */}
       <span
@@ -97,19 +105,25 @@ export function AchievementBadge({
           config.icon,
           isLocked ? 'opacity-40' : 'opacity-100'
         )}
+        role="img"
+        aria-hidden="true"
       >
         {achievement.icon}
       </span>
 
       {/* Lock overlay for locked achievements */}
       {isLocked && (
-        <div className="absolute inset-0 flex items-center justify-center rounded-full bg-gray-900/60">
+        <div
+          className="absolute inset-0 flex items-center justify-center rounded-full bg-gray-900/60"
+          aria-hidden="true"
+        >
           <svg
-            className={cn('text-gray-500', config.lockIcon)}
+            className={cn('text-gray-400', config.lockIcon)}
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
             strokeWidth={2}
+            {...getDecorativeIconProps()}
           >
             <path
               strokeLinecap="round"
@@ -129,7 +143,7 @@ export function AchievementBadge({
   const tooltipContent = (
     <div className="space-y-1 max-w-[200px]">
       <div className="font-medium text-gray-100">{achievement.name}</div>
-      <div className="text-xs text-gray-400">{achievement.description}</div>
+      <div className="text-xs text-gray-300">{achievement.description}</div>
       {!isLocked && (
         <div className="text-xs text-teal-400">+{achievement.xp_value} XP</div>
       )}

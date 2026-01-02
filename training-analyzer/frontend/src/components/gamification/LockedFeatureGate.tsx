@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { useTranslations } from 'next-intl';
+import { getLockedElementProps, getDecorativeIconProps } from '@/lib/accessibility';
 
 // Feature unlock levels mapping (mirrors LEVEL_REWARDS from achievement_service.py)
 export const FEATURE_UNLOCK_LEVELS: Record<string, number> = {
@@ -171,6 +172,12 @@ export function LockedFeatureGate({
       ? t('almostUnlocked', { xp: xpToUnlock })
       : t('lockedFeature', { level: requiredLevel });
 
+    const lockedProps = getLockedElementProps({
+      isLocked: true,
+      lockedMessage: tooltipContent,
+      unlockLevel: requiredLevel,
+    });
+
     return (
       <Tooltip content={tooltipContent} position="top">
         <div
@@ -180,6 +187,7 @@ export function LockedFeatureGate({
             'almost-unlocked-container',
             className
           )}
+          {...lockedProps}
         >
           {/* Pulsing glow effect via CSS animation */}
           <style jsx>{`
@@ -204,11 +212,11 @@ export function LockedFeatureGate({
           </div>
 
           {/* Lock overlay */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/40 rounded-lg">
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/40 rounded-lg" aria-hidden="true">
             {/* Pulsing lock icon */}
             <div className="flex items-center gap-2 animate-pulse">
-              <LockIcon className="w-6 h-6 text-orange-400" />
-              <span className="text-sm font-medium text-orange-400">
+              <LockIcon className="w-6 h-6 text-orange-400" aria-hidden="true" />
+              <span className="text-sm font-medium text-orange-300">
                 {t('lockedFeature', { level: requiredLevel })}
               </span>
             </div>
@@ -236,6 +244,12 @@ export function LockedFeatureGate({
   // Render locked state
   const tooltipContent = t('lockedFeature', { level: requiredLevel });
 
+  const lockedProps = getLockedElementProps({
+    isLocked: true,
+    lockedMessage: tooltipContent,
+    unlockLevel: requiredLevel,
+  });
+
   return (
     <Tooltip content={tooltipContent} position="top">
       <div
@@ -243,6 +257,7 @@ export function LockedFeatureGate({
           'relative opacity-50 cursor-not-allowed',
           className
         )}
+        {...lockedProps}
       >
         {/* Content with reduced interactivity */}
         <div className="pointer-events-none grayscale">
@@ -250,9 +265,9 @@ export function LockedFeatureGate({
         </div>
 
         {/* Lock overlay */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/60 rounded-lg">
-          <LockIcon className="w-8 h-8 text-gray-400" />
-          <span className="mt-2 text-sm font-medium text-gray-400">
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/60 rounded-lg" aria-hidden="true">
+          <LockIcon className="w-8 h-8 text-gray-300" aria-hidden="true" />
+          <span className="mt-2 text-sm font-medium text-gray-300">
             {t('lockedFeature', { level: requiredLevel })}
           </span>
 

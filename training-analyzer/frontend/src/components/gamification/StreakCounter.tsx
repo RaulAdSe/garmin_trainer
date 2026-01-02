@@ -51,19 +51,19 @@ export function StreakCounter({
 
   const tooltipContent = (
     <div className="space-y-2 py-1">
-      <div className="text-xs text-gray-400 uppercase tracking-wide">Streak Details</div>
+      <div className="text-xs text-gray-300 uppercase tracking-wide">Streak Details</div>
       <div className="space-y-1">
         <div className="flex justify-between gap-4 text-xs">
-          <span className="text-gray-400">Current Streak</span>
+          <span className="text-gray-300">Current Streak</span>
           <span className="text-gray-100 font-medium">{streakInfo.current} days</span>
         </div>
         <div className="flex justify-between gap-4 text-xs">
-          <span className="text-gray-400">Longest Streak</span>
+          <span className="text-gray-300">Longest Streak</span>
           <span className="text-amber-400 font-medium">{streakInfo.longest} days</span>
         </div>
         {streakInfo.freeze_tokens > 0 && (
           <div className="flex justify-between gap-4 text-xs">
-            <span className="text-gray-400">Freeze Tokens</span>
+            <span className="text-gray-300">Freeze Tokens</span>
             <span className="text-blue-400 font-medium">{streakInfo.freeze_tokens}</span>
           </div>
         )}
@@ -122,7 +122,7 @@ export function StreakCounter({
           {/* Details row */}
           {showDetails && (
             <div className="flex items-center gap-2">
-              <span className={cn('text-gray-500', config.details)}>
+              <span className={cn('text-gray-400', config.details)}>
                 day streak
               </span>
 

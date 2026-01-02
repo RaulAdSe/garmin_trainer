@@ -28,3 +28,7 @@ export {
   useFitnessMetrics,
   useVO2MaxTrend,
 } from './useAthleteContext';
+
+export { useDataFreshness } from './useDataFreshness';
+
+export { useTouchChart } from './useTouchChart';

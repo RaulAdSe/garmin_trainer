@@ -111,7 +111,7 @@ export function LevelRewards({
       <div className="bg-gray-900/50 rounded-xl p-4 border border-gray-800">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm text-gray-400">{t('currentTitle')}</p>
+            <p className="text-sm text-gray-300">{t('currentTitle')}</p>
             <p className="text-lg font-semibold text-white">
               {t(`levels.${getCurrentTierLevel(currentLevel)}.title`)}
             </p>
@@ -149,7 +149,7 @@ export function LevelRewards({
                 {t('nextReward')} - {t('unlocksAt')} {nextReward.level}
               </p>
               <p className="text-white font-semibold mt-1">{nextReward.title}</p>
-              <p className="text-sm text-gray-400 mt-1">{nextReward.description}</p>
+              <p className="text-sm text-gray-300 mt-1">{nextReward.description}</p>
               <div className="flex flex-wrap gap-2 mt-2">
                 {nextReward.unlocks.map((feature) => (
                   <span
@@ -167,7 +167,7 @@ export function LevelRewards({
 
       {/* Level Roadmap */}
       <div>
-        <h3 className="text-sm font-medium text-gray-400 mb-4">{t('title')}</h3>
+        <h3 className="text-sm font-medium text-gray-300 mb-4">{t('title')}</h3>
         <div className="space-y-3">
           {ALL_LEVEL_REWARDS.map((reward, index) => {
             const isUnlocked = currentLevel >= reward.level;
@@ -324,7 +324,7 @@ export function LevelRewardsCompact({
 
   if (!nextReward) {
     return (
-      <div className={cn('text-sm text-gray-400', className)}>
+      <div className={cn('text-sm text-gray-300', className)}>
         {t('allUnlocked')}
       </div>
     );
@@ -335,7 +335,7 @@ export function LevelRewardsCompact({
   return (
     <div className={cn('space-y-2', className)}>
       <div className="flex items-center justify-between text-sm">
-        <span className="text-gray-400">{t('nextReward')}</span>
+        <span className="text-gray-300">{t('nextReward')}</span>
         <span className="text-orange-400">Level {nextReward.level}</span>
       </div>
       <div className="h-2 bg-gray-800 rounded-full overflow-hidden">

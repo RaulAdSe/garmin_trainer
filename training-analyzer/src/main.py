@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 
 from .config import get_settings
-from .api.routes import athlete, analysis, plans, workouts, export, garmin, chat, explain, gamification, strava, garmin_credentials, usage, stripe_webhook, admin, auth
+from .api.routes import athlete, analysis, plans, workouts, export, garmin, chat, explain, gamification, strava, garmin_credentials, usage, stripe_webhook, admin, auth, safety
 from .api.exception_handlers import register_exception_handlers
 from .api.middleware.rate_limit import limiter
 from .api.middleware.security_headers import SecurityHeadersMiddleware
@@ -202,6 +202,7 @@ app.include_router(usage.router, prefix="/api/v1/usage", tags=["usage"])
 app.include_router(stripe_webhook.router, prefix="/api/v1", tags=["stripe"])
 app.include_router(admin.router, prefix="/api/v1", tags=["admin"])
 app.include_router(auth.router, prefix="/api/v1", tags=["auth"])
+app.include_router(safety.router, prefix="/api/v1/safety", tags=["safety"])
 
 
 @app.get("/")

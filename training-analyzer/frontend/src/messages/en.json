@@ -5,12 +5,15 @@
     "dashboard": "Dashboard",
     "workouts": "Workouts",
     "achievements": "Achievements",
+    "progress": "Progress",
     "connect": "Connect",
     "plans": "Plans",
     "design": "Design",
     "goals": "Goals",
     "zones": "Zones",
     "chat": "AI Coach",
+    "more": "More",
+    "settings": "Settings",
     "version": "Version 1.0.0",
     "openMenu": "Open menu",
     "closeMenu": "Close menu",
@@ -528,5 +531,16 @@
       "periodization": "Periodization Planner",
       "coach_mode": "Coach Mode"
     }
+  },
+  "dataFreshness": {
+    "updated": "Updated",
+    "refresh": "Refresh data",
+    "lastSync": "Last sync",
+    "neverSynced": "Data has never been synced",
+    "staleWarning": "Data is older than {hours} hours. Consider refreshing.",
+    "connectToSync": "Connect Garmin to enable sync",
+    "syncing": "Syncing...",
+    "syncFailed": "Sync failed",
+    "syncSuccess": "Sync complete"
   }
 }

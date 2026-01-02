@@ -91,7 +91,7 @@ export function LoadingInline({
 }) {
   return (
     <div
-      className={clsx('inline-flex items-center gap-2 text-gray-400', className)}
+      className={clsx('inline-flex items-center gap-2 text-gray-300', className)}
       role="status"
       aria-live="polite"
     >
@@ -121,7 +121,7 @@ export function LoadingCenter({
       aria-live="polite"
     >
       <LoadingSpinner size={size} />
-      <p className="text-gray-400 text-sm">{message}</p>
+      <p className="text-gray-300 text-sm">{message}</p>
     </div>
   );
 }

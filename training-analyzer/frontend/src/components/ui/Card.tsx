@@ -107,7 +107,7 @@ export function CardDescription({
   className?: string;
 }) {
   return (
-    <p className={clsx('text-sm text-gray-400 mt-1', className)}>{children}</p>
+    <p className={clsx('text-sm text-gray-300 mt-1', className)}>{children}</p>
   );
 }
 

@@ -59,7 +59,7 @@ export function ProgressBar({
                 Level {levelInfo.level}
               </span>
             </div>
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-gray-300">
               {xpToNextLevel.toLocaleString()} XP to Level {levelInfo.level + 1}
             </span>
           </div>

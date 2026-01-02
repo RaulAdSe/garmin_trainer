@@ -15,7 +15,7 @@ const rarityColors: Record<AchievementRarity, { border: string; glow: string; te
   common: {
     border: 'border-gray-600',
     glow: '',
-    text: 'text-gray-400',
+    text: 'text-gray-300',
   },
   rare: {
     border: 'border-blue-500',

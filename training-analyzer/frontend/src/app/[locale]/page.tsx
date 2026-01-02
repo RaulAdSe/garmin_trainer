@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Link } from "@/i18n/navigation";
 import { useAthleteContext, useVO2MaxTrend } from "@/hooks/useAthleteContext";
 import { useUserProgress } from "@/hooks/useAchievements";
+import { useDataFreshness } from "@/hooks/useDataFreshness";
 import { useAuth } from "@/contexts/auth-context";
 import { hasAuthToken } from "@/lib/auth-fetch";
 import { ReadinessGauge } from "@/components/athlete/ReadinessGauge";
@@ -16,6 +17,7 @@ import { TrainingBalance, TrainingBalanceSkeleton } from "@/components/dashboard
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { SkeletonCard } from "@/components/ui/Skeleton";
+import { DataFreshnessIndicator } from "@/components/ui/DataFreshnessIndicator";
 
 export default function Dashboard() {
   const t = useTranslations("dashboard");
@@ -25,6 +27,7 @@ export default function Dashboard() {
   const { data: context, isLoading, error, refetch } = useAthleteContext();
   const { data: userProgress, isLoading: progressLoading } = useUserProgress();
   const { data: vo2maxData, isLoading: vo2maxLoading } = useVO2MaxTrend(90);
+  const dataFreshness = useDataFreshness({ staleThresholdHours: 72 });
 
   // Check if error is a 401 and redirect to login
   const is401Error = error && (
@@ -149,12 +152,28 @@ export default function Dashboard() {
     <div className="space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="animate-fadeIn">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-100">
-          {t("title")}
-        </h1>
-        <p className="text-sm sm:text-base text-gray-400 mt-1">
-          {t("subtitle")}
-        </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-100">
+              {t("title")}
+            </h1>
+            <p className="text-sm sm:text-base text-gray-400 mt-1">
+              {t("subtitle")}
+            </p>
+          </div>
+          {/* Data Freshness Indicator */}
+          {!dataFreshness.isLoading && (
+            <DataFreshnessIndicator
+              lastSyncTime={dataFreshness.lastSyncTime}
+              relativeTimeString={dataFreshness.relativeTimeString}
+              onRefresh={dataFreshness.refresh}
+              isRefreshing={dataFreshness.isSyncing}
+              canRefresh={dataFreshness.hasCredentials}
+              staleThresholdHours={72}
+              className="shrink-0"
+            />
+          )}
+        </div>
       </div>
 
       {/* Compact Gamification Header */}

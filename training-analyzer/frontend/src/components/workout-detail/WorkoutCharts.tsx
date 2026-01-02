@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef, KeyboardEvent } from 'react';
 import {
   LineChart,
   Line,
@@ -23,8 +23,17 @@ import type {
   PowerPoint,
   SyncedHoverState,
 } from '@/types/workout-detail';
+import type { TimeRange } from '@/types/touch-chart';
 import { formatChartTime, formatElapsedTime, downsampleData } from '@/lib/workout-utils';
 import { formatPace } from '@/lib/utils';
+import {
+  Keys,
+  getInteractiveChartProps,
+  generateChartSummary,
+  focusVisibleClasses,
+  announceToScreenReader,
+} from '@/lib/accessibility';
+import { TouchableChartWrapper } from '@/components/charts/TouchableChartWrapper';
 
 // Chart theme colors
 const COLORS = {
@@ -304,9 +313,10 @@ interface HeartRateChartProps {
   syncedHover: SyncedHoverState;
   onMouseMove: (data: { activeTooltipIndex?: number; activeLabel?: string }) => void;
   onMouseLeave: () => void;
+  onActiveIndexChange?: (index: number | null) => void;
 }
 
-function HeartRateChart({ data, maxHR, syncedHover, onMouseMove, onMouseLeave }: HeartRateChartProps) {
+function HeartRateChart({ data, maxHR, syncedHover, onMouseMove, onMouseLeave, onActiveIndexChange }: HeartRateChartProps) {
   const chartData = useMemo(() => {
     const downsampled = downsampleData(data, 400);
     return downsampled.map(point => ({
@@ -338,25 +348,73 @@ function HeartRateChart({ data, maxHR, syncedHover, onMouseMove, onMouseLeave }:
     return { timestamp: point.timestamp, value: point.hr };
   }, [syncedHover.activeIndex, chartData]);
 
+  // Calculate time range for touch interactions
+  const fullTimeRange: TimeRange = useMemo(() => {
+    if (chartData.length === 0) return { start: 0, end: 0 };
+    return {
+      start: chartData[0].timestamp,
+      end: chartData[chartData.length - 1].timestamp,
+    };
+  }, [chartData]);
+
+  // Render pinned tooltip
+  const renderPinnedTooltip = useCallback((dataIndex: number) => {
+    if (dataIndex >= chartData.length) return null;
+    const point = chartData[dataIndex];
+    return (
+      <div className="bg-gray-800 border border-amber-500/50 rounded-lg px-3 py-2 shadow-xl">
+        <div className="text-xs text-gray-400 mb-1">{formatElapsedTime(point.timestamp)}</div>
+        <div className="text-sm font-medium text-red-400">{point.hr} bpm</div>
+      </div>
+    );
+  }, [chartData]);
+
+  // Generate chart summary for screen readers
+  const chartSummary = useMemo(() => {
+    const hrs = chartData.map(d => d.hr).filter(hr => hr > 0);
+    if (hrs.length === 0) return 'Heart Rate chart with no data';
+    const avg = Math.round(hrs.reduce((a, b) => a + b, 0) / hrs.length);
+    return generateChartSummary({
+      chartType: 'Line chart',
+      title: 'Heart Rate over time',
+      dataPoints: chartData.length,
+      minValue: Math.min(...hrs),
+      maxValue: Math.max(...hrs),
+      avgValue: avg,
+      unit: 'bpm',
+    });
+  }, [chartData]);
+
   return (
-    <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+    <div
+      className="bg-gray-900 rounded-xl border border-gray-800 p-4"
+      role="figure"
+      aria-label={chartSummary}
+    >
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
           </svg>
-          <h3 className="text-sm font-medium text-gray-200">Heart Rate</h3>
+          <h3 className="text-sm font-medium text-gray-200" id="hr-chart-title">Heart Rate</h3>
         </div>
         {/* Synced value display */}
         {syncedData && (
-          <div className="text-sm text-gray-300">
-            <span className="text-gray-500">{formatElapsedTime(syncedData.timestamp)}</span>
-            <span className="mx-2 text-gray-600">|</span>
+          <div className="text-sm text-gray-300" aria-live="polite" aria-atomic="true">
+            <span className="text-gray-400">{formatElapsedTime(syncedData.timestamp)}</span>
+            <span className="mx-2 text-gray-600" aria-hidden="true">|</span>
             <span className="text-red-400 font-medium">{syncedData.value} bpm</span>
           </div>
         )}
       </div>
-      <div className="h-40 sm:h-48">
+      <TouchableChartWrapper
+        dataLength={chartData.length}
+        fullTimeRange={fullTimeRange}
+        onActiveIndexChange={onActiveIndexChange}
+        renderPinnedTooltip={renderPinnedTooltip}
+        hintStorageKey="hr-chart-hint-dismissed"
+        className="h-40 sm:h-48"
+      >
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={chartData}
@@ -428,7 +486,7 @@ function HeartRateChart({ data, maxHR, syncedHover, onMouseMove, onMouseLeave }:
             />
           </LineChart>
         </ResponsiveContainer>
-      </div>
+      </TouchableChartWrapper>
     </div>
   );
 }
@@ -440,9 +498,10 @@ interface PaceSpeedChartProps {
   syncedHover: SyncedHoverState;
   onMouseMove: (data: { activeTooltipIndex?: number; activeLabel?: string }) => void;
   onMouseLeave: () => void;
+  onActiveIndexChange?: (index: number | null) => void;
 }
 
-function PaceSpeedChart({ data, isRunning, syncedHover, onMouseMove, onMouseLeave }: PaceSpeedChartProps) {
+function PaceSpeedChart({ data, isRunning, syncedHover, onMouseMove, onMouseLeave, onActiveIndexChange }: PaceSpeedChartProps) {
   const chartData = useMemo(() => {
     const downsampled = downsampleData(data, 400);
     return downsampled.map(point => ({
@@ -492,27 +551,77 @@ function PaceSpeedChart({ data, isRunning, syncedHover, onMouseMove, onMouseLeav
 
   const formatValue = isRunning ? (v: number) => formatPace(v) : (v: number) => v.toFixed(1);
 
+  // Calculate time range for touch interactions
+  const fullTimeRange: TimeRange = useMemo(() => {
+    if (chartData.length === 0) return { start: 0, end: 0 };
+    return {
+      start: chartData[0].timestamp,
+      end: chartData[chartData.length - 1].timestamp,
+    };
+  }, [chartData]);
+
+  // Render pinned tooltip
+  const renderPinnedTooltip = useCallback((dataIndex: number) => {
+    if (dataIndex >= chartData.length) return null;
+    const point = chartData[dataIndex];
+    return (
+      <div className="bg-gray-800 border border-amber-500/50 rounded-lg px-3 py-2 shadow-xl">
+        <div className="text-xs text-gray-400 mb-1">{formatElapsedTime(point.timestamp)}</div>
+        <div className={`text-sm font-medium ${tooltipColor}`}>
+          {formatValue(point.value)}{unit}
+        </div>
+      </div>
+    );
+  }, [chartData, formatValue, tooltipColor, unit]);
+
+  // Generate chart summary for screen readers
+  const chartSummary = useMemo(() => {
+    const values = chartData.map(d => d.value).filter(v => v > 0);
+    if (values.length === 0) return `${title} chart with no data`;
+    const avg = values.reduce((a, b) => a + b, 0) / values.length;
+    return generateChartSummary({
+      chartType: 'Line chart',
+      title: `${title} over time`,
+      dataPoints: chartData.length,
+      minValue: isRunning ? formatPace(Math.max(...values)) : Math.min(...values).toFixed(1),
+      maxValue: isRunning ? formatPace(Math.min(...values)) : Math.max(...values).toFixed(1),
+      avgValue: isRunning ? formatPace(avg) : avg.toFixed(1),
+      unit: isRunning ? '/km' : 'km/h',
+    });
+  }, [chartData, title, isRunning]);
+
   return (
-    <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+    <div
+      className="bg-gray-900 rounded-xl border border-gray-800 p-4"
+      role="figure"
+      aria-label={chartSummary}
+    >
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <svg className={`w-5 h-5 ${iconColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className={`w-5 h-5 ${iconColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
           <h3 className="text-sm font-medium text-gray-200">{title}</h3>
         </div>
         {/* Synced value display */}
         {syncedData && (
-          <div className="text-sm text-gray-300">
-            <span className="text-gray-500">{formatElapsedTime(syncedData.timestamp)}</span>
-            <span className="mx-2 text-gray-600">|</span>
+          <div className="text-sm text-gray-300" aria-live="polite" aria-atomic="true">
+            <span className="text-gray-400">{formatElapsedTime(syncedData.timestamp)}</span>
+            <span className="mx-2 text-gray-600" aria-hidden="true">|</span>
             <span className={`${isRunning ? 'text-blue-400' : 'text-green-400'} font-medium`}>
               {formatValue(syncedData.value)}{unit}
             </span>
           </div>
         )}
       </div>
-      <div className="h-40 sm:h-48">
+      <TouchableChartWrapper
+        dataLength={chartData.length}
+        fullTimeRange={fullTimeRange}
+        onActiveIndexChange={onActiveIndexChange}
+        renderPinnedTooltip={renderPinnedTooltip}
+        hintStorageKey="pace-chart-hint-dismissed"
+        className="h-40 sm:h-48"
+      >
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={chartData}
@@ -582,7 +691,7 @@ function PaceSpeedChart({ data, isRunning, syncedHover, onMouseMove, onMouseLeav
             />
           </LineChart>
         </ResponsiveContainer>
-      </div>
+      </TouchableChartWrapper>
     </div>
   );
 }
@@ -635,24 +744,39 @@ function CadenceChart({ data, isRunning, syncedHover, onMouseMove, onMouseLeave 
   const unit = isRunning ? 'spm' : 'rpm';
   const title = 'Cadence';
 
+  // Generate chart summary for screen readers
+  const chartSummary = generateChartSummary({
+    chartType: 'Line chart',
+    title: 'Cadence over time',
+    dataPoints: chartData.length,
+    minValue: minCadence,
+    maxValue: maxCadence,
+    avgValue: avgCadence,
+    unit,
+  });
+
   return (
-    <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+    <div
+      className="bg-gray-900 rounded-xl border border-gray-800 p-4"
+      role="figure"
+      aria-label={chartSummary}
+    >
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <svg className="w-5 h-5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-5 h-5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
           <h3 className="text-sm font-medium text-gray-200">{title}</h3>
           {/* Average cadence badge */}
-          <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded">
+          <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded" aria-label={`Average cadence: ${avgCadence} ${unit}`}>
             avg {avgCadence} {unit}
           </span>
         </div>
         {/* Synced value display */}
         {syncedData && (
-          <div className="text-sm text-gray-300">
-            <span className="text-gray-500">{formatElapsedTime(syncedData.timestamp)}</span>
-            <span className="mx-2 text-gray-600">|</span>
+          <div className="text-sm text-gray-300" aria-live="polite" aria-atomic="true">
+            <span className="text-gray-400">{formatElapsedTime(syncedData.timestamp)}</span>
+            <span className="mx-2 text-gray-600" aria-hidden="true">|</span>
             <span className="text-purple-400 font-medium">{syncedData.value} {unit}</span>
           </div>
         )}
@@ -780,24 +904,39 @@ function PowerChart({ data, syncedHover, onMouseMove, onMouseLeave }: PowerChart
     return { timestamp: point.timestamp, value: point.power };
   }, [syncedHover.activeIndex, chartData]);
 
+  // Generate chart summary for screen readers
+  const chartSummary = generateChartSummary({
+    chartType: 'Line chart',
+    title: 'Power output over time',
+    dataPoints: chartData.length,
+    minValue: minPower,
+    maxValue: maxPower,
+    avgValue: avgPower,
+    unit: 'W',
+  });
+
   return (
-    <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+    <div
+      className="bg-gray-900 rounded-xl border border-gray-800 p-4"
+      role="figure"
+      aria-label={chartSummary}
+    >
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
           <h3 className="text-sm font-medium text-gray-200">Power</h3>
           {/* Average power badge */}
-          <span className="text-xs bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded">
+          <span className="text-xs bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded" aria-label={`Average power: ${avgPower} watts`}>
             avg {avgPower}W
           </span>
         </div>
         {/* Synced value display */}
         {syncedData && (
-          <div className="text-sm text-gray-300">
-            <span className="text-gray-500">{formatElapsedTime(syncedData.timestamp)}</span>
-            <span className="mx-2 text-gray-600">|</span>
+          <div className="text-sm text-gray-300" aria-live="polite" aria-atomic="true">
+            <span className="text-gray-400">{formatElapsedTime(syncedData.timestamp)}</span>
+            <span className="mx-2 text-gray-600" aria-hidden="true">|</span>
             <span className="text-amber-400 font-medium">{syncedData.value}W</span>
           </div>
         )}
@@ -924,32 +1063,39 @@ function ElevationChart({ data, syncedHover, onMouseMove, onMouseLeave }: Elevat
     return { timestamp: point.timestamp, value: point.elevation };
   }, [syncedHover.activeIndex, chartData]);
 
+  // Generate chart summary for screen readers
+  const chartSummary = `Area chart showing Elevation profile with ${chartData.length} data points. Range: ${minElev}m to ${maxElev}m. Total elevation gain: ${totalGain}m. Total elevation loss: ${totalLoss}m.`;
+
   return (
-    <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+    <div
+      className="bg-gray-900 rounded-xl border border-gray-800 p-4"
+      role="figure"
+      aria-label={chartSummary}
+    >
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <svg className="w-5 h-5 text-stone-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-5 h-5 text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
           </svg>
           <h3 className="text-sm font-medium text-gray-200">Elevation</h3>
           {/* Synced value display */}
           {syncedData && (
-            <span className="ml-2 text-sm text-gray-300">
-              <span className="text-gray-500">{formatElapsedTime(syncedData.timestamp)}</span>
-              <span className="mx-2 text-gray-600">|</span>
-              <span className="text-stone-400 font-medium">{syncedData.value.toFixed(0)}m</span>
+            <span className="ml-2 text-sm text-gray-300" aria-live="polite" aria-atomic="true">
+              <span className="text-gray-400">{formatElapsedTime(syncedData.timestamp)}</span>
+              <span className="mx-2 text-gray-600" aria-hidden="true">|</span>
+              <span className="text-stone-300 font-medium">{syncedData.value.toFixed(0)}m</span>
             </span>
           )}
         </div>
-        <div className="flex items-center gap-3 text-xs text-gray-400">
-          <span className="flex items-center gap-1">
-            <svg className="w-3 h-3 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="flex items-center gap-3 text-xs text-gray-300">
+          <span className="flex items-center gap-1" aria-label={`Elevation gain: ${totalGain} meters`}>
+            <svg className="w-3 h-3 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
             </svg>
             {totalGain}m
           </span>
-          <span className="flex items-center gap-1">
-            <svg className="w-3 h-3 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <span className="flex items-center gap-1" aria-label={`Elevation loss: ${totalLoss} meters`}>
+            <svg className="w-3 h-3 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
             </svg>
             {totalLoss}m

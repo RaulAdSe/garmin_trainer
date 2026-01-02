@@ -98,7 +98,7 @@ export function ErrorState({
             </svg>
           </div>
           <h2 className="text-xl font-semibold text-gray-100 mb-2">{title}</h2>
-          <p className="text-gray-400 mb-6">{errorMessage}</p>
+          <p className="text-gray-300 mb-6">{errorMessage}</p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             {onRetry && (
               <Button variant="primary" onClick={onRetry}>
