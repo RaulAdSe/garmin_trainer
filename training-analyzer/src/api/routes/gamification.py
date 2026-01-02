@@ -17,6 +17,8 @@ from ...models.gamification import (
     AchievementWithStatus,
     CheckAchievementsRequest,
     CheckAchievementsResponse,
+    CheckEarlyAchievementsRequest,
+    CheckEarlyAchievementsResponse,
     UserProgress,
     to_camel,
 )
@@ -230,4 +232,52 @@ async def check_achievements(
         raise HTTPException(
             status_code=500,
             detail="Failed to check achievements. Please try again later.",
+        )
+
+
+@router.post("/check-early-achievements", response_model=CheckEarlyAchievementsResponse)
+async def check_early_achievements(
+    request: CheckEarlyAchievementsRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+    achievement_service: AchievementService = Depends(get_achievement_service),
+):
+    """
+    Check and award "Guaranteed Early Win" achievements.
+
+    These achievements are designed to ensure new users earn their first
+    achievement within 24 hours of joining, creating immediate positive
+    reinforcement for the gamification system.
+
+    Early Win achievements include:
+    - First Steps: Awarded on first login after connecting a device
+    - Profile Complete: Awarded after filling out profile/preferences
+    - First Workout Logged: Awarded for first workout (synced or manual)
+    - Early Bird: Login before 7am (any timezone)
+    - Night Owl: Login after 10pm
+    - Explorer: Visit 3 different pages
+    - Curious Mind: View workout details for the first time
+
+    Args:
+        request: CheckEarlyAchievementsRequest with user activity context
+
+    Returns:
+        CheckEarlyAchievementsResponse with:
+        - new_achievements: List of newly unlocked achievements
+        - xp_earned: Total XP earned
+        - level_up: Whether user leveled up
+        - is_first_achievement: True if this is the user's very first achievement
+          (frontend should show extra celebration with confetti)
+        - total_achievements_unlocked: Total achievements now unlocked
+
+    Requires authentication.
+    """
+    try:
+        return achievement_service.check_early_achievements(request.context)
+
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to check early achievements: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to check early achievements. Please try again later.",
         )

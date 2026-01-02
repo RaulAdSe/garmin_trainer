@@ -23,6 +23,8 @@ from ..models.gamification import (
     AchievementUnlock,
     AchievementWithStatus,
     CheckAchievementsResponse,
+    CheckEarlyAchievementsResponse,
+    EarlyAchievementContext,
     LevelInfo,
     LevelReward,
     StreakInfo,
@@ -39,6 +41,97 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 DEFAULT_ACHIEVEMENTS: List[Dict[str, Any]] = [
+    # ==========================================================================
+    # Early Win Achievements - Guaranteed within first session
+    # These create positive reinforcement for new users
+    # ==========================================================================
+    {
+        "id": "early_first_steps",
+        "name": "First Steps",
+        "description": "Log in for the first time after connecting your device",
+        "category": "early_win",
+        "icon": "👋",
+        "xp_value": 15,
+        "rarity": "common",
+        "condition_type": "early_first_login",
+        "condition_value": "1",
+        "display_order": -100,  # Negative to show first
+    },
+    {
+        "id": "early_profile_complete",
+        "name": "Profile Complete",
+        "description": "Fill out your profile and preferences",
+        "category": "early_win",
+        "icon": "📝",
+        "xp_value": 20,
+        "rarity": "common",
+        "condition_type": "early_profile",
+        "condition_value": "1",
+        "display_order": -99,
+    },
+    {
+        "id": "early_first_workout",
+        "name": "First Workout Logged",
+        "description": "Log your first workout (synced or manual)",
+        "category": "early_win",
+        "icon": "🏃",
+        "xp_value": 25,
+        "rarity": "common",
+        "condition_type": "early_workout",
+        "condition_value": "1",
+        "display_order": -98,
+    },
+    {
+        "id": "early_bird",
+        "name": "Early Bird",
+        "description": "Log in before 7am - rise and shine!",
+        "category": "early_win",
+        "icon": "🌅",
+        "xp_value": 15,
+        "rarity": "common",
+        "condition_type": "early_morning_login",
+        "condition_value": "7",
+        "display_order": -97,
+    },
+    {
+        "id": "night_owl",
+        "name": "Night Owl",
+        "description": "Log in after 10pm - burning the midnight oil!",
+        "category": "early_win",
+        "icon": "🦉",
+        "xp_value": 15,
+        "rarity": "common",
+        "condition_type": "early_night_login",
+        "condition_value": "22",
+        "display_order": -96,
+    },
+    {
+        "id": "early_explorer",
+        "name": "Explorer",
+        "description": "Visit 3 different pages to explore the app",
+        "category": "early_win",
+        "icon": "🧭",
+        "xp_value": 15,
+        "rarity": "common",
+        "condition_type": "early_pages_visited",
+        "condition_value": "3",
+        "display_order": -95,
+    },
+    {
+        "id": "early_curious_mind",
+        "name": "Curious Mind",
+        "description": "View workout details for the first time",
+        "category": "early_win",
+        "icon": "🔍",
+        "xp_value": 15,
+        "rarity": "common",
+        "condition_type": "early_workout_details",
+        "condition_value": "1",
+        "display_order": -94,
+    },
+    # ==========================================================================
+    # Regular achievements
+    # ==========================================================================
     # Streak achievements
     {
         "id": "first_workout",
@@ -1202,3 +1295,130 @@ class AchievementService:
                 title = LEVEL_REWARDS[reward_level].get("title", title)
                 break
         return title
+
+    # =========================================================================
+    # Early Win Achievement Methods
+    # =========================================================================
+
+    def _get_total_unlocked_count(self) -> int:
+        """Get total number of achievements unlocked by the user."""
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) as cnt FROM user_achievements"
+            ).fetchone()
+            return row["cnt"] if row else 0
+
+    def check_early_achievements(
+        self,
+        context: EarlyAchievementContext,
+    ) -> CheckEarlyAchievementsResponse:
+        """
+        Check and unlock early win achievements for new users.
+
+        These achievements are designed to be very easy to earn,
+        providing immediate positive reinforcement within the first session.
+
+        Args:
+            context: EarlyAchievementContext with user activity info
+
+        Returns:
+            CheckEarlyAchievementsResponse with new unlocks and XP earned
+        """
+        new_achievements: List[AchievementUnlock] = []
+        total_xp = 0
+
+        # Track if this is the user's first ever achievement
+        unlocked_before = self._get_total_unlocked_count()
+        is_first_achievement = unlocked_before == 0
+
+        # Check "First Steps" - first login after connecting device
+        if context.is_first_login:
+            unlock = self._unlock_achievement(
+                "early_first_steps",
+                metadata={"trigger": "first_login"},
+            )
+            if unlock:
+                new_achievements.append(unlock)
+                total_xp += unlock.achievement.xp_value
+
+        # Check "Profile Complete"
+        if context.profile_complete:
+            unlock = self._unlock_achievement(
+                "early_profile_complete",
+                metadata={"trigger": "profile_complete"},
+            )
+            if unlock:
+                new_achievements.append(unlock)
+                total_xp += unlock.achievement.xp_value
+
+        # Check "First Workout Logged"
+        if context.has_first_workout:
+            unlock = self._unlock_achievement(
+                "early_first_workout",
+                metadata={"trigger": "first_workout"},
+            )
+            if unlock:
+                new_achievements.append(unlock)
+                total_xp += unlock.achievement.xp_value
+
+        # Check "Early Bird" - login before 7am
+        if context.login_hour is not None and context.login_hour < 7:
+            unlock = self._unlock_achievement(
+                "early_bird",
+                metadata={"login_hour": context.login_hour},
+            )
+            if unlock:
+                new_achievements.append(unlock)
+                total_xp += unlock.achievement.xp_value
+
+        # Check "Night Owl" - login after 10pm (22:00)
+        if context.login_hour is not None and context.login_hour >= 22:
+            unlock = self._unlock_achievement(
+                "night_owl",
+                metadata={"login_hour": context.login_hour},
+            )
+            if unlock:
+                new_achievements.append(unlock)
+                total_xp += unlock.achievement.xp_value
+
+        # Check "Explorer" - visit 3 different pages
+        if len(context.pages_visited) >= 3:
+            unlock = self._unlock_achievement(
+                "early_explorer",
+                metadata={"pages_visited": context.pages_visited[:5]},  # Store first 5
+            )
+            if unlock:
+                new_achievements.append(unlock)
+                total_xp += unlock.achievement.xp_value
+
+        # Check "Curious Mind" - view workout details
+        if context.viewed_workout_details:
+            unlock = self._unlock_achievement(
+                "early_curious_mind",
+                metadata={"trigger": "workout_details_viewed"},
+            )
+            if unlock:
+                new_achievements.append(unlock)
+                total_xp += unlock.achievement.xp_value
+
+        # Add XP and check for level up
+        level_up = False
+        new_level = None
+
+        if total_xp > 0:
+            _, level_up, new_level = self.add_xp(total_xp, "early_achievements")
+
+        # Get updated count
+        total_unlocked = self._get_total_unlocked_count()
+
+        # If we unlocked anything and had nothing before, this is the first achievement
+        is_first = is_first_achievement and len(new_achievements) > 0
+
+        return CheckEarlyAchievementsResponse(
+            new_achievements=new_achievements,
+            xp_earned=total_xp,
+            level_up=level_up,
+            new_level=new_level,
+            is_first_achievement=is_first,
+            total_achievements_unlocked=total_unlocked,
+        )

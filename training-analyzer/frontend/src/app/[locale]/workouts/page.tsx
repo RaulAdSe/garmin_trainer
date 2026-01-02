@@ -6,6 +6,7 @@ import { useWorkouts } from '@/hooks/useWorkouts';
 import { WorkoutList } from '@/components/workouts/WorkoutList';
 import { GarminSync } from '@/components/garmin/GarminSync';
 import { Button } from '@/components/ui/Button';
+import { TooltipTriggers } from '@/components/onboarding';
 import type { WorkoutListFilters } from '@/lib/types';
 import type { GarminSyncResponse } from '@/lib/api-client';
 
@@ -77,13 +78,15 @@ export default function WorkoutsPage() {
           )}
 
           {/* Garmin Sync Button */}
-          <Button
-            variant="primary"
-            onClick={() => setShowGarminSync(true)}
-            leftIcon={<SyncIcon className="w-4 h-4" />}
-          >
-            {t('syncGarmin')}
-          </Button>
+          <div data-onboarding="connect-button">
+            <Button
+              variant="primary"
+              onClick={() => setShowGarminSync(true)}
+              leftIcon={<SyncIcon className="w-4 h-4" />}
+            >
+              {t('syncGarmin')}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -123,6 +126,12 @@ export default function WorkoutsPage() {
           />
         )}
       </div>
+
+      {/* Contextual Onboarding Tooltips */}
+      <TooltipTriggers
+        hasNoWorkouts={total === 0 && !isLoading}
+        workoutCount={total}
+      />
     </div>
   );
 }

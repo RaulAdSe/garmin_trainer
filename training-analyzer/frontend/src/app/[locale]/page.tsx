@@ -1,23 +1,34 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { Link } from "@/i18n/navigation";
 import { useAthleteContext, useVO2MaxTrend } from "@/hooks/useAthleteContext";
-import { useUserProgress } from "@/hooks/useAchievements";
+import { useUserProgress, useAchievements } from "@/hooks/useAchievements";
 import { useDataFreshness } from "@/hooks/useDataFreshness";
+import { useWorkouts } from "@/hooks/useWorkouts";
 import { useAuth } from "@/contexts/auth-context";
 import { hasAuthToken } from "@/lib/auth-fetch";
 import { ReadinessGauge } from "@/components/athlete/ReadinessGauge";
 import { VO2MaxCard } from "@/components/athlete/VO2MaxCard";
-import { GamificationHeader, GamificationHeaderSkeleton } from "@/components/dashboard/GamificationHeader";
-import { TodaysTraining, TodaysTrainingSkeleton } from "@/components/dashboard/TodaysTraining";
-import { TrainingBalance, TrainingBalanceSkeleton } from "@/components/dashboard/TrainingBalance";
+import {
+  GamificationHeader,
+  GamificationHeaderSkeleton,
+  TodaysTraining,
+  TodaysTrainingSkeleton,
+  TrainingBalance,
+  TrainingBalanceSkeleton,
+  FocusView,
+  FocusViewSkeleton,
+  DashboardToggle,
+  useDashboardViewMode,
+} from "@/components/dashboard";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { SkeletonCard } from "@/components/ui/Skeleton";
 import { DataFreshnessIndicator } from "@/components/ui/DataFreshnessIndicator";
+import { TooltipTriggers } from "@/components/onboarding";
 
 export default function Dashboard() {
   const t = useTranslations("dashboard");
@@ -27,7 +38,17 @@ export default function Dashboard() {
   const { data: context, isLoading, error, refetch } = useAthleteContext();
   const { data: userProgress, isLoading: progressLoading } = useUserProgress();
   const { data: vo2maxData, isLoading: vo2maxLoading } = useVO2MaxTrend(90);
+  const { data: achievements } = useAchievements();
+  const { total: workoutCount } = useWorkouts({ pageSize: 1 });
   const dataFreshness = useDataFreshness({ staleThresholdHours: 72 });
+  const [viewMode, setViewMode, isViewModeLoaded] = useDashboardViewMode();
+
+  // Compute onboarding tooltip data
+  const achievementCount = useMemo(
+    () => achievements?.filter((a) => a.unlockedAt).length ?? 0,
+    [achievements]
+  );
+  const currentLevel = typeof userProgress?.level === 'number' ? userProgress.level : 1;
 
   // Check if error is a 401 and redirect to login
   const is401Error = error && (
@@ -42,8 +63,8 @@ export default function Dashboard() {
     }
   }, [is401Error, router]);
 
-  // Show loading state while auth is being checked
-  if (authLoading) {
+  // Show loading state while auth or view mode is being checked
+  if (authLoading || !isViewModeLoaded) {
     return (
       <div className="space-y-4 sm:space-y-6">
         <div>
@@ -95,6 +116,11 @@ export default function Dashboard() {
   }
 
   if (isLoading) {
+    // Show appropriate skeleton based on view mode
+    if (viewMode === "focus") {
+      return <FocusViewSkeleton />;
+    }
+
     return (
       <div className="space-y-4 sm:space-y-6">
         {/* Header skeleton */}
@@ -148,6 +174,32 @@ export default function Dashboard() {
     );
   }
 
+  // Render Focus View when in focus mode
+  if (viewMode === "focus" && context) {
+    return (
+      <div className="space-y-4 sm:space-y-6">
+        {/* Header with toggle */}
+        <div className="flex items-center justify-between animate-fadeIn">
+          <div className="flex items-center gap-4">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-100">
+              {t("title")}
+            </h1>
+          </div>
+          <DashboardToggle
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+          />
+        </div>
+
+        {/* Focus View */}
+        <FocusView
+          context={context}
+          onExpandDashboard={() => setViewMode("full")}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* Header */}
@@ -161,26 +213,34 @@ export default function Dashboard() {
               {t("subtitle")}
             </p>
           </div>
-          {/* Data Freshness Indicator */}
-          {!dataFreshness.isLoading && (
-            <DataFreshnessIndicator
-              lastSyncTime={dataFreshness.lastSyncTime}
-              relativeTimeString={dataFreshness.relativeTimeString}
-              onRefresh={dataFreshness.refresh}
-              isRefreshing={dataFreshness.isSyncing}
-              canRefresh={dataFreshness.hasCredentials}
-              staleThresholdHours={72}
-              className="shrink-0"
+          <div className="flex items-center gap-3 shrink-0">
+            {/* Dashboard View Toggle */}
+            <DashboardToggle
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
             />
-          )}
+            {/* Data Freshness Indicator */}
+            {!dataFreshness.isLoading && (
+              <DataFreshnessIndicator
+                lastSyncTime={dataFreshness.lastSyncTime}
+                relativeTimeString={dataFreshness.relativeTimeString}
+                onRefresh={dataFreshness.refresh}
+                isRefreshing={dataFreshness.isSyncing}
+                canRefresh={dataFreshness.hasCredentials}
+                staleThresholdHours={72}
+              />
+            )}
+          </div>
         </div>
       </div>
 
       {/* Compact Gamification Header */}
-      <GamificationHeader userProgress={userProgress} />
+      <div data-onboarding="level-badge">
+        <GamificationHeader userProgress={userProgress} />
+      </div>
 
       {/* Readiness Hero - Full Width */}
-      <Card className="animate-slideUp">
+      <Card className="animate-slideUp" data-onboarding="readiness-gauge">
         <CardHeader>
           <CardTitle>{t("readinessCard")}</CardTitle>
         </CardHeader>
@@ -293,6 +353,14 @@ export default function Dashboard() {
           </div>
         </Card>
       )}
+
+      {/* Contextual Onboarding Tooltips */}
+      <TooltipTriggers
+        hasNoWorkouts={workoutCount === 0}
+        workoutCount={workoutCount}
+        currentLevel={currentLevel}
+        achievementCount={achievementCount}
+      />
     </div>
   );
 }

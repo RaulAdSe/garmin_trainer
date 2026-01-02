@@ -302,7 +302,8 @@
       "consistency": "Consistency",
       "performance": "Performance",
       "execution": "Execution",
-      "milestone": "Milestone"
+      "milestone": "Milestone",
+      "early_win": "Quick Wins"
     },
     "rarity": {
       "common": "Common",
@@ -312,6 +313,26 @@
     },
     "noAchievements": "No achievements yet",
     "keepTraining": "Keep training to unlock your first achievement!",
+    "earlyWin": {
+      "title": "Early Win!",
+      "firstAchievement": "First Achievement Unlocked!",
+      "achievementUnlocked": "Achievement Unlocked!",
+      "quickWin": "QUICK WIN",
+      "firstSteps": "First Steps",
+      "firstStepsDesc": "Log in for the first time after connecting your device",
+      "profileComplete": "Profile Complete",
+      "profileCompleteDesc": "Fill out your profile and preferences",
+      "firstWorkoutLogged": "First Workout Logged",
+      "firstWorkoutLoggedDesc": "Log your first workout (synced or manual)",
+      "earlyBird": "Early Bird",
+      "earlyBirdDesc": "Log in before 7am - rise and shine!",
+      "nightOwl": "Night Owl",
+      "nightOwlDesc": "Log in after 10pm - burning the midnight oil!",
+      "explorer": "Explorer",
+      "explorerDesc": "Visit 3 different pages to explore the app",
+      "curiousMind": "Curious Mind",
+      "curiousMindDesc": "View workout details for the first time"
+    },
     "unlockCelebration": {
       "title": "Feature Unlocked!",
       "levelReached": "You've reached Level {level} and unlocked this feature!",
@@ -542,5 +563,225 @@
     "syncing": "Syncing...",
     "syncFailed": "Sync failed",
     "syncSuccess": "Sync complete"
+  },
+  "purpose": {
+    "title": "What drives you?",
+    "subtitle": "Understanding your WHY helps us keep you motivated on tough days and celebrate your wins.",
+    "setMyPurpose": "Set My Purpose",
+    "skipForNow": "Skip for now",
+    "customOption": "Something else",
+    "customPlaceholder": "Write your own training purpose...",
+    "customHint": "Tell us what matters most to you",
+    "whyNote": "Research shows that athletes who connect with their 'why' are 42% more likely to reach their goals.",
+    "yourWhy": "Your Why",
+    "remember": "Remember why you started:",
+    "dismiss": "Dismiss",
+    "options": {
+      "first_5k": "Complete my first 5K",
+      "first_10k": "Complete my first 10K",
+      "first_half": "Finish my first half marathon",
+      "first_marathon": "Run my first marathon",
+      "beat_pb": "Beat my personal best",
+      "stay_healthy": "Stay healthy and active",
+      "lose_weight": "Lose weight and get fit",
+      "enjoy_more": "Enjoy running more"
+    },
+    "descriptions": {
+      "first_5k": "Start your running journey with a achievable milestone",
+      "first_10k": "Double the distance, double the achievement",
+      "first_half": "Join the 21K club with your first half",
+      "first_marathon": "The ultimate running challenge awaits",
+      "beat_pb": "Push past your limits and set new records",
+      "stay_healthy": "Make movement a sustainable part of life",
+      "lose_weight": "Transform your body through consistent training",
+      "enjoy_more": "Find joy in every stride and breath"
+    },
+    "reminder": {
+      "streak_broken": {
+        "title": "Your streak needs you",
+        "message": "It's been a few days. Your body is ready - let's get back on track.",
+        "quote": "The comeback is always stronger than the setback."
+      },
+      "inactive": {
+        "title": "We miss you out there",
+        "message": "It's been a while since your last workout. Every champion has rest days, but they always come back.",
+        "quote": "It's not about being the best. It's about being better than you were yesterday."
+      },
+      "check_in": {
+        "title": "How are you feeling?",
+        "message": "Just checking in to remind you why you started this journey.",
+        "quote": "Success is the sum of small efforts repeated day in and day out."
+      },
+      "encouragement": {
+        "title": "Keep up the great work!",
+        "message": "You're building something amazing. Stay focused on your goal.",
+        "quote": "The only bad workout is the one that didn't happen."
+      },
+      "letsGo": "Let's do this!",
+      "remindLater": "Remind me later"
+    }
+  },
+  "onboarding": {
+    "skipOnboarding": "Skip setup for now",
+    "common": {
+      "back": "Back",
+      "continue": "Continue",
+      "gotIt": "Got it",
+      "awesome": "Awesome!",
+      "learnMore": "Learn more",
+      "dismiss": "Dismiss"
+    },
+    "progress": {
+      "step": "Step {current} of {total}"
+    },
+    "welcome": {
+      "tagline": "Your AI-Powered Training Companion",
+      "getStarted": "Get Started",
+      "value1Title": "Smart Analytics",
+      "value1Desc": "AI-powered insights from every workout",
+      "value2Title": "AI Coach",
+      "value2Desc": "Personalized training recommendations",
+      "value3Title": "Achievements",
+      "value3Desc": "Track progress and unlock rewards",
+      "privacyNote": "Your data stays secure. We never share your training information with third parties."
+    },
+    "connection": {
+      "title": "Connect Your Device",
+      "subtitle": "Import your workouts automatically or enter them manually",
+      "garminTitle": "Garmin Connect",
+      "garminDesc": "Sync activities, heart rate, and advanced metrics",
+      "stravaTitle": "Strava",
+      "stravaDesc": "Import activities and share analysis with friends",
+      "manualTitle": "Manual Entry",
+      "manualDesc": "Log workouts manually without connecting a device",
+      "skipTitle": "Skip for Now",
+      "skipDesc": "Set up sync later in settings",
+      "benefitsTitle": "What you'll get with sync:",
+      "benefit1": "Automatic workout import after each activity",
+      "benefit2": "Heart rate zones and training metrics",
+      "benefit3": "AI-powered workout analysis and insights",
+      "benefit4": "Progress tracking and trend analysis"
+    },
+    "profile": {
+      "title": "Personalize Your Experience",
+      "subtitle": "Help us tailor recommendations to your goals",
+      "finish": "Start Training",
+      "goalsTab": "Goals",
+      "zonesTab": "Zones",
+      "preferencesTab": "Preferences",
+      "primaryGoalLabel": "What's your main training goal?",
+      "goalRace": "Race Performance",
+      "goalFitness": "General Fitness",
+      "goalHealth": "Health & Wellness",
+      "goalWeight": "Weight Management",
+      "raceDistanceLabel": "What distance are you training for?",
+      "halfMarathon": "Half Marathon",
+      "marathon": "Marathon",
+      "ultra": "Ultra",
+      "weeklyHoursLabel": "How many hours can you train per week?",
+      "weeklyHoursHint": "We'll adapt recommendations to fit your schedule",
+      "experienceLabel": "What's your experience level?",
+      "beginner": "Beginner",
+      "beginnerDesc": "New to structured training (0-1 years)",
+      "intermediate": "Intermediate",
+      "intermediateDesc": "Some experience with training plans (1-3 years)",
+      "advanced": "Advanced",
+      "advancedDesc": "Experienced athlete with solid training history (3+ years)",
+      "zoneMethodLabel": "How would you like to set your training zones?",
+      "zoneAuto": "Auto-detect from workouts",
+      "zoneAutoDesc": "We'll calculate zones from your recent training data",
+      "zoneLthr": "Lactate Threshold HR",
+      "zoneLthrDesc": "Enter your threshold heart rate from a field test",
+      "zoneMaxHr": "Maximum Heart Rate",
+      "zoneMaxHrDesc": "Enter your known max HR from a max effort",
+      "zoneManual": "Set zones manually",
+      "zoneManualDesc": "Enter each zone range yourself",
+      "recommended": "Recommended",
+      "lthrLabel": "Lactate Threshold Heart Rate",
+      "lthrHint": "Your heart rate at lactate threshold (from a 30-min time trial)",
+      "maxHrLabel": "Maximum Heart Rate",
+      "maxHrHint": "Your highest heart rate ever recorded",
+      "zoneAutoInfo": "We'll analyze your workout data to estimate your zones. The more data we have, the more accurate the zones become.",
+      "unitsLabel": "Preferred units",
+      "metric": "Metric",
+      "imperial": "Imperial",
+      "readyTitle": "You're all set!",
+      "readyDesc": "Your personalized training dashboard is ready. Let's start your journey!"
+    },
+    "complete": {
+      "welcome": "Welcome to trAIner!"
+    },
+    "featureIntro": {
+      "weekLabel": "Week {week}",
+      "newFeatures": "New features to explore",
+      "dismissAll": "Dismiss all",
+      "dismiss": "Dismiss",
+      "gotIt": "Got it",
+      "new": "NEW",
+      "unlocksAtLevel": "Level {level}",
+      "dashboardTitle": "Your Training Dashboard",
+      "dashboardDesc": "See your readiness score, fitness metrics, and daily training recommendations at a glance.",
+      "workoutsTitle": "Workout History",
+      "workoutsDesc": "View all your synced activities with AI-powered analysis and insights.",
+      "metricsWhyTitle": "Understanding Your Metrics",
+      "metricsWhyDesc": "Tap any metric to learn what it means and why it matters for your training.",
+      "zonesTitle": "Training Zones",
+      "zonesDesc": "Heart rate and pace zones calibrated to your fitness level.",
+      "achievementsTitle": "Achievements System",
+      "achievementsDesc": "Earn XP and unlock badges for consistency, performance, and milestones.",
+      "progressTitle": "Progress Tracking",
+      "progressDesc": "See how your fitness is improving over time with trend analysis.",
+      "aiChatTitle": "AI Coach Chat",
+      "aiChatDesc": "Get personalized training advice from your AI coach. Unlocks at Level 8!",
+      "plansTitle": "Training Plans",
+      "plansDesc": "Generate custom training plans for your race goals. Unlocks at Level 10!"
+    },
+    "noWorkouts": {
+      "title": "Welcome to trAIner!",
+      "content": "Connect your Garmin account to import your workouts and get personalized AI-powered training insights.",
+      "action": "Connect Garmin"
+    },
+    "firstWorkoutSynced": {
+      "title": "Your Readiness Score",
+      "content": "This gauge shows how ready your body is for training today. Green means you're recovered and ready for hard efforts. Yellow suggests moderate training. Red indicates you should focus on recovery."
+    },
+    "firstAnalysisViewed": {
+      "title": "Earn XP as You Train",
+      "content": "Every workout you complete and analyze earns you experience points (XP). Level up to unlock new features like AI Coach chat, training plans, and more!"
+    },
+    "firstAchievementEarned": {
+      "title": "Achievement Unlocked!",
+      "content": "You've earned your first achievement! Achievements reward consistency, performance milestones, and training goals. Each achievement gives you XP to level up faster.",
+      "action": "View Achievements"
+    },
+    "levelUp": {
+      "title": "Level {level} Unlocked!",
+      "content": "Congratulations! You've unlocked new features: {features}. Keep training to unlock even more powerful tools!",
+      "noNewFeatures": "Keep going to unlock more features",
+      "action": "Explore Features"
+    }
+  },
+  "focusView": {
+    "readiness": "Readiness",
+    "today": "Today",
+    "readyForQuality": "Ready for Quality",
+    "readyForQualityMessage": "Your body is recovered and ready for hard work.",
+    "goodForSteady": "Good for Steady Training",
+    "goodForSteadyMessage": "Your body is responding well. Keep building.",
+    "focusOnRecovery": "Focus on Recovery",
+    "focusOnRecoveryMessage": "Your body needs rest. Recovery is progress.",
+    "viewFullDashboard": "View Full Dashboard",
+    "focusMode": "Focus",
+    "fullMode": "Full",
+    "viewModeLabel": "Dashboard view mode",
+    "workoutTypes": {
+      "quality": "Quality Session",
+      "tempo": "Tempo Run",
+      "easyRun": "Easy Run",
+      "moderate": "Moderate Effort",
+      "recovery": "Recovery Walk",
+      "rest": "Rest Day",
+      "fullRecovery": "Full Rest"
+    }
   }
 }

@@ -516,17 +516,19 @@ All three experts identified that the app alienates beginners:
 
 **Success Metric**: Mobile usability score improves; zero injury risk alerts missed
 
-### Phase 2: Onboarding (Weeks 5-8)
+### Phase 2: Onboarding (Weeks 5-8) ✅ COMPLETED
 
 **Focus**: New user experience
 
-- [ ] 3-phase onboarding flow
-- [ ] Purpose anchoring question
-- [ ] Guaranteed early win achievements
-- [ ] Dashboard focus mode
-- [ ] Contextual tooltips
+- [x] 3-phase onboarding flow
+- [x] Purpose anchoring question
+- [x] Guaranteed early win achievements
+- [x] Dashboard focus mode
+- [x] Contextual tooltips
 
 **Success Metric**: Day-7 retention increases 20%
+
+> **Implementation**: See [Implementation 6](#implementation-6-phase-2---onboarding--new-user-experience-completed) for details.
 
 ### Phase 3: Beginner Mode (Weeks 9-12)
 
@@ -1397,3 +1399,255 @@ src/
 | GET | `/api/recovery/sleep-debt` | Get sleep debt |
 | POST | `/api/taper/generate` | Generate taper plan |
 | POST | `/api/race-pacing/generate` | Generate race plan |
+
+---
+
+## Implementation 6: Phase 2 - Onboarding & New User Experience (COMPLETED)
+
+This section documents the completed Phase 2 implementation focusing on new user experience improvements.
+
+### 6.1 Three-Phase Onboarding Flow
+
+**Files Created:**
+- `frontend/src/components/onboarding/OnboardingFlow.tsx` - Main orchestrator
+- `frontend/src/components/onboarding/WelcomeStep.tsx` - Welcome screen
+- `frontend/src/components/onboarding/ConnectionStep.tsx` - Garmin/Strava connection
+- `frontend/src/components/onboarding/ProfileStep.tsx` - User profile setup
+- `frontend/src/components/onboarding/FeatureIntroStep.tsx` - Feature introduction
+- `frontend/src/contexts/onboarding-context.tsx` - State management
+
+**Flow Structure:**
+```
+Step 1: Welcome
+├── App introduction
+├── Value proposition
+└── Get started CTA
+
+Step 2: Connection
+├── Garmin Connect option
+├── Strava option (coming soon)
+└── Skip option (limited features)
+
+Step 3: Profile
+├── Training goals selection
+├── Experience level
+├── Preferred units
+└── Weekly availability
+```
+
+**Key Features:**
+- Progress indicator with step dots
+- Animated transitions between steps
+- Persistence via localStorage
+- Skip functionality with feature limitations warning
+- Auto-detection of returning users
+
+### 6.2 Purpose Anchoring
+
+**Files Created:**
+- `frontend/src/components/onboarding/PurposeStep.tsx` - Purpose selection during onboarding
+- `frontend/src/components/dashboard/PurposeReminder.tsx` - Dashboard reminder widget
+- `frontend/src/hooks/usePurpose.ts` - Purpose state management
+
+**Purpose Options:**
+| ID | Label | Icon | Motivation Message |
+|----|-------|------|-------------------|
+| `health` | Health & Longevity | ❤️ | "Every workout is an investment in your future self." |
+| `family` | Family & Loved Ones | 👨‍👩‍👧‍👦 | "Training today so you can keep up with those you love." |
+| `competition` | Competition & Achievement | 🏆 | "Champions are made in training, not on race day." |
+| `stress_relief` | Mental Wellness | 🧘 | "Movement is medicine for the mind." |
+| `community` | Community & Connection | 🤝 | "You're part of a global community of athletes." |
+
+**PurposeReminder Component:**
+- Displays on dashboard when readiness is low (red/yellow zone)
+- Shows personalized message based on selected purpose
+- Reinforces "why" during difficult moments
+- Dismissible but reappears on new sessions
+
+### 6.3 Early Win Achievements
+
+**Files Modified:**
+- `src/services/achievement_service.py` - Added early win achievements
+- `src/models/gamification.py` - Added `early_win` category
+- `src/api/routes/gamification.py` - Added check endpoint
+
+**New Achievements (category: `early_win`):**
+| ID | Name | XP | Trigger |
+|----|------|-----|---------|
+| `early_first_steps` | First Steps 👋 | 15 | First login after connection |
+| `early_profile_complete` | Profile Complete 📝 | 20 | Complete profile setup |
+| `early_first_workout` | First Workout Logged 🏃 | 25 | Log first workout (synced/manual) |
+| `early_bird` | Early Bird 🌅 | 15 | Login before 7am |
+| `night_owl` | Night Owl 🦉 | 15 | Login after 10pm |
+| `early_explorer` | Explorer 🧭 | 15 | Visit 3 different pages |
+
+**API Endpoint:**
+```python
+POST /api/gamification/check-early-achievements
+{
+  "context": {
+    "just_logged_in": true,
+    "profile_completed": false,
+    "first_workout_synced": false,
+    "login_hour": 6,
+    "pages_visited": ["dashboard", "workouts"]
+  }
+}
+```
+
+**Design Principles:**
+- Guaranteed within first session
+- Low XP values (15-25) to avoid devaluing later achievements
+- Negative `display_order` to appear first in achievement list
+- Creates immediate positive reinforcement
+
+### 6.4 Dashboard Focus Mode
+
+**Files Created:**
+- `frontend/src/components/dashboard/FocusView.tsx` - Simplified dashboard view
+- `frontend/src/components/dashboard/DashboardToggle.tsx` - Toggle button
+
+**Focus View Design:**
+```
+┌─────────────────────────────────────┐
+│         READINESS: 78               │
+│       Ready for Quality             │
+│                                     │
+│  "Your body is recovered and        │
+│   ready for a challenge."           │
+│                                     │
+│  Today's Suggestion:                │
+│  45min Easy Run                     │
+│                                     │
+│      [View Full Dashboard]          │
+└─────────────────────────────────────┘
+```
+
+**Key Features:**
+- Single hero metric (Readiness score)
+- Motivational message based on zone (green/yellow/red)
+- Today's suggested workout
+- One-tap expansion to full dashboard
+- Preference persisted in localStorage
+- Defaults to Focus View for users level < 5
+
+**Zone-Based Messaging:**
+| Zone | Score | Message | Sub-message |
+|------|-------|---------|-------------|
+| Green | ≥75 | "Ready for Quality" | "Your body is recovered and ready for a challenge." |
+| Yellow | 50-74 | "Good for Steady" | "A moderate effort today will build your base." |
+| Red | <50 | "Focus on Recovery" | "Rest is when adaptation happens. Honor your body." |
+
+### 6.5 Contextual Tooltips
+
+**Files Created:**
+- `frontend/src/components/onboarding/ContextualTooltip.tsx` - Tooltip component
+- `frontend/src/components/onboarding/TooltipTriggers.tsx` - Trigger definitions
+- `frontend/src/hooks/useContextualTooltips.ts` - Tooltip state management
+
+**Tooltip Triggers:**
+| ID | Trigger Condition | Message |
+|----|-------------------|---------|
+| `no_workouts` | User has no workouts | "Connect your device to import your training history" |
+| `first_workout_synced` | Just synced first workout | "Great! Your first workout is here. Tap to see the analysis." |
+| `first_analysis_viewed` | Viewing first analysis | "This is your workout breakdown. XP is earned by viewing analyses." |
+| `first_achievement_earned` | First achievement unlocked | "You earned your first achievement! Keep going to unlock more." |
+| `level_up` | User just leveled up | "Level up! You've unlocked {feature}." |
+
+**Implementation Details:**
+```typescript
+interface TooltipConditions {
+  hasNoWorkouts: boolean;
+  justSyncedFirstWorkout: boolean;
+  viewingFirstAnalysis: boolean;
+  justEarnedFirstAchievement: boolean;
+  justLeveledUp: boolean;
+  currentLevel?: number;
+  unlockedFeatures?: string[];
+}
+```
+
+**Features:**
+- One tooltip shown at a time (priority-based)
+- Dismiss persisted to localStorage
+- Won't show again after dismissed
+- Animated entrance/exit
+- Positioned contextually near relevant UI element
+
+### 6.6 i18n Support
+
+**Files Modified:**
+- `frontend/src/messages/en.json` - English translations
+- `frontend/src/messages/es.json` - Spanish translations
+
+**Translation Keys Added:**
+```json
+{
+  "onboarding": {
+    "welcome": { "title", "subtitle", "getStarted" },
+    "connection": { "title", "garmin", "strava", "skip" },
+    "profile": { "title", "goals", "experience", "units" },
+    "purpose": { "title", "health", "family", "competition", "mental", "community" }
+  },
+  "focusView": {
+    "readyForQuality", "readyForQualityMessage",
+    "goodForSteady", "goodForSteadyMessage",
+    "focusOnRecovery", "focusOnRecoveryMessage",
+    "viewFullDashboard"
+  },
+  "tooltips": {
+    "noWorkouts", "firstWorkout", "firstAnalysis", "firstAchievement", "levelUp"
+  }
+}
+```
+
+### 6.7 File Structure Summary
+
+```
+frontend/src/
+├── components/
+│   ├── dashboard/
+│   │   ├── FocusView.tsx          # Simplified dashboard
+│   │   ├── DashboardToggle.tsx    # Focus/Full toggle
+│   │   └── PurposeReminder.tsx    # Purpose motivation widget
+│   └── onboarding/
+│       ├── OnboardingFlow.tsx     # Main orchestrator
+│       ├── WelcomeStep.tsx        # Step 1
+│       ├── ConnectionStep.tsx     # Step 2
+│       ├── ProfileStep.tsx        # Step 3
+│       ├── PurposeStep.tsx        # Purpose selection
+│       ├── FeatureIntroStep.tsx   # Feature introduction
+│       ├── ContextualTooltip.tsx  # Tooltip component
+│       ├── TooltipTriggers.tsx    # Trigger definitions
+│       └── index.ts               # Exports
+├── contexts/
+│   └── onboarding-context.tsx     # Onboarding state
+├── hooks/
+│   ├── usePurpose.ts              # Purpose hook
+│   └── useContextualTooltips.ts   # Tooltips hook
+└── messages/
+    ├── en.json                    # +243 lines
+    └── es.json                    # +243 lines
+
+src/
+├── services/
+│   └── achievement_service.py     # +220 lines (early wins)
+├── models/
+│   └── gamification.py            # +60 lines (early win types)
+└── api/routes/
+    └── gamification.py            # +50 lines (check endpoint)
+```
+
+### 6.8 Success Metrics
+
+Phase 2 targets from the roadmap:
+- **Day-7 retention increase**: 20% improvement target
+- **First-session completion**: Track onboarding completion rate
+- **Early achievement unlock rate**: >80% of new users should earn at least one
+
+**Tracking Points:**
+1. Onboarding step completion rates
+2. Purpose selection distribution
+3. Focus view vs full dashboard preference
+4. Tooltip dismiss rates
+5. Early achievement unlock timing

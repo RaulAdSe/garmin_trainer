@@ -302,7 +302,8 @@
       "consistency": "Consistencia",
       "performance": "Rendimiento",
       "execution": "Ejecución",
-      "milestone": "Hito"
+      "milestone": "Hito",
+      "early_win": "Logros Rápidos"
     },
     "rarity": {
       "common": "Común",
@@ -312,6 +313,26 @@
     },
     "noAchievements": "Sin logros aún",
     "keepTraining": "¡Sigue entrenando para desbloquear tu primer logro!",
+    "earlyWin": {
+      "title": "¡Logro Rápido!",
+      "firstAchievement": "¡Primer Logro Desbloqueado!",
+      "achievementUnlocked": "¡Logro Desbloqueado!",
+      "quickWin": "LOGRO RÁPIDO",
+      "firstSteps": "Primeros Pasos",
+      "firstStepsDesc": "Inicia sesión por primera vez después de conectar tu dispositivo",
+      "profileComplete": "Perfil Completo",
+      "profileCompleteDesc": "Completa tu perfil y preferencias",
+      "firstWorkoutLogged": "Primer Entrenamiento Registrado",
+      "firstWorkoutLoggedDesc": "Registra tu primer entrenamiento (sincronizado o manual)",
+      "earlyBird": "Madrugador",
+      "earlyBirdDesc": "Inicia sesión antes de las 7am - ¡a madrugar!",
+      "nightOwl": "Noctámbulo",
+      "nightOwlDesc": "Inicia sesión después de las 10pm - ¡quemando el aceite de medianoche!",
+      "explorer": "Explorador",
+      "explorerDesc": "Visita 3 páginas diferentes para explorar la app",
+      "curiousMind": "Mente Curiosa",
+      "curiousMindDesc": "Visualiza los detalles de un entrenamiento por primera vez"
+    },
     "unlockCelebration": {
       "title": "¡Función Desbloqueada!",
       "levelReached": "¡Has alcanzado el Nivel {level} y desbloqueado esta función!",
@@ -542,5 +563,225 @@
     "syncing": "Sincronizando...",
     "syncFailed": "Error de sincronizacion",
     "syncSuccess": "Sincronizacion completa"
+  },
+  "purpose": {
+    "title": "Que te motiva?",
+    "subtitle": "Entender tu POR QUE nos ayuda a mantenerte motivado en los dias dificiles y celebrar tus logros.",
+    "setMyPurpose": "Establecer Mi Proposito",
+    "skipForNow": "Saltar por ahora",
+    "customOption": "Algo diferente",
+    "customPlaceholder": "Escribe tu propio proposito de entrenamiento...",
+    "customHint": "Cuentanos que es lo mas importante para ti",
+    "whyNote": "Los estudios demuestran que los atletas que conectan con su 'por que' tienen un 42% mas de probabilidades de alcanzar sus metas.",
+    "yourWhy": "Tu Por Que",
+    "remember": "Recuerda por que empezaste:",
+    "dismiss": "Descartar",
+    "options": {
+      "first_5k": "Completar mi primer 5K",
+      "first_10k": "Completar mi primer 10K",
+      "first_half": "Terminar mi primer medio maraton",
+      "first_marathon": "Correr mi primer maraton",
+      "beat_pb": "Superar mi marca personal",
+      "stay_healthy": "Mantenerme sano y activo",
+      "lose_weight": "Perder peso y ponerme en forma",
+      "enjoy_more": "Disfrutar mas corriendo"
+    },
+    "descriptions": {
+      "first_5k": "Comienza tu viaje como corredor con una meta alcanzable",
+      "first_10k": "Duplica la distancia, duplica el logro",
+      "first_half": "Unete al club de los 21K con tu primer medio",
+      "first_marathon": "El desafio definitivo del running te espera",
+      "beat_pb": "Supera tus limites y establece nuevos records",
+      "stay_healthy": "Haz del movimiento una parte sostenible de tu vida",
+      "lose_weight": "Transforma tu cuerpo con entrenamiento constante",
+      "enjoy_more": "Encuentra alegria en cada zancada y respiracion"
+    },
+    "reminder": {
+      "streak_broken": {
+        "title": "Tu racha te necesita",
+        "message": "Han pasado algunos dias. Tu cuerpo esta listo - volvamos al camino.",
+        "quote": "La remontada siempre es mas fuerte que el tropiezo."
+      },
+      "inactive": {
+        "title": "Te echamos de menos",
+        "message": "Ha pasado un tiempo desde tu ultimo entrenamiento. Todo campeon tiene dias de descanso, pero siempre vuelve.",
+        "quote": "No se trata de ser el mejor. Se trata de ser mejor que ayer."
+      },
+      "check_in": {
+        "title": "Como te sientes?",
+        "message": "Solo queriamos recordarte por que empezaste este viaje.",
+        "quote": "El exito es la suma de pequenos esfuerzos repetidos dia tras dia."
+      },
+      "encouragement": {
+        "title": "Sigue asi!",
+        "message": "Estas construyendo algo increible. Mantente enfocado en tu meta.",
+        "quote": "El unico mal entrenamiento es el que no se hizo."
+      },
+      "letsGo": "Vamos a por ello!",
+      "remindLater": "Recordarmelo despues"
+    }
+  },
+  "onboarding": {
+    "skipOnboarding": "Saltar configuracion por ahora",
+    "common": {
+      "back": "Atras",
+      "continue": "Continuar",
+      "gotIt": "Entendido",
+      "awesome": "Genial!",
+      "learnMore": "Saber mas",
+      "dismiss": "Descartar"
+    },
+    "progress": {
+      "step": "Paso {current} de {total}"
+    },
+    "welcome": {
+      "tagline": "Tu Companero de Entrenamiento con IA",
+      "getStarted": "Empezar",
+      "value1Title": "Analitica Inteligente",
+      "value1Desc": "Insights con IA de cada entrenamiento",
+      "value2Title": "Coach IA",
+      "value2Desc": "Recomendaciones de entrenamiento personalizadas",
+      "value3Title": "Logros",
+      "value3Desc": "Sigue tu progreso y desbloquea recompensas",
+      "privacyNote": "Tus datos estan seguros. Nunca compartimos tu informacion de entrenamiento con terceros."
+    },
+    "connection": {
+      "title": "Conecta tu Dispositivo",
+      "subtitle": "Importa tus entrenamientos automaticamente o ingresalos manualmente",
+      "garminTitle": "Garmin Connect",
+      "garminDesc": "Sincroniza actividades, frecuencia cardiaca y metricas avanzadas",
+      "stravaTitle": "Strava",
+      "stravaDesc": "Importa actividades y comparte analisis con amigos",
+      "manualTitle": "Entrada Manual",
+      "manualDesc": "Registra entrenamientos manualmente sin conectar un dispositivo",
+      "skipTitle": "Saltar por Ahora",
+      "skipDesc": "Configura la sincronizacion despues en ajustes",
+      "benefitsTitle": "Lo que obtendras con la sincronizacion:",
+      "benefit1": "Importacion automatica de entrenamientos despues de cada actividad",
+      "benefit2": "Zonas de frecuencia cardiaca y metricas de entrenamiento",
+      "benefit3": "Analisis de entrenamientos con IA e insights",
+      "benefit4": "Seguimiento de progreso y analisis de tendencias"
+    },
+    "profile": {
+      "title": "Personaliza tu Experiencia",
+      "subtitle": "Ayudanos a adaptar las recomendaciones a tus objetivos",
+      "finish": "Empezar a Entrenar",
+      "goalsTab": "Objetivos",
+      "zonesTab": "Zonas",
+      "preferencesTab": "Preferencias",
+      "primaryGoalLabel": "Cual es tu objetivo principal de entrenamiento?",
+      "goalRace": "Rendimiento en Carreras",
+      "goalFitness": "Forma Fisica General",
+      "goalHealth": "Salud y Bienestar",
+      "goalWeight": "Control de Peso",
+      "raceDistanceLabel": "Para que distancia estas entrenando?",
+      "halfMarathon": "Media Maraton",
+      "marathon": "Maraton",
+      "ultra": "Ultra",
+      "weeklyHoursLabel": "Cuantas horas puedes entrenar por semana?",
+      "weeklyHoursHint": "Adaptaremos las recomendaciones a tu horario",
+      "experienceLabel": "Cual es tu nivel de experiencia?",
+      "beginner": "Principiante",
+      "beginnerDesc": "Nuevo en entrenamiento estructurado (0-1 anos)",
+      "intermediate": "Intermedio",
+      "intermediateDesc": "Algo de experiencia con planes de entrenamiento (1-3 anos)",
+      "advanced": "Avanzado",
+      "advancedDesc": "Atleta experimentado con historial solido (3+ anos)",
+      "zoneMethodLabel": "Como te gustaria configurar tus zonas de entrenamiento?",
+      "zoneAuto": "Auto-detectar de entrenamientos",
+      "zoneAutoDesc": "Calcularemos las zonas de tus datos de entrenamiento recientes",
+      "zoneLthr": "FC Umbral de Lactato",
+      "zoneLthrDesc": "Ingresa tu frecuencia cardiaca de umbral de un test de campo",
+      "zoneMaxHr": "Frecuencia Cardiaca Maxima",
+      "zoneMaxHrDesc": "Ingresa tu FC maxima conocida de un esfuerzo maximo",
+      "zoneManual": "Configurar zonas manualmente",
+      "zoneManualDesc": "Ingresa cada rango de zona tu mismo",
+      "recommended": "Recomendado",
+      "lthrLabel": "Frecuencia Cardiaca de Umbral de Lactato",
+      "lthrHint": "Tu frecuencia cardiaca en umbral de lactato (de un test de 30 min)",
+      "maxHrLabel": "Frecuencia Cardiaca Maxima",
+      "maxHrHint": "Tu frecuencia cardiaca mas alta jamas registrada",
+      "zoneAutoInfo": "Analizaremos tus datos de entrenamiento para estimar tus zonas. Cuantos mas datos tengamos, mas precisas seran las zonas.",
+      "unitsLabel": "Unidades preferidas",
+      "metric": "Metrico",
+      "imperial": "Imperial",
+      "readyTitle": "Estas listo!",
+      "readyDesc": "Tu panel de entrenamiento personalizado esta listo. Empecemos tu viaje!"
+    },
+    "complete": {
+      "welcome": "Bienvenido a trAIner!"
+    },
+    "featureIntro": {
+      "weekLabel": "Semana {week}",
+      "newFeatures": "Nuevas funciones para explorar",
+      "dismissAll": "Descartar todo",
+      "dismiss": "Descartar",
+      "gotIt": "Entendido",
+      "new": "NUEVO",
+      "unlocksAtLevel": "Nivel {level}",
+      "dashboardTitle": "Tu Panel de Entrenamiento",
+      "dashboardDesc": "Ve tu puntuacion de preparacion, metricas de forma fisica y recomendaciones diarias de un vistazo.",
+      "workoutsTitle": "Historial de Entrenamientos",
+      "workoutsDesc": "Ve todas tus actividades sincronizadas con analisis e insights con IA.",
+      "metricsWhyTitle": "Entendiendo tus Metricas",
+      "metricsWhyDesc": "Toca cualquier metrica para aprender que significa y por que importa para tu entrenamiento.",
+      "zonesTitle": "Zonas de Entrenamiento",
+      "zonesDesc": "Zonas de frecuencia cardiaca y ritmo calibradas a tu nivel de forma fisica.",
+      "achievementsTitle": "Sistema de Logros",
+      "achievementsDesc": "Gana XP y desbloquea insignias por consistencia, rendimiento e hitos.",
+      "progressTitle": "Seguimiento de Progreso",
+      "progressDesc": "Ve como esta mejorando tu forma fisica con el tiempo con analisis de tendencias.",
+      "aiChatTitle": "Chat con Coach IA",
+      "aiChatDesc": "Obtén consejos de entrenamiento personalizados de tu coach IA. Se desbloquea en el Nivel 8!",
+      "plansTitle": "Planes de Entrenamiento",
+      "plansDesc": "Genera planes de entrenamiento personalizados para tus objetivos de carrera. Se desbloquea en el Nivel 10!"
+    },
+    "noWorkouts": {
+      "title": "Bienvenido a trAIner!",
+      "content": "Conecta tu cuenta de Garmin para importar tus entrenamientos y obtener insights personalizados con IA.",
+      "action": "Conectar Garmin"
+    },
+    "firstWorkoutSynced": {
+      "title": "Tu Puntuacion de Preparacion",
+      "content": "Este indicador muestra que tan preparado esta tu cuerpo para entrenar hoy. Verde significa que estas recuperado y listo para esfuerzos fuertes. Amarillo sugiere entrenamiento moderado. Rojo indica que debes enfocarte en recuperacion."
+    },
+    "firstAnalysisViewed": {
+      "title": "Gana XP Mientras Entrenas",
+      "content": "Cada entrenamiento que completas y analizas te da puntos de experiencia (XP). Sube de nivel para desbloquear nuevas funciones como el chat con Coach IA, planes de entrenamiento y mas!"
+    },
+    "firstAchievementEarned": {
+      "title": "Logro Desbloqueado!",
+      "content": "Has ganado tu primer logro! Los logros recompensan la consistencia, hitos de rendimiento y objetivos de entrenamiento. Cada logro te da XP para subir de nivel mas rapido.",
+      "action": "Ver Logros"
+    },
+    "levelUp": {
+      "title": "Nivel {level} Desbloqueado!",
+      "content": "Felicidades! Has desbloqueado nuevas funciones: {features}. Sigue entrenando para desbloquear herramientas aun mas potentes!",
+      "noNewFeatures": "Sigue adelante para desbloquear mas funciones",
+      "action": "Explorar Funciones"
+    }
+  },
+  "focusView": {
+    "readiness": "Preparacion",
+    "today": "Hoy",
+    "readyForQuality": "Listo para Calidad",
+    "readyForQualityMessage": "Tu cuerpo esta recuperado y listo para entrenar fuerte.",
+    "goodForSteady": "Bien para Entrenamiento Continuo",
+    "goodForSteadyMessage": "Tu cuerpo responde bien. Sigue construyendo.",
+    "focusOnRecovery": "Enfocate en Recuperar",
+    "focusOnRecoveryMessage": "Tu cuerpo necesita descanso. Recuperar es progresar.",
+    "viewFullDashboard": "Ver Panel Completo",
+    "focusMode": "Enfocado",
+    "fullMode": "Completo",
+    "viewModeLabel": "Modo de vista del panel",
+    "workoutTypes": {
+      "quality": "Sesion de Calidad",
+      "tempo": "Rodaje de Tempo",
+      "easyRun": "Rodaje Suave",
+      "moderate": "Esfuerzo Moderado",
+      "recovery": "Caminata de Recuperacion",
+      "rest": "Dia de Descanso",
+      "fullRecovery": "Descanso Total"
+    }
   }
 }

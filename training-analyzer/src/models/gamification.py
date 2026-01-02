@@ -19,6 +19,7 @@ class AchievementCategory(str, Enum):
     PERFORMANCE = "performance"
     EXECUTION = "execution"
     MILESTONE = "milestone"
+    EARLY_WIN = "early_win"  # Guaranteed early achievements for new users
 
 
 class AchievementRarity(str, Enum):
@@ -167,6 +168,40 @@ class CheckAchievementsRequest(BaseModel):
     activity_date: Optional[str] = Field(None, description="Date of activity (YYYY-MM-DD)")
 
 
+class EarlyAchievementContext(BaseModel):
+    """Context for checking early win achievements."""
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+    )
+
+    # Login context
+    is_first_login: bool = Field(default=False, description="First login after device connection")
+    login_hour: Optional[int] = Field(None, description="Hour of login (0-23)")
+
+    # Profile context
+    profile_complete: bool = Field(default=False, description="User has completed profile/preferences")
+
+    # Workout context
+    has_first_workout: bool = Field(default=False, description="User has logged first workout")
+
+    # Navigation context
+    pages_visited: List[str] = Field(default_factory=list, description="List of pages visited")
+    viewed_workout_details: bool = Field(default=False, description="Has viewed workout details")
+
+
+class CheckEarlyAchievementsRequest(BaseModel):
+    """Request model for checking early win achievements."""
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+    )
+
+    context: EarlyAchievementContext = Field(..., description="Context for early achievement checking")
+
+
 class CheckAchievementsResponse(BaseModel):
     """Response model for achievement check."""
 
@@ -184,6 +219,31 @@ class CheckAchievementsResponse(BaseModel):
     new_level: Optional[int] = Field(None, description="New level if leveled up")
     streak_updated: bool = Field(default=False, description="Whether streak was updated")
     current_streak: int = Field(default=0, description="Current streak value")
+
+
+class CheckEarlyAchievementsResponse(BaseModel):
+    """Response model for early win achievement check."""
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+    )
+
+    new_achievements: List[AchievementUnlock] = Field(
+        default_factory=list,
+        description="Newly unlocked early achievements"
+    )
+    xp_earned: int = Field(default=0, description="Total XP earned from new achievements")
+    level_up: bool = Field(default=False, description="Whether user leveled up")
+    new_level: Optional[int] = Field(None, description="New level if leveled up")
+    is_first_achievement: bool = Field(
+        default=False,
+        description="Whether any of these is the user's very first achievement (triggers extra celebration)"
+    )
+    total_achievements_unlocked: int = Field(
+        default=0,
+        description="Total number of achievements now unlocked"
+    )
 
 
 # =============================================================================

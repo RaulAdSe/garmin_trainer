@@ -32,3 +32,22 @@ export {
 export { useDataFreshness } from './useDataFreshness';
 
 export { useTouchChart } from './useTouchChart';
+
+export { usePurpose, type PurposeType, type UserPurpose } from './usePurpose';
+
+export {
+  useContextualTooltips,
+  useOnboardingProgress,
+  type TooltipId,
+  type TooltipConditions,
+  type OnboardingProgress,
+} from './useContextualTooltips';
+
+// Re-export onboarding context hook for convenience
+export { useOnboarding } from '@/contexts/onboarding-context';
+export type {
+  OnboardingStep,
+  OnboardingProfile,
+  OnboardingState,
+  FeatureIntroState,
+} from '@/contexts/onboarding-context';
