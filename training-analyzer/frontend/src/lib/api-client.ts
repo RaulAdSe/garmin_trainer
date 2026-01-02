@@ -1449,4 +1449,234 @@ export async function getBeginnerModeStatus(): Promise<BeginnerModeStatus> {
   return handleResponse<BeginnerModeStatus>(response);
 }
 
+// ============================================
+// Social Proof API (Emotional Engagement)
+// ============================================
+
+export interface PercentileRanking {
+  category: string;
+  percentile: number;
+  label: string;
+  value?: number;
+  unit?: string;
+}
+
+export interface CommunityActivity {
+  activityType: string;
+  count: number;
+  timeAgo: string;
+}
+
+export interface SocialProofStats {
+  athletesTrainedToday: number;
+  workoutsCompletedToday: number;
+  athletesTrainingNow: number;
+  pacePercentile?: PercentileRanking | null;
+  streakPercentile?: PercentileRanking | null;
+  levelPercentile?: PercentileRanking | null;
+  recentActivity: CommunityActivity[];
+  generatedAt: string;
+  cacheTtlSeconds: number;
+}
+
+// Get social proof stats
+export async function getSocialProofStats(): Promise<SocialProofStats> {
+  const response = await authFetch(`${API_BASE}/emotional/social-proof`);
+
+  // Return default stats for 401 errors (not logged in)
+  if (response.status === 401) {
+    return {
+      athletesTrainedToday: 0,
+      workoutsCompletedToday: 0,
+      athletesTrainingNow: 0,
+      pacePercentile: null,
+      streakPercentile: null,
+      levelPercentile: null,
+      recentActivity: [],
+      generatedAt: new Date().toISOString(),
+      cacheTtlSeconds: 60,
+    };
+  }
+
+  return handleResponse<SocialProofStats>(response);
+}
+
+// ============================================
+// Personal Records (PR) API
+// ============================================
+
+import type {
+  PRType,
+  PersonalRecord,
+  PRListResponse,
+  RecentPRsResponse,
+  PRSummary,
+  PRComparisonResult,
+  DetectPRsResponse,
+} from './types';
+
+export interface GetPersonalRecordsRequest {
+  prType?: PRType;
+  activityType?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface DetectPRsRequest {
+  workoutId: string;
+}
+
+// Get all personal records
+export async function getPersonalRecords(
+  request: GetPersonalRecordsRequest = {}
+): Promise<PRListResponse> {
+  const params = new URLSearchParams();
+
+  if (request.prType) params.set('pr_type', request.prType);
+  if (request.activityType) params.set('activity_type', request.activityType);
+  if (request.limit) params.set('limit', String(request.limit));
+  if (request.offset) params.set('offset', String(request.offset));
+
+  const queryString = params.toString();
+  const url = `${API_BASE}/emotional/prs${queryString ? `?${queryString}` : ''}`;
+
+  const response = await authFetch(url);
+  return handleResponse<PRListResponse>(response);
+}
+
+// Get recent personal records
+export async function getRecentPRs(days: number = 30): Promise<RecentPRsResponse> {
+  const response = await authFetch(`${API_BASE}/emotional/prs/recent?days=${days}`);
+  return handleResponse<RecentPRsResponse>(response);
+}
+
+// Get PR summary
+export async function getPRSummary(): Promise<PRSummary> {
+  const response = await authFetch(`${API_BASE}/emotional/prs/summary`);
+  return handleResponse<PRSummary>(response);
+}
+
+// Detect PRs in a workout
+export async function detectPRs(request: DetectPRsRequest): Promise<DetectPRsResponse> {
+  const response = await authFetch(`${API_BASE}/emotional/prs/detect`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ workoutId: request.workoutId }),
+  });
+  return handleResponse<DetectPRsResponse>(response);
+}
+
+// Compare workout to PRs
+export async function compareToPRs(workoutId: string): Promise<PRComparisonResult> {
+  const response = await authFetch(`${API_BASE}/emotional/prs/compare/${workoutId}`);
+  return handleResponse<PRComparisonResult>(response);
+}
+
+// ============================================
+// Comeback Challenge API (Streak Recovery)
+// ============================================
+
+export interface ComebackChallenge {
+  id: string;
+  userId: string;
+  triggeredAt: string;
+  previousStreak: number;
+  status: 'active' | 'completed' | 'expired' | 'cancelled';
+  day1CompletedAt: string | null;
+  day2CompletedAt: string | null;
+  day3CompletedAt: string | null;
+  xpMultiplier: number;
+  bonusXpEarned: number;
+  expiresAt: string | null;
+  createdAt: string | null;
+  daysCompleted: number;
+  isComplete: boolean;
+  isActive: boolean;
+  nextDayToComplete: number | null;
+}
+
+export interface RecordComebackWorkoutResponse {
+  success: boolean;
+  challenge: ComebackChallenge | null;
+  bonusXpEarned: number;
+  totalXpEarned: number;
+  challengeCompleted: boolean;
+  message: string;
+}
+
+export interface ComebackChallengeHistoryResponse {
+  challenges: ComebackChallenge[];
+  total: number;
+}
+
+// Get active comeback challenge for current user
+export async function getComebackChallenge(): Promise<ComebackChallenge | null> {
+  const response = await authFetch(`${API_BASE}/emotional/comeback-challenge`);
+
+  // Return null for 401 errors (not logged in)
+  if (response.status === 401) {
+    return null;
+  }
+
+  return handleResponse<ComebackChallenge | null>(response);
+}
+
+// Record a workout during comeback challenge (applies 1.5x XP multiplier)
+export async function recordComebackWorkout(
+  workoutId: string,
+  baseXp: number = 25
+): Promise<RecordComebackWorkoutResponse> {
+  const response = await authFetch(`${API_BASE}/emotional/comeback-challenge/record`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ workoutId, baseXp }),
+  });
+  return handleResponse<RecordComebackWorkoutResponse>(response);
+}
+
+// Trigger a new comeback challenge (called when streak breaks)
+export async function triggerComebackChallenge(
+  previousStreak: number
+): Promise<ComebackChallenge | null> {
+  const response = await authFetch(`${API_BASE}/emotional/comeback-challenge/trigger`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ previousStreak }),
+  });
+  return handleResponse<ComebackChallenge | null>(response);
+}
+
+// Get comeback challenge history
+export async function getComebackChallengeHistory(
+  limit: number = 10
+): Promise<ComebackChallengeHistoryResponse> {
+  const response = await authFetch(`${API_BASE}/emotional/comeback-challenge/history?limit=${limit}`);
+
+  // Return empty history for 401 errors (not logged in)
+  if (response.status === 401) {
+    return {
+      challenges: [],
+      total: 0,
+    };
+  }
+
+  return handleResponse<ComebackChallengeHistoryResponse>(response);
+}
+
+// Cancel an active comeback challenge
+export async function cancelComebackChallenge(
+  challengeId: string
+): Promise<ComebackChallenge | null> {
+  const response = await authFetch(`${API_BASE}/emotional/comeback-challenge/${challengeId}/cancel`, {
+    method: 'POST',
+  });
+  return handleResponse<ComebackChallenge | null>(response);
+}
+
 export { ApiClientError };

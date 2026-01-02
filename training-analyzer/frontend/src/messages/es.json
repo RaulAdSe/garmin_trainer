@@ -952,5 +952,307 @@
       "title": "Entrenamiento Registrado!",
       "message": "Tu {activityType} ha sido guardado con una carga estimada de {load}."
     }
+  },
+  "socialProof": {
+    "athletesTrained": "atletas entrenaron hoy",
+    "athletesToday": "Atletas hoy",
+    "workoutsToday": "Entrenamientos hoy",
+    "trainingNow": "atletas entrenando ahora",
+    "topPercentile": "Top {percentile}%",
+    "recentActivity": "Actividad Reciente",
+    "rankings": {
+      "title": "Tus Rankings"
+    },
+    "category": {
+      "pace": "Ritmo",
+      "streak": "Consistencia",
+      "level": "Nivel"
+    },
+    "activityTypes": {
+      "workout_completed": "entrenamientos completados",
+      "achievement_unlocked": "logros desbloqueados",
+      "streak_continued": "rachas continuadas",
+      "level_up": "subidas de nivel"
+    }
+  },
+  "comebackChallenge": {
+    "title": "Desafio de Regreso",
+    "subtitle": "Tu racha de {streak} dias se rompio, pero los campeones nunca se quedan caidos!",
+    "motivationalMessage": "Todo campeon tiene regresos. Este es tu momento de demostrar que los retrocesos son solo preparaciones para mayores regresos.",
+    "day": "Dia {day}",
+    "progressText": "{completed} de {total} dias completados",
+    "bonusXpEarned": "+{xp} XP de bonificacion ganado",
+    "timeRemainingDays": "{days}d {hours}h restantes",
+    "timeRemainingHours": "{hours}h {minutes}m restantes",
+    "timeRemainingMinutes": "{minutes}m restantes",
+    "expired": "Desafio expirado",
+    "callToAction": "Completa un entrenamiento para terminar el Dia {day}!",
+    "modal": {
+      "title": "Increible Regreso!",
+      "subtitle": "Completaste el desafio de regreso de 3 dias!",
+      "bonusXpLabel": "XP de Bonificacion Ganado",
+      "previousStreak": "Racha Anterior",
+      "days": "dias",
+      "multiplier": "Multiplicador de XP",
+      "streakRestored": "Tu impulso de racha ha sido restaurado!",
+      "keepItUp": "Sigue entrenando para construir una racha aun mas larga.",
+      "motivationalQuote": "El regreso siempre es mas fuerte que el retroceso.",
+      "continueButton": "Continuar Entrenando"
+    }
+  },
+  "identity": {
+    "createTitle": "Define Tu Identidad de Entrenamiento",
+    "editTitle": "Actualiza Tu Identidad de Entrenamiento",
+    "subtitle": "Crea una declaracion de compromiso que refleje quien eres como atleta.",
+    "prefix": "Soy alguien que",
+    "chooseTemplate": "Elige una plantilla o escribe la tuya",
+    "customOption": "Escribir mi propia declaracion",
+    "customLabel": "Tu declaracion personalizada",
+    "customPlaceholder": "se presenta cada dia por mi mismo",
+    "characters": "caracteres",
+    "preview": "Vista previa",
+    "save": "Establecer Mi Identidad",
+    "update": "Actualizar Identidad",
+    "saving": "Guardando...",
+    "cancel": "Cancelar",
+    "edit": "Editar",
+    "myIdentity": "Mi Identidad",
+    "reinforcedTimes": "Reforzado {count} veces",
+    "scienceNote": "La investigacion muestra que los compromisos basados en identidad son 42% mas efectivos que los basados en metas.",
+    "dismiss": "Descartar",
+    "reinforcement": {
+      "title": "Recuerda Quien Eres",
+      "subtitle": "Tomate un momento para reconectar con tu identidad de entrenamiento.",
+      "counter": "Reforzado {count} veces",
+      "confirm": "Si, Ese Soy Yo!",
+      "confirming": "Confirmando...",
+      "later": "Recordarmelo despues",
+      "note": "Reforzar tu identidad fortalece tu compromiso con el entrenamiento."
+    },
+    "templates": {
+      "trains_consistently": {
+        "statement": "entrena consistentemente, pase lo que pase",
+        "description": "Comprometete a presentarte a tu entrenamiento cada dia"
+      },
+      "prioritizes_health": {
+        "statement": "prioriza su salud cada dia",
+        "description": "Haz de la salud tu innegociable diario"
+      },
+      "shows_up": {
+        "statement": "se presenta incluso cuando es dificil",
+        "description": "Acepta el desafio y nunca te rindas"
+      },
+      "values_discipline": {
+        "statement": "valora la disciplina sobre la motivacion",
+        "description": "Construye habitos que no dependan de sentirse motivado"
+      },
+      "never_quits": {
+        "statement": "nunca se rinde en sus metas",
+        "description": "La persistencia es tu superpoder"
+      },
+      "embraces_process": {
+        "statement": "ama el proceso, no solo los resultados",
+        "description": "Encuentra alegria en el viaje mismo"
+      }
+    }
+  },
+  "emotional": {
+    "recoveryTips": "Consejos de Recuperacion",
+    "alternatives": "Prueba en su lugar",
+    "anotherMessage": "Mostrar otro mensaje",
+    "context": {
+      "redZone": "Tu Cuerpo Necesita Descanso",
+      "streakBreak": "Racha Terminada",
+      "plateau": "Meseta de Progreso",
+      "badWorkout": "Entrenamiento Dificil",
+      "comeback": "Bienvenido de Vuelta",
+      "consistencyMilestone": "Victoria de Consistencia",
+      "recoveryDay": "Dia de Recuperacion",
+      "general": "Apoyo"
+    },
+    "redZone": {
+      "message1": "Tu cuerpo te esta diciendo algo importante. El descanso no es debilidad - es sabiduria.",
+      "message2": "Tu cuerpo esta pidiendo descanso. Escucharlo es senal de un atleta inteligente.",
+      "message3": "La recuperacion es cuando ocurre la adaptacion. Tu cuerpo esta construyendo fuerza ahora mismo.",
+      "action1": "Considera una caminata suave o estiramientos hoy.",
+      "action2": "Toma hoy para recargar - volveras mas fuerte.",
+      "action3": "Usa este tiempo para prepararte mentalmente para tu proxima sesion.",
+      "tip1": "Prioriza el sueno esta noche",
+      "tip2": "Mantente hidratado durante el dia",
+      "tip3": "Los estiramientos suaves pueden ayudar a la recuperacion",
+      "tip4": "Enfocate en nutricion de calidad",
+      "tip5": "Prueba una ducha de contraste (caliente/frio)",
+      "tip6": "Eleva tus piernas por 10 minutos",
+      "tip7": "Duerme mas si es posible",
+      "tip8": "Considera un bano de sales de Epsom",
+      "tip9": "Comida rica en proteinas para recuperacion"
+    },
+    "streakBreak": {
+      "message1": "La vida pasa. Un dia no borra todo tu progreso.",
+      "message2": "Saltarse un dia es parte de ser humano. Lo que importa es retomar el rumbo.",
+      "message3": "La consistencia no es perfeccion - es levantarse de nuevo. Tu puedes.",
+      "action1": "Comienza fresco manana - tu cuerpo recuerda cada entrenamiento.",
+      "action2": "Planifica tu proximo entrenamiento ahora para que sea mas facil empezar de nuevo.",
+      "action3": "Una sesion corta y facil puede ayudarte a sentirte de vuelta en el ritmo."
+    },
+    "plateau": {
+      "title": "Meseta Detectada",
+      "message1": "Las mesetas son tu cuerpo consolidando ganancias. A menudo preceden los avances.",
+      "message2": "El progreso no siempre es lineal. Tu cuerpo se esta adaptando de formas que aun no puedes ver.",
+      "message3": "Todo gran atleta ha enfrentado mesetas. No son paredes - son plataformas de lanzamiento.",
+      "action1": "Confia en el proceso - tu proximo PR podria estar a la vuelta de la esquina.",
+      "action2": "Considera variar tu entrenamiento - a veces el cambio genera crecimiento.",
+      "action3": "Enfocate en la tecnica o prueba un tipo diferente de entrenamiento.",
+      "precedeBreakthroughs": "Las mesetas a menudo preceden los avances",
+      "bodyConsolidating": "Tu cuerpo esta consolidando ganancias. Esta es una fase normal e importante del desarrollo atletico. Mantente constante y el avance llegara.",
+      "duration": "Tiempo en meseta",
+      "breakthroughSoon": "Avance llegando pronto!",
+      "historicalTitle": "Tu historial de {metric} muestra mesetas seguidas de ganancias",
+      "breakthroughPoints": "Puntos de avance",
+      "pastBreakthroughs": "Has superado {count} mesetas antes!",
+      "suggestions": "Lo que podria ayudar",
+      "suggestion1": "Prueba una nueva ruta o tipo de entrenamiento para estimular la adaptacion",
+      "suggestion2": "Considera una semana de recuperacion - a veces menos es mas",
+      "suggestion3": "Revisa tu sueno y nutricion - pequenos cambios pueden hacer grandes diferencias",
+      "encouragement": "Cada avance comenzo con una meseta. Sigue adelante."
+    },
+    "badWorkout": {
+      "message1": "Algunos dias las piernas simplemente no responden. Eso es normal y esta bien.",
+      "message2": "Un entrenamiento dificil no define tu condicion fisica. Es solo un dato.",
+      "message3": "Incluso los profesionales tienen dias malos. Lo que los separa es presentarse de todos modos.",
+      "action1": "Descansa bien esta noche - manana es una nueva oportunidad.",
+      "action2": "Reflexiona sobre posibles factores: sueno, nutricion, estres.",
+      "action3": "Date credito por el esfuerzo realizado."
+    },
+    "comeback": {
+      "message1": "Todo campeon tiene regresos. Esta es tu historia.",
+      "message2": "Bienvenido de vuelta. Tu condicion fisica pasada sigue ahi - vamos a sacarla de nuevo.",
+      "message3": "La parte mas dificil de un regreso es comenzar. Ya lo hiciste.",
+      "action1": "Empieza lento y construye gradualmente - tu cuerpo recordara.",
+      "action2": "Facilita el entrenamiento - la paciencia ahora significa progreso mas rapido despues.",
+      "action3": "Celebra este momento - estas de vuelta en el juego."
+    },
+    "consistency": {
+      "message1": "Presentarse es la parte mas dificil. La has dominado.",
+      "message2": "La consistencia supera a la intensidad siempre. Lo estas demostrando.",
+      "message3": "Dia tras dia, has elegido priorizar tu salud. Eso es poderoso.",
+      "action1": "Mantén este impulso - estas construyendo un habito inquebrantable.",
+      "action2": "Tu dedicacion es inspiradora. Sigue presentandote por ti mismo.",
+      "action3": "Toma un momento para apreciar lo lejos que has llegado."
+    },
+    "recoveryDay": {
+      "message1": "La recuperacion no es quedarse atras - es construir fuerza.",
+      "message2": "El descanso tambien es entrenamiento. Tu cuerpo se esta adaptando y haciendose mas fuerte.",
+      "message3": "La recuperacion activa acelera tu progreso. Abraza el ritmo mas lento.",
+      "action1": "Usa este tiempo para trabajo de movilidad o preparacion mental.",
+      "action2": "Disfruta esta recuperacion - te la has ganado.",
+      "action3": "Prueba algo suave que te traiga alegria.",
+      "tip1": "Los estiramientos suaves ayudan a la circulacion",
+      "tip2": "Mantente activo sin sobrecargar tu sistema",
+      "tip3": "El ensayo mental tambien es entrenamiento",
+      "tip4": "Enfocate en un sueno de calidad",
+      "tip5": "La nutricion apoya la recuperacion",
+      "tip6": "Mantente hidratado",
+      "tip7": "El movimiento promueve el flujo sanguineo",
+      "tip8": "No te saltes el sueno",
+      "tip9": "La proteina ayuda a la reparacion muscular"
+    },
+    "activities": {
+      "yoga": "Yoga suave",
+      "walking": "Caminata ligera",
+      "foamRolling": "Rodillo de espuma",
+      "meditation": "Meditacion",
+      "easySwim": "Natacion suave",
+      "stretching": "Estiramientos ligeros",
+      "breathwork": "Trabajo de respiracion",
+      "massage": "Masaje",
+      "visualization": "Visualizacion",
+      "mobility": "Trabajo de movilidad",
+      "easyCycling": "Ciclismo ligero",
+      "reading": "Lectura sobre entrenamiento",
+      "easyWalking": "Caminata facil",
+      "swimming": "Natacion",
+      "natureWalk": "Caminata por la naturaleza",
+      "lightHike": "Senderismo ligero",
+      "dance": "Baile"
+    },
+    "recovery": {
+      "title": "Tu Cuerpo Necesita Descanso",
+      "bodyAskingRest": "Tu cuerpo esta pidiendo descanso. Escucharlo es lo mas inteligente que puedes hacer.",
+      "readinessScore": "Puntuacion de Preparacion",
+      "redZoneMessage": "Estas en zona roja. Descansa hoy para proteger el entrenamiento de manana.",
+      "yellowZoneMessage": "Estas en zona amarilla. Mantén la actividad ligera y enfocada en recuperacion.",
+      "tipsTitle": "Consejos de Recuperacion",
+      "alternativeActivities": "Alternativas Suaves",
+      "encouragement": "El descanso es cuando te haces mas fuerte. Esto es parte del proceso.",
+      "prioritizeSleep": "Prioriza el sueno",
+      "stayHydrated": "Mantente hidratado",
+      "nutrition": "Nutricion de calidad",
+      "lightMovement": "Movimiento ligero"
+    }
+  },
+  "personalRecords": {
+    "celebration": {
+      "title": "Nuevo Record Personal!",
+      "subtitle": "Lo has logrado!",
+      "close": "Cerrar",
+      "share": "Compartir",
+      "celebrate": "Celebrar!",
+      "multiplePRs": "Has establecido {count} RPs en este entrenamiento!",
+      "prTypes": {
+        "pace": "Ritmo Mas Rapido",
+        "distance": "Mayor Distancia",
+        "duration": "Mayor Duracion",
+        "elevation": "Mayor Desnivel",
+        "power": "Mayor Potencia"
+      }
+    },
+    "badge": {
+      "pace": "RP Ritmo",
+      "distance": "RP Distancia",
+      "duration": "RP Duracion",
+      "elevation": "RP Desnivel",
+      "power": "RP Potencia",
+      "more": "+{count} mas"
+    },
+    "history": {
+      "title": "Records Personales",
+      "empty": "Aun no hay records personales. Sigue entrenando!",
+      "viewModes": {
+        "timeline": "Todo el Tiempo",
+        "recent": "Recientes"
+      },
+      "summary": {
+        "title": "Resumen",
+        "totalPRs": "Total RPs",
+        "last30Days": "Ultimos 30 Dias",
+        "latestPR": "Ultimo RP"
+      }
+    },
+    "prTypes": {
+      "pace": "Ritmo",
+      "distance": "Distancia",
+      "duration": "Duracion",
+      "elevation": "Desnivel",
+      "power": "Potencia"
+    },
+    "activityTypes": {
+      "running": "Carrera",
+      "trail_running": "Trail Running",
+      "cycling": "Ciclismo",
+      "swimming": "Natacion",
+      "walking": "Caminata",
+      "hiking": "Senderismo",
+      "other": "Otro"
+    },
+    "filters": {
+      "all": "Todos los Tipos"
+    },
+    "detection": {
+      "checking": "Buscando RPs...",
+      "newPR": "Nuevo RP!",
+      "nearPR": "Casi un RP!",
+      "noPR": "Sin nuevos RPs"
+    }
   }
 }

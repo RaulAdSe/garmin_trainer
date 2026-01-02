@@ -987,5 +987,307 @@
       "weeklyMileageCap": "Weekly Mileage Cap Warnings",
       "weeklyMileageCapHint": "Get alerts when approaching 10% weekly increase limit"
     }
+  },
+  "socialProof": {
+    "athletesTrained": "athletes trained today",
+    "athletesToday": "Athletes today",
+    "workoutsToday": "Workouts today",
+    "trainingNow": "athletes training now",
+    "topPercentile": "Top {percentile}%",
+    "recentActivity": "Recent Activity",
+    "rankings": {
+      "title": "Your Rankings"
+    },
+    "category": {
+      "pace": "Pace",
+      "streak": "Consistency",
+      "level": "Level"
+    },
+    "activityTypes": {
+      "workout_completed": "workouts completed",
+      "achievement_unlocked": "achievements unlocked",
+      "streak_continued": "streaks continued",
+      "level_up": "level ups"
+    }
+  },
+  "comebackChallenge": {
+    "title": "Comeback Challenge",
+    "subtitle": "Your {streak}-day streak broke, but champions never stay down!",
+    "motivationalMessage": "Every champion has comebacks. This is your moment to prove that setbacks are just setups for greater comebacks.",
+    "day": "Day {day}",
+    "progressText": "{completed} of {total} days complete",
+    "bonusXpEarned": "+{xp} bonus XP earned",
+    "timeRemainingDays": "{days}d {hours}h remaining",
+    "timeRemainingHours": "{hours}h {minutes}m remaining",
+    "timeRemainingMinutes": "{minutes}m remaining",
+    "expired": "Challenge expired",
+    "callToAction": "Complete a workout to finish Day {day}!",
+    "modal": {
+      "title": "Amazing Comeback!",
+      "subtitle": "You completed the 3-day comeback challenge!",
+      "bonusXpLabel": "Bonus XP Earned",
+      "previousStreak": "Previous Streak",
+      "days": "days",
+      "multiplier": "XP Multiplier",
+      "streakRestored": "Your streak momentum is restored!",
+      "keepItUp": "Keep training to build an even longer streak.",
+      "motivationalQuote": "The comeback is always stronger than the setback.",
+      "continueButton": "Continue Training"
+    }
+  },
+  "identity": {
+    "createTitle": "Define Your Training Identity",
+    "editTitle": "Update Your Training Identity",
+    "subtitle": "Create a commitment statement that reflects who you are as an athlete.",
+    "prefix": "I am someone who",
+    "chooseTemplate": "Choose a template or write your own",
+    "customOption": "Write my own statement",
+    "customLabel": "Your custom statement",
+    "customPlaceholder": "shows up every day for myself",
+    "characters": "characters",
+    "preview": "Preview",
+    "save": "Set My Identity",
+    "update": "Update Identity",
+    "saving": "Saving...",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "myIdentity": "My Identity",
+    "reinforcedTimes": "Reinforced {count} times",
+    "scienceNote": "Research shows that identity-based commitments are 42% more effective than goal-based ones.",
+    "dismiss": "Dismiss",
+    "reinforcement": {
+      "title": "Remember Who You Are",
+      "subtitle": "Take a moment to reconnect with your training identity.",
+      "counter": "Reinforced {count} times",
+      "confirm": "Yes, That's Me!",
+      "confirming": "Confirming...",
+      "later": "Remind me later",
+      "note": "Reinforcing your identity strengthens your commitment to training."
+    },
+    "templates": {
+      "trains_consistently": {
+        "statement": "trains consistently, no matter what",
+        "description": "Commit to showing up for your training every day"
+      },
+      "prioritizes_health": {
+        "statement": "prioritizes their health every day",
+        "description": "Make health your daily non-negotiable"
+      },
+      "shows_up": {
+        "statement": "shows up even when it's hard",
+        "description": "Embrace the challenge and never give up"
+      },
+      "values_discipline": {
+        "statement": "values discipline over motivation",
+        "description": "Build habits that don't depend on feeling motivated"
+      },
+      "never_quits": {
+        "statement": "never gives up on their goals",
+        "description": "Persistence is your superpower"
+      },
+      "embraces_process": {
+        "statement": "loves the process, not just the results",
+        "description": "Find joy in the journey itself"
+      }
+    }
+  },
+  "emotional": {
+    "recoveryTips": "Recovery Tips",
+    "alternatives": "Try Instead",
+    "anotherMessage": "Show another message",
+    "context": {
+      "redZone": "Body Needs Rest",
+      "streakBreak": "Streak Ended",
+      "plateau": "Progress Plateau",
+      "badWorkout": "Tough Workout",
+      "comeback": "Welcome Back",
+      "consistencyMilestone": "Consistency Win",
+      "recoveryDay": "Recovery Day",
+      "general": "Support"
+    },
+    "redZone": {
+      "message1": "Your body is telling you something important. Rest isn't weakness - it's wisdom.",
+      "message2": "Your body is asking for rest. Listening to it is a sign of a smart athlete.",
+      "message3": "Recovery is when adaptation happens. Your body is building strength right now.",
+      "action1": "Consider a gentle walk or stretching today.",
+      "action2": "Take today to recharge - you'll come back stronger.",
+      "action3": "Use this time to mentally prepare for your next session.",
+      "tip1": "Prioritize sleep tonight",
+      "tip2": "Stay hydrated throughout the day",
+      "tip3": "Light stretching can help recovery",
+      "tip4": "Focus on quality nutrition",
+      "tip5": "Try a contrast shower (hot/cold)",
+      "tip6": "Elevate your legs for 10 minutes",
+      "tip7": "Get extra sleep if possible",
+      "tip8": "Consider an Epsom salt bath",
+      "tip9": "Protein-rich meal for recovery"
+    },
+    "streakBreak": {
+      "message1": "Life happens. One day doesn't erase all your progress.",
+      "message2": "Missing a day is part of being human. What matters is getting back on track.",
+      "message3": "Consistency isn't about perfection - it's about getting back up. You've got this.",
+      "action1": "Start fresh tomorrow - your body remembers every workout.",
+      "action2": "Plan your next workout now to make it easier to start again.",
+      "action3": "A short, easy session can help you feel back in the rhythm."
+    },
+    "plateau": {
+      "title": "Plateau Detected",
+      "message1": "Plateaus are your body consolidating gains. They often precede breakthroughs.",
+      "message2": "Progress isn't always linear. Your body is adapting in ways you can't see yet.",
+      "message3": "Every great athlete has faced plateaus. They're not walls - they're launching pads.",
+      "action1": "Trust the process - your next PR might be just around the corner.",
+      "action2": "Consider varying your training - sometimes change sparks growth.",
+      "action3": "Focus on technique or try a different type of workout.",
+      "precedeBreakthroughs": "Plateaus often precede breakthroughs",
+      "bodyConsolidating": "Your body is consolidating gains. This is a normal and important phase of athletic development. Stay consistent, and the breakthrough will come.",
+      "duration": "Time on plateau",
+      "breakthroughSoon": "Breakthrough coming soon!",
+      "historicalTitle": "Your {metric} history shows plateaus followed by gains",
+      "breakthroughPoints": "Breakthrough points",
+      "pastBreakthroughs": "You've broken through {count} plateaus before!",
+      "suggestions": "What might help",
+      "suggestion1": "Try a new route or workout type to stimulate adaptation",
+      "suggestion2": "Consider a recovery week - sometimes less is more",
+      "suggestion3": "Review your sleep and nutrition - small changes can make big differences",
+      "encouragement": "Every breakthrough started with a plateau. Keep going."
+    },
+    "badWorkout": {
+      "message1": "Some days the legs just aren't there. That's normal and okay.",
+      "message2": "One tough workout doesn't define your fitness. It's just one data point.",
+      "message3": "Even the pros have off days. What separates them is showing up anyway.",
+      "action1": "Rest well tonight - tomorrow is a new opportunity.",
+      "action2": "Reflect on possible factors: sleep, nutrition, stress.",
+      "action3": "Give yourself credit for putting in the effort."
+    },
+    "comeback": {
+      "message1": "Every champion has comebacks. This is your story.",
+      "message2": "Welcome back. Your past fitness is still there - let's bring it out again.",
+      "message3": "The hardest part of a comeback is starting. You've already done that.",
+      "action1": "Start slow and build gradually - your body will remember.",
+      "action2": "Ease into training - patience now means faster progress later.",
+      "action3": "Celebrate this moment - you're back in the game."
+    },
+    "consistency": {
+      "message1": "Showing up is the hardest part. You've mastered it.",
+      "message2": "Consistency beats intensity every time. You're proving that.",
+      "message3": "Day after day, you've chosen to prioritize your health. That's powerful.",
+      "action1": "Keep this momentum going - you're building an unshakeable habit.",
+      "action2": "Your dedication is inspiring. Keep showing up for yourself.",
+      "action3": "Take a moment to appreciate how far you've come."
+    },
+    "recoveryDay": {
+      "message1": "Recovery isn't falling behind - it's building strength.",
+      "message2": "Rest is training too. Your body is adapting and getting stronger.",
+      "message3": "Active recovery accelerates your progress. Embrace the slower pace.",
+      "action1": "Use this time for mobility work or mental preparation.",
+      "action2": "Enjoy this recovery - you've earned it.",
+      "action3": "Try something gentle that brings you joy.",
+      "tip1": "Light stretching helps circulation",
+      "tip2": "Stay active without taxing your system",
+      "tip3": "Mental rehearsal is training too",
+      "tip4": "Focus on quality sleep",
+      "tip5": "Nutrition supports recovery",
+      "tip6": "Stay hydrated",
+      "tip7": "Movement promotes blood flow",
+      "tip8": "Don't skip sleep",
+      "tip9": "Protein aids muscle repair"
+    },
+    "activities": {
+      "yoga": "Gentle yoga",
+      "walking": "Light walking",
+      "foamRolling": "Foam rolling",
+      "meditation": "Meditation",
+      "easySwim": "Easy swimming",
+      "stretching": "Light stretching",
+      "breathwork": "Breathwork",
+      "massage": "Massage",
+      "visualization": "Visualization",
+      "mobility": "Mobility work",
+      "easyCycling": "Light cycling",
+      "reading": "Reading about training",
+      "easyWalking": "Easy walking",
+      "swimming": "Swimming",
+      "natureWalk": "Nature walk",
+      "lightHike": "Light hike",
+      "dance": "Dance"
+    },
+    "recovery": {
+      "title": "Your Body Needs Rest",
+      "bodyAskingRest": "Your body is asking for rest. Listening is the smartest thing you can do.",
+      "readinessScore": "Readiness Score",
+      "redZoneMessage": "You're in the red zone. Rest today to protect tomorrow's training.",
+      "yellowZoneMessage": "You're in the yellow zone. Keep activity light and recovery-focused.",
+      "tipsTitle": "Recovery Tips",
+      "alternativeActivities": "Gentle Alternatives",
+      "encouragement": "Rest is when you get stronger. This is part of the process.",
+      "prioritizeSleep": "Prioritize sleep",
+      "stayHydrated": "Stay hydrated",
+      "nutrition": "Quality nutrition",
+      "lightMovement": "Light movement"
+    }
+  },
+  "personalRecords": {
+    "celebration": {
+      "title": "New Personal Record!",
+      "subtitle": "You just crushed it!",
+      "close": "Close",
+      "share": "Share",
+      "celebrate": "Celebrate!",
+      "multiplePRs": "You set {count} PRs in this workout!",
+      "prTypes": {
+        "pace": "Fastest Pace",
+        "distance": "Longest Distance",
+        "duration": "Longest Duration",
+        "elevation": "Most Elevation",
+        "power": "Highest Power"
+      }
+    },
+    "badge": {
+      "pace": "Pace PR",
+      "distance": "Distance PR",
+      "duration": "Duration PR",
+      "elevation": "Elevation PR",
+      "power": "Power PR",
+      "more": "+{count} more"
+    },
+    "history": {
+      "title": "Personal Records",
+      "empty": "No personal records yet. Keep training!",
+      "viewModes": {
+        "timeline": "All Time",
+        "recent": "Recent"
+      },
+      "summary": {
+        "title": "Summary",
+        "totalPRs": "Total PRs",
+        "last30Days": "Last 30 Days",
+        "latestPR": "Latest PR"
+      }
+    },
+    "prTypes": {
+      "pace": "Pace",
+      "distance": "Distance",
+      "duration": "Duration",
+      "elevation": "Elevation",
+      "power": "Power"
+    },
+    "activityTypes": {
+      "running": "Running",
+      "trail_running": "Trail Running",
+      "cycling": "Cycling",
+      "swimming": "Swimming",
+      "walking": "Walking",
+      "hiking": "Hiking",
+      "other": "Other"
+    },
+    "filters": {
+      "all": "All Types"
+    },
+    "detection": {
+      "checking": "Checking for PRs...",
+      "newPR": "New PR!",
+      "nearPR": "Almost a PR!",
+      "noPR": "No new PRs"
+    }
   }
 }

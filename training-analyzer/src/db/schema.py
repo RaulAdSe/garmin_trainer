@@ -602,6 +602,24 @@ CREATE TABLE IF NOT EXISTS user_preferences (
 -- Create index for preferences lookups
 CREATE INDEX IF NOT EXISTS idx_user_preferences_user ON user_preferences(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_preferences_beginner ON user_preferences(beginner_mode_enabled);
+
+-- =============================================================================
+-- Identity Commitment Table (Emotional Design)
+-- =============================================================================
+
+-- User identity statements for psychological commitment
+CREATE TABLE IF NOT EXISTS identity_statements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL UNIQUE,
+    statement TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    last_reinforced_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    reinforcement_count INTEGER DEFAULT 0,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Create index for identity statement lookups
+CREATE INDEX IF NOT EXISTS idx_identity_statements_user ON identity_statements(user_id);
 """
 
 # Separate schema for updating user profile

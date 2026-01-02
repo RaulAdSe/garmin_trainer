@@ -1089,3 +1089,143 @@ export interface BeginnerModeStatus {
   days_in_beginner_mode: number | null;
   start_date: string | null;
 }
+
+// ============================================
+// Personal Records (PR) Types
+// ============================================
+
+export type PRType = 'pace' | 'distance' | 'duration' | 'elevation' | 'power';
+
+export type PRActivityType =
+  | 'running'
+  | 'trail_running'
+  | 'cycling'
+  | 'swimming'
+  | 'walking'
+  | 'hiking'
+  | 'other';
+
+export interface PersonalRecord {
+  id: string;
+  userId: string;
+  prType: PRType;
+  activityType: PRActivityType;
+  value: number;
+  unit: string;
+  workoutId: string;
+  achievedAt: string;
+  previousValue: number | null;
+  improvement: number | null;
+  improvementPercent: number | null;
+  workoutName: string | null;
+  workoutDate: string | null;
+}
+
+export interface PRSummary {
+  totalPrs: number;
+  recentPrs: number;
+  prsByType: Record<string, number>;
+  latestPr: PersonalRecord | null;
+}
+
+export interface PRListResponse {
+  personalRecords: PersonalRecord[];
+  total: number;
+  summary: PRSummary;
+}
+
+export interface RecentPRsResponse {
+  personalRecords: PersonalRecord[];
+  count: number;
+  days: number;
+}
+
+export interface PRDetectionResult {
+  newPrs: PersonalRecord[];
+  nearPrs: Array<{
+    prType: PRType;
+    currentValue: number;
+    bestValue: number;
+    difference: number;
+    differencePercent: number;
+    unit: string;
+  }>;
+  workoutId: string;
+  hasNewPr: boolean;
+}
+
+export interface PRCelebrationData {
+  prType: PRType;
+  activityType: PRActivityType;
+  value: number;
+  unit: string;
+  improvement: number | null;
+  improvementPercent: number | null;
+  previousValue: number | null;
+  workoutName: string | null;
+  workoutDate: string | null;
+  allPRs?: Array<{
+    prType: PRType;
+    value: number;
+    unit: string;
+    improvement: number | null;
+  }>;
+}
+
+export interface DetectPRsResponse {
+  result: PRDetectionResult;
+  celebrationData: PRCelebrationData | null;
+}
+
+export interface PRComparisonResult {
+  workoutId: string;
+  comparisons: Array<{
+    prType: PRType;
+    workoutValue: number;
+    prValue: number;
+    difference: number;
+    differencePercent: number;
+    unit: string;
+    isBetter: boolean;
+  }>;
+  potentialPrs: Array<{
+    prType: PRType;
+    currentValue: number;
+    targetValue: number;
+    gap: number;
+    unit: string;
+  }>;
+}
+
+// PR type display colors
+export const PR_TYPE_COLORS: Record<PRType, {
+  bg: string;
+  text: string;
+  border: string;
+}> = {
+  pace: {
+    bg: 'bg-amber-500/20',
+    text: 'text-amber-400',
+    border: 'border-amber-500/30',
+  },
+  distance: {
+    bg: 'bg-blue-500/20',
+    text: 'text-blue-400',
+    border: 'border-blue-500/30',
+  },
+  duration: {
+    bg: 'bg-purple-500/20',
+    text: 'text-purple-400',
+    border: 'border-purple-500/30',
+  },
+  elevation: {
+    bg: 'bg-green-500/20',
+    text: 'text-green-400',
+    border: 'border-green-500/30',
+  },
+  power: {
+    bg: 'bg-orange-500/20',
+    text: 'text-orange-400',
+    border: 'border-orange-500/30',
+  },
+};

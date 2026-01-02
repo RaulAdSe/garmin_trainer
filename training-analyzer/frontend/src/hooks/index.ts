@@ -62,6 +62,61 @@ export {
   type UseRunWalkTimerReturn,
 } from './useRunWalkTimer';
 
+export {
+  useSocialProof,
+  useInvalidateSocialProof,
+  socialProofKeys,
+} from './useSocialProof';
+
+export {
+  useIdentity,
+  useIdentityStatement,
+  useIdentityTemplates,
+  useCreateIdentityStatement,
+  useReinforceIdentity,
+  useReinforcementCheck,
+  useDeleteIdentityStatement,
+  identityKeys,
+  type IdentityStatement,
+  type IdentityTemplate,
+  type ReinforcementCheck,
+} from './useIdentity';
+
+export {
+  useEmotionalMessage,
+  useEmotionalMessageAPI,
+  useDetectEmotionalContext,
+  useAvailableContexts,
+  useRecoveryMessage,
+  emotionalMessageKeys,
+  type EmotionalMessageResponse,
+  type DetectedContextResponse,
+  type DismissedMessage,
+} from './useEmotionalMessage';
+
+export {
+  usePRHistory,
+  useRecentPRs,
+  usePRSummary,
+  useCompareToPRs,
+  useDetectPRs,
+  usePRCelebration,
+  useAutoDetectPRs,
+  prKeys,
+} from './usePRDetection';
+
+export {
+  useComebackChallenge,
+  useRecordComebackWorkout,
+  useTriggerComebackChallenge,
+  useComebackChallengeHistory,
+  useCancelComebackChallenge,
+  comebackChallengeKeys,
+  type ComebackChallenge,
+  type RecordWorkoutResponse,
+  type ChallengeHistoryResponse,
+} from './useComebackChallenge';
+
 // Re-export onboarding context hook for convenience
 export { useOnboarding } from '@/contexts/onboarding-context';
 export type {
