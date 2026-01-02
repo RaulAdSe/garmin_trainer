@@ -542,17 +542,19 @@ All three experts identified that the app alienates beginners:
 
 **Success Metric**: Beginner segment (CTL <30) retention matches overall
 
-### Phase 4: Emotional Connection (Weeks 13-16)
+### Phase 4: Emotional Connection (Weeks 13-16) ✅ COMPLETED
 
 **Focus**: From dashboard to coach
 
-- [ ] Dynamic streak recovery
-- [ ] Emotional support messaging
-- [ ] PR detection and celebration
-- [ ] Identity commitment feature
-- [ ] Social proof layer
+- [x] Dynamic streak recovery (Comeback Challenge with 1.5x XP bonus)
+- [x] Emotional support messaging (Context-aware supportive messages)
+- [x] PR detection and celebration (Multi-metric PR detection with celebratory UI)
+- [x] Identity commitment feature (Psychological commitment statements)
+- [x] Social proof layer (Community stats, percentile rankings)
 
 **Success Metric**: NPS increases; "coach-like" mentioned in feedback
+
+> **Implementation**: See [Implementation 7](#implementation-7-phase-4---emotional-connection-completed) for details.
 
 ### Phase 5: Advanced Features (Weeks 17+)
 
@@ -1651,3 +1653,264 @@ Phase 2 targets from the roadmap:
 3. Focus view vs full dashboard preference
 4. Tooltip dismiss rates
 5. Early achievement unlock timing
+
+---
+
+## Implementation 7: Phase 4 - Emotional Connection (COMPLETED)
+
+This section documents the completed Phase 4 implementation focusing on emotional design patterns from sports psychology research.
+
+### 7.1 Overview
+
+Phase 4 transforms the app from a "dashboard" into a "coach" by implementing emotional connection features based on behavioral psychology research.
+
+**Key Psychological Frameworks Applied:**
+- Growth Mindset (Dweck, 2006) - Comeback challenges
+- Peak Experiences (Csikszentmihalyi, 1990) - PR celebrations
+- Identity Commitment (Cialdini, 2006) - Identity statements
+- Social Proof (Cialdini, 2006) - Community statistics
+- Psychological Safety (Edmondson, 1999) - Supportive messaging
+
+### 7.2 Comeback Challenge System
+
+**Purpose**: Convert streak breaks from failures into growth opportunities.
+
+**Implementation:**
+- Detects when a user's streak breaks
+- Offers "Comeback Challenge" with 1.5x XP multiplier
+- Time-limited challenges (7 days) with clear targets
+- Growth mindset framing: "Every champion has comebacks"
+
+**Files:**
+```
+src/services/comeback_service.py      # Challenge management
+src/db/models/comeback.py             # ComebackChallenge model
+frontend/src/components/emotional/ComebackChallengeCard.tsx
+frontend/src/components/emotional/ComebackChallengeModal.tsx
+frontend/src/hooks/useComebackChallenge.ts
+```
+
+### 7.3 PR Detection & Celebration
+
+**Purpose**: Recognize and celebrate personal records to create peak experience memory anchors.
+
+**Implementation:**
+- Auto-detects multiple PR types (pace, distance, power, heart rate, cadence)
+- Sport-specific PR metrics (running, cycling, swimming, strength)
+- Celebratory modal with confetti animation
+- PR history and badge display
+
+**PR Types:**
+- Running: Fastest pace, longest distance, best 5K/10K/HM/M times
+- Cycling: Max power, longest ride, best normalized power
+- General: Best consistency, training load, recovery score
+
+**Files:**
+```
+src/services/pr_detection_service.py  # Multi-metric detection
+src/models/personal_records.py        # PR types and models
+frontend/src/components/emotional/PRCelebrationModal.tsx
+frontend/src/components/emotional/PRBadge.tsx
+frontend/src/components/emotional/PRHistory.tsx
+frontend/src/hooks/usePRDetection.ts
+```
+
+### 7.4 Identity Commitment Feature
+
+**Purpose**: Leverage psychological commitment to increase consistency through identity-based motivation.
+
+**Implementation:**
+- Prompt at Level 3: "I am someone who..." identity statement
+- User can edit and refine their identity statements
+- Displayed on profile and reinforced during workouts
+- Tracks statement strength and reinforcement history
+
+**Psychological Basis:**
+> "Public commitment increases consistency by 39%" - Cialdini, 2006
+
+**Files:**
+```
+src/services/identity_service.py      # Identity management
+src/db/schema.py                      # identity_statements table
+frontend/src/components/emotional/IdentityBadge.tsx
+frontend/src/components/emotional/IdentityStatementEditor.tsx
+frontend/src/components/emotional/IdentityReinforcement.tsx
+frontend/src/hooks/useIdentity.ts
+```
+
+### 7.5 Social Proof Layer
+
+**Purpose**: Motivate through community connection without creating comparison anxiety.
+
+**Implementation:**
+- Anonymous community statistics ("2,340 athletes trained today")
+- Percentile rankings ("Top 15% for consistency this month")
+- Community pulse indicators (active athletes, recent workouts)
+- No social network required - privacy-first approach
+
+**Files:**
+```
+src/services/social_proof_service.py  # Community stats
+frontend/src/components/emotional/SocialProofBanner.tsx
+frontend/src/components/emotional/PercentileCard.tsx
+frontend/src/components/emotional/CommunityPulse.tsx
+frontend/src/hooks/useSocialProof.ts
+```
+
+### 7.6 Emotional Support Messaging
+
+**Purpose**: Provide context-aware supportive messages that feel like a coach, not a dashboard.
+
+**Implementation:**
+- Detects user state (recovering, plateauing, progressing, fatigued)
+- Provides appropriate emotional support messages
+- Plateau encouragement with breakthrough suggestions
+- Recovery support with reassurance messaging
+
+**Message Categories:**
+- Recovery support: "Your body is building strength. Trust the process."
+- Plateau encouragement: "Breakthroughs come after persistence."
+- Progress celebration: "Your consistency is paying off."
+- Fatigue acknowledgment: "Rest is part of training."
+
+**Files:**
+```
+src/services/emotional_messaging_service.py
+frontend/src/lib/emotional-messages.ts
+frontend/src/components/emotional/EmotionalMessageCard.tsx
+frontend/src/components/emotional/PlateauEncouragement.tsx
+frontend/src/components/emotional/RecoverySupport.tsx
+frontend/src/hooks/useEmotionalMessage.ts
+```
+
+### 7.7 API Routes
+
+All emotional features are exposed through `/api/emotional/*` endpoints:
+
+```python
+# src/api/routes/emotional.py
+
+# Comeback Challenge
+POST   /api/emotional/comeback/start
+GET    /api/emotional/comeback/active
+POST   /api/emotional/comeback/{id}/complete
+DELETE /api/emotional/comeback/{id}
+
+# PR Detection
+GET    /api/emotional/prs
+GET    /api/emotional/prs/recent
+POST   /api/emotional/prs/detect
+GET    /api/emotional/prs/{pr_type}
+
+# Identity
+GET    /api/emotional/identity
+POST   /api/emotional/identity
+PUT    /api/emotional/identity/{id}
+DELETE /api/emotional/identity/{id}
+POST   /api/emotional/identity/{id}/reinforce
+
+# Social Proof
+GET    /api/emotional/social/stats
+GET    /api/emotional/social/percentile
+GET    /api/emotional/social/pulse
+
+# Emotional Messages
+GET    /api/emotional/message
+GET    /api/emotional/message/{context}
+```
+
+### 7.8 i18n Support
+
+Full internationalization for English and Spanish:
+
+```json
+// messages/en.json + messages/es.json additions (~300 lines each)
+{
+  "emotional": {
+    "comeback": {
+      "title": "Comeback Challenge",
+      "description": "Every champion has comebacks",
+      "bonus": "1.5x XP bonus active!"
+    },
+    "pr": {
+      "celebration": "🎉 New Personal Record!",
+      "fastest": "Fastest Ever",
+      "longest": "Longest Distance"
+    },
+    "identity": {
+      "prompt": "I am someone who...",
+      "reinforcement": "Remember: {statement}"
+    },
+    "social": {
+      "athletesToday": "{count} athletes trained today",
+      "percentile": "Top {percent}% for {metric}"
+    },
+    "support": {
+      "recovery": "Your body is building strength",
+      "plateau": "Breakthroughs come after persistence"
+    }
+  }
+}
+```
+
+### 7.9 File Structure
+
+```
+frontend/src/
+├── components/emotional/
+│   ├── index.ts                      # Barrel export
+│   ├── ComebackChallengeCard.tsx     # Challenge display
+│   ├── ComebackChallengeModal.tsx    # Challenge acceptance
+│   ├── CommunityPulse.tsx            # Active community
+│   ├── EmotionalMessageCard.tsx      # Support messages
+│   ├── IdentityBadge.tsx             # Identity display
+│   ├── IdentityReinforcement.tsx     # In-workout reinforcement
+│   ├── IdentityStatementEditor.tsx   # Edit statements
+│   ├── PercentileCard.tsx            # Ranking display
+│   ├── PlateauEncouragement.tsx      # Plateau support
+│   ├── PRBadge.tsx                   # PR indicator
+│   ├── PRCelebrationModal.tsx        # PR celebration
+│   ├── PRHistory.tsx                 # PR timeline
+│   ├── RecoverySupport.tsx           # Recovery messaging
+│   └── SocialProofBanner.tsx         # Community stats
+├── hooks/
+│   ├── useComebackChallenge.ts       # Comeback state
+│   ├── useEmotionalMessage.ts        # Message context
+│   ├── useIdentity.ts                # Identity management
+│   ├── usePRDetection.ts             # PR tracking
+│   └── useSocialProof.ts             # Social stats
+└── lib/
+    └── emotional-messages.ts         # Message generation
+
+src/
+├── services/
+│   ├── comeback_service.py           # +467 lines
+│   ├── emotional_messaging_service.py # +423 lines
+│   ├── identity_service.py           # +334 lines
+│   ├── pr_detection_service.py       # +770 lines
+│   └── social_proof_service.py       # +338 lines
+├── models/
+│   └── personal_records.py           # +188 lines
+├── db/models/
+│   ├── __init__.py
+│   └── comeback.py                   # +126 lines
+└── api/routes/
+    └── emotional.py                  # +1396 lines
+```
+
+### 7.10 Success Metrics
+
+Phase 4 targets from the roadmap:
+- **NPS increase**: Target improvement in Net Promoter Score
+- **"Coach-like" feedback**: Track mentions of coaching feel in user feedback
+- **Comeback completion rate**: >50% of streak-broken users should attempt comeback
+- **PR celebration engagement**: Track modal interaction rates
+- **Identity statement adoption**: >40% of Level 3+ users should have statements
+
+**Tracking Points:**
+1. Comeback challenge start/completion rates
+2. PR celebration modal engagement
+3. Identity statement creation and edit frequency
+4. Social proof banner interaction
+5. Emotional message click-through rates
+6. User sentiment in feedback mentioning "coach" or "supportive"
