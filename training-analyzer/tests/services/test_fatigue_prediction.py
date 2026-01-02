@@ -322,3 +322,4 @@ class TestFatiguePrediction:
         assert data["confidence"] == 0.75
 
 
+

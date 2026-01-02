@@ -3,10 +3,12 @@
 import { use, useState, useEffect } from 'react';
 import { Link } from '@/i18n/navigation';
 import { useWorkout, useWorkoutAnalysis } from '@/hooks/useWorkouts';
+import { useChartComparison } from '@/hooks/useChartComparison';
 import { WorkoutAnalysis, WorkoutAnalysisSkeleton } from '@/components/workouts/WorkoutAnalysis';
 import { WorkoutCharts } from '@/components/workout-detail/WorkoutCharts';
 import { RouteMap } from '@/components/workout-detail/RouteMap';
 import { QuickSplitsPreview } from '@/components/workout-detail/QuickSplitsPreview';
+import { ComparisonSelector } from '@/components/charts/ComparisonSelector';
 import { getActivityDetails, syncWorkoutToStrava, getStravaStatus, getStravaSyncStatus } from '@/lib/api-client';
 import type { ActivityDetailsResponse } from '@/types/workout-detail';
 import {
@@ -43,6 +45,24 @@ export default function WorkoutDetailPage({ params }: WorkoutDetailPageProps) {
 
   // Synchronized hover state for charts and map
   const [activeHoverIndex, setActiveHoverIndex] = useState<number | null>(null);
+
+  // Chart comparison state
+  const {
+    isComparisonEnabled,
+    comparableWorkouts,
+    quickSelections,
+    selectedComparisonId,
+    comparisonData,
+    stats,
+    isLoadingComparable,
+    isLoadingComparison,
+    enableComparison,
+    disableComparison,
+    selectComparison,
+    clearComparison,
+    setNormalizationMode,
+    normalizationMode,
+  } = useChartComparison({ activityId: workoutId, enabled: !!workoutId });
 
   // Strava sync state
   const [isStravaConnected, setIsStravaConnected] = useState(false);
@@ -429,12 +449,59 @@ export default function WorkoutDetailPage({ params }: WorkoutDetailPageProps) {
 
         {/* Interactive Charts - Full width */}
         {activityDetails && (
-          <WorkoutCharts
-            timeSeries={activityDetails.time_series}
-            isRunning={isRunning}
-            activeIndex={activeHoverIndex}
-            onHoverIndexChange={setActiveHoverIndex}
-          />
+          <section className="bg-gray-900 rounded-xl border border-gray-800 p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-100">Charts</h2>
+              {/* Comparison Toggle */}
+              <div className="flex items-center gap-3">
+                {isComparisonEnabled ? (
+                  <button
+                    onClick={disableComparison}
+                    className="px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200 hover:bg-gray-800 rounded-md transition-colors"
+                  >
+                    Disable Comparison
+                  </button>
+                ) : (
+                  <button
+                    onClick={enableComparison}
+                    className="px-3 py-1.5 text-sm bg-teal-600 text-white hover:bg-teal-700 rounded-md transition-colors flex items-center gap-1.5"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    Compare Workout
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Comparison Selector */}
+            {isComparisonEnabled && (
+              <div className="mb-4">
+                <ComparisonSelector
+                  comparableWorkouts={comparableWorkouts}
+                  quickSelections={quickSelections}
+                  selectedId={selectedComparisonId}
+                  onSelect={selectComparison}
+                  onClear={clearComparison}
+                  normalizationMode={normalizationMode}
+                  onNormalizationModeChange={setNormalizationMode}
+                  isLoading={isLoadingComparable}
+                />
+              </div>
+            )}
+
+            <WorkoutCharts
+              timeSeries={activityDetails.time_series}
+              isRunning={isRunning}
+              activeIndex={activeHoverIndex}
+              onHoverIndexChange={setActiveHoverIndex}
+              comparisonEnabled={isComparisonEnabled}
+              comparisonData={comparisonData}
+              comparisonStats={stats}
+              selectedComparisonId={selectedComparisonId}
+            />
+          </section>
         )}
 
 

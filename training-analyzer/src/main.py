@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 
 from .config import get_settings
-from .api.routes import athlete, analysis, plans, workouts, export, garmin, chat, explain, gamification, strava, garmin_credentials, usage, stripe_webhook, admin, auth, safety, mileage_cap, preferences, pace_zones, manual_workouts, emotional
+from .api.routes import athlete, analysis, plans, workouts, export, garmin, chat, explain, gamification, strava, garmin_credentials, usage, stripe_webhook, admin, auth, safety, mileage_cap, preferences, pace_zones, manual_workouts, emotional, comparison, race_pacing, economy, recovery, patterns
 from .api.exception_handlers import register_exception_handlers
 from .api.middleware.rate_limit import limiter
 from .api.middleware.security_headers import SecurityHeadersMiddleware
@@ -208,6 +208,11 @@ app.include_router(preferences.router, prefix="/api/v1", tags=["preferences"])
 app.include_router(pace_zones.router, prefix="/api/v1/pace-zones", tags=["pace-zones"])
 app.include_router(manual_workouts.router, prefix="/api/v1/workouts/manual", tags=["manual-workouts"])
 app.include_router(emotional.router, prefix="/api/v1/emotional", tags=["emotional"])
+app.include_router(comparison.router, prefix="/api/v1/comparison", tags=["comparison"])
+app.include_router(race_pacing.router, prefix="/api/v1/race", tags=["race-pacing"])
+app.include_router(economy.router, prefix="/api/v1/economy", tags=["economy"])
+app.include_router(recovery.router, prefix="/api/v1/recovery", tags=["recovery"])
+app.include_router(patterns.router, prefix="/api/v1/patterns", tags=["patterns"])
 
 
 @app.get("/")

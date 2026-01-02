@@ -367,3 +367,4 @@ Where:
 - `base_need = 7-day sleep average`
 - `strain_adjustment = max(0, (yesterday_strain - 10) * 0.05)`
 - `debt_repayment = total_debt / 7`
+

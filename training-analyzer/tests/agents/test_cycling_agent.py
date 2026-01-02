@@ -296,3 +296,4 @@ class TestCyclingWorkoutIntegration:
         assert "200" not in workout_high.description or "300" not in workout_low.description
 
 
+

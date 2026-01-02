@@ -432,3 +432,4 @@ The system implements 90-day data retention:
 - Wellness data older than 90 days is automatically purged
 - Keeps database size manageable for on-device storage
 - Sufficient history for trend analysis and baseline calculations
+

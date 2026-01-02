@@ -12,6 +12,10 @@
     "goals": "Goals",
     "zones": "Zones",
     "chat": "AI Coach",
+    "recovery": "Recovery",
+    "patterns": "Patterns",
+    "economy": "Economy",
+    "racePacing": "Race Pacing",
     "more": "More",
     "settings": "Settings",
     "version": "Version 1.0.0",
@@ -1223,7 +1227,13 @@
       "prioritizeSleep": "Prioritize sleep",
       "stayHydrated": "Stay hydrated",
       "nutrition": "Quality nutrition",
-      "lightMovement": "Light movement"
+      "lightMovement": "Light movement",
+      "noData": "No recovery data available",
+      "noSleepData": "No sleep data available",
+      "noHRVData": "No HRV data available",
+      "insufficientHRVData": "Insufficient HRV data for trend analysis",
+      "scoreDescription": "Recovery score based on sleep, HRV, and training load",
+      "connectDevice": "Connect a device to track recovery metrics"
     }
   },
   "personalRecords": {
@@ -1289,5 +1299,17 @@
       "nearPR": "Almost a PR!",
       "noPR": "No new PRs"
     }
+  },
+  "patterns": {
+    "noData": "No pattern data available",
+    "insufficientData": "Insufficient data for pattern analysis. Need at least 10 workouts."
+  },
+  "economy": {
+    "title": "Running Economy",
+    "subtitle": "Track your running efficiency"
+  },
+  "racePacing": {
+    "title": "Race Pacing Planner",
+    "subtitle": "Generate optimal pacing strategies"
   }
 }

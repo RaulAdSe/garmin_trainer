@@ -109,7 +109,7 @@ export function BottomNavigation() {
   );
 
   // Check if any of the "More" menu items are active
-  const isMoreMenuActive = ['/zones', '/goals', '/plans', '/connect', '/settings'].some((path) =>
+  const isMoreMenuActive = ['/zones', '/goals', '/plans', '/recovery', '/patterns', '/economy', '/race-pacing', '/connect', '/settings'].some((path) =>
     pathname.startsWith(path)
   );
 

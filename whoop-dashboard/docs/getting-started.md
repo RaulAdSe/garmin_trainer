@@ -301,3 +301,4 @@ The frontend expects the database at `../wellness.db` relative to the `frontend`
 - Check [architecture.md](./architecture.md) for technical details
 - See [metrics-explained.md](./metrics-explained.md) for metric deep-dives
 - Review [api-reference.md](./api-reference.md) for API documentation
+

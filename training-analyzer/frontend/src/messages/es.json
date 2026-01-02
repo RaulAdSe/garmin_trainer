@@ -12,6 +12,10 @@
     "goals": "Objetivos",
     "zones": "Zonas",
     "chat": "Coach IA",
+    "recovery": "Recuperación",
+    "patterns": "Patrones",
+    "economy": "Economía",
+    "racePacing": "Ritmo de Carrera",
     "more": "Más",
     "settings": "Ajustes",
     "version": "Versión 1.0.0",
@@ -1188,7 +1192,13 @@
       "prioritizeSleep": "Prioriza el sueno",
       "stayHydrated": "Mantente hidratado",
       "nutrition": "Nutricion de calidad",
-      "lightMovement": "Movimiento ligero"
+      "lightMovement": "Movimiento ligero",
+      "noData": "No hay datos de recuperacion disponibles",
+      "noSleepData": "No hay datos de sueno disponibles",
+      "noHRVData": "No hay datos de HRV disponibles",
+      "insufficientHRVData": "Datos de HRV insuficientes para analisis de tendencias",
+      "scoreDescription": "Puntuacion de recuperacion basada en sueno, HRV y carga de entrenamiento",
+      "connectDevice": "Conecta un dispositivo para rastrear metricas de recuperacion"
     }
   },
   "personalRecords": {
@@ -1254,5 +1264,17 @@
       "nearPR": "Casi un RP!",
       "noPR": "Sin nuevos RPs"
     }
+  },
+  "patterns": {
+    "noData": "No hay datos de patrones disponibles",
+    "insufficientData": "Datos insuficientes para analisis de patrones. Se necesitan al menos 10 entrenamientos."
+  },
+  "economy": {
+    "title": "Economia de Carrera",
+    "subtitle": "Rastrea tu eficiencia de carrera"
+  },
+  "racePacing": {
+    "title": "Planificador de Ritmo de Carrera",
+    "subtitle": "Genera estrategias de ritmo optimas"
   }
 }

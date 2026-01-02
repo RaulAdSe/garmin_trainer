@@ -359,3 +359,4 @@ First-time analysis calls the LLM. Subsequent requests are cached in the databas
 - Check [API Reference](./api-reference.md) for all endpoints
 - See [Metrics Explained](./metrics-explained.md) for calculations
 - Review [coaching_app_plan.md](./coaching_app_plan.md) for roadmap
+

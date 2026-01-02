@@ -24,6 +24,7 @@ import type {
   SyncedHoverState,
 } from '@/types/workout-detail';
 import type { TimeRange } from '@/types/touch-chart';
+import type { WorkoutComparisonData, ComparisonStats } from '@/types/comparison';
 import { formatChartTime, formatElapsedTime, downsampleData } from '@/lib/workout-utils';
 import { formatPace } from '@/lib/utils';
 import {
@@ -34,6 +35,7 @@ import {
   announceToScreenReader,
 } from '@/lib/accessibility';
 import { TouchableChartWrapper } from '@/components/charts/TouchableChartWrapper';
+import { ComparisonChart } from '@/components/charts/ComparisonChart';
 
 // Chart theme colors
 const COLORS = {
@@ -67,6 +69,10 @@ interface WorkoutChartsProps {
   className?: string;
   activeIndex?: number | null;
   onHoverIndexChange?: (index: number | null) => void;
+  comparisonEnabled?: boolean;
+  comparisonData?: WorkoutComparisonData | null;
+  comparisonStats?: ComparisonStats | null;
+  selectedComparisonId?: string | null;
 }
 
 export function WorkoutCharts({
@@ -76,6 +82,10 @@ export function WorkoutCharts({
   className = '',
   activeIndex: externalActiveIndex,
   onHoverIndexChange,
+  comparisonEnabled = false,
+  comparisonData,
+  comparisonStats,
+  selectedComparisonId,
 }: WorkoutChartsProps) {
   const [internalHover, setInternalHover] = useState<SyncedHoverState>({
     activeIndex: null,
@@ -250,57 +260,150 @@ export function WorkoutCharts({
         </div>
       )}
 
-      {/* Pace/Speed Chart */}
-      {hasPaceData && visibleCharts.has('pace') && (
-        <PaceSpeedChart
-          data={timeSeries.pace_or_speed}
-          isRunning={isRunning}
-          syncedHover={syncedHover}
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-        />
-      )}
+      {/* Charts - Use ComparisonChart when comparison is enabled */}
+      {comparisonEnabled && comparisonData && selectedComparisonId ? (
+        <>
+          {/* Pace/Speed Comparison Chart */}
+          {hasPaceData && visibleCharts.has('pace') && (
+            <div className="bg-gray-800/50 rounded-lg p-4">
+              <h3 className="text-sm font-medium text-gray-300 mb-2">Pace Comparison</h3>
+              <ComparisonChart
+                primaryData={comparisonData.primary_series}
+                comparisonData={comparisonData.comparison_series}
+                metric="pace"
+                comparisonLabel="Comparison"
+                showDifference={true}
+                showComparison={true}
+                height={200}
+                stats={comparisonStats}
+              />
+            </div>
+          )}
 
-      {/* Heart Rate Chart */}
-      {hasHRData && visibleCharts.has('heartRate') && (
-        <HeartRateChart
-          data={timeSeries.heart_rate}
-          maxHR={maxHR}
-          syncedHover={syncedHover}
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-        />
-      )}
+          {/* Heart Rate Comparison Chart */}
+          {hasHRData && visibleCharts.has('heartRate') && (
+            <div className="bg-gray-800/50 rounded-lg p-4">
+              <h3 className="text-sm font-medium text-gray-300 mb-2">Heart Rate Comparison</h3>
+              <ComparisonChart
+                primaryData={comparisonData.primary_series}
+                comparisonData={comparisonData.comparison_series}
+                metric="heart_rate"
+                comparisonLabel="Comparison"
+                showDifference={true}
+                showComparison={true}
+                height={200}
+                stats={comparisonStats}
+              />
+            </div>
+          )}
 
-      {/* Power Chart */}
-      {hasPowerData && visibleCharts.has('power') && (
-        <PowerChart
-          data={timeSeries.power!}
-          syncedHover={syncedHover}
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-        />
-      )}
+          {/* Power Comparison Chart */}
+          {hasPowerData && visibleCharts.has('power') && (
+            <div className="bg-gray-800/50 rounded-lg p-4">
+              <h3 className="text-sm font-medium text-gray-300 mb-2">Power Comparison</h3>
+              <ComparisonChart
+                primaryData={comparisonData.primary_series}
+                comparisonData={comparisonData.comparison_series}
+                metric="power"
+                comparisonLabel="Comparison"
+                showDifference={true}
+                showComparison={true}
+                height={200}
+                stats={comparisonStats}
+              />
+            </div>
+          )}
 
-      {/* Cadence Chart */}
-      {hasCadenceData && visibleCharts.has('cadence') && (
-        <CadenceChart
-          data={timeSeries.cadence}
-          isRunning={isRunning}
-          syncedHover={syncedHover}
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-        />
-      )}
+          {/* Cadence Comparison Chart */}
+          {hasCadenceData && visibleCharts.has('cadence') && (
+            <div className="bg-gray-800/50 rounded-lg p-4">
+              <h3 className="text-sm font-medium text-gray-300 mb-2">Cadence Comparison</h3>
+              <ComparisonChart
+                primaryData={comparisonData.primary_series}
+                comparisonData={comparisonData.comparison_series}
+                metric="cadence"
+                comparisonLabel="Comparison"
+                showDifference={true}
+                showComparison={true}
+                height={200}
+                stats={comparisonStats}
+              />
+            </div>
+          )}
 
-      {/* Elevation Chart */}
-      {hasElevationData && visibleCharts.has('elevation') && (
-        <ElevationChart
-          data={timeSeries.elevation}
-          syncedHover={syncedHover}
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-        />
+          {/* Elevation Comparison Chart */}
+          {hasElevationData && visibleCharts.has('elevation') && (
+            <div className="bg-gray-800/50 rounded-lg p-4">
+              <h3 className="text-sm font-medium text-gray-300 mb-2">Elevation Comparison</h3>
+              <ComparisonChart
+                primaryData={comparisonData.primary_series}
+                comparisonData={comparisonData.comparison_series}
+                metric="elevation"
+                comparisonLabel="Comparison"
+                showDifference={true}
+                showComparison={true}
+                height={200}
+                stats={comparisonStats}
+              />
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          {/* Regular Charts (no comparison) */}
+          {/* Pace/Speed Chart */}
+          {hasPaceData && visibleCharts.has('pace') && (
+            <PaceSpeedChart
+              data={timeSeries.pace_or_speed}
+              isRunning={isRunning}
+              syncedHover={syncedHover}
+              onMouseMove={handleMouseMove}
+              onMouseLeave={handleMouseLeave}
+            />
+          )}
+
+          {/* Heart Rate Chart */}
+          {hasHRData && visibleCharts.has('heartRate') && (
+            <HeartRateChart
+              data={timeSeries.heart_rate}
+              maxHR={maxHR}
+              syncedHover={syncedHover}
+              onMouseMove={handleMouseMove}
+              onMouseLeave={handleMouseLeave}
+            />
+          )}
+
+          {/* Power Chart */}
+          {hasPowerData && visibleCharts.has('power') && (
+            <PowerChart
+              data={timeSeries.power!}
+              syncedHover={syncedHover}
+              onMouseMove={handleMouseMove}
+              onMouseLeave={handleMouseLeave}
+            />
+          )}
+
+          {/* Cadence Chart */}
+          {hasCadenceData && visibleCharts.has('cadence') && (
+            <CadenceChart
+              data={timeSeries.cadence}
+              isRunning={isRunning}
+              syncedHover={syncedHover}
+              onMouseMove={handleMouseMove}
+              onMouseLeave={handleMouseLeave}
+            />
+          )}
+
+          {/* Elevation Chart */}
+          {hasElevationData && visibleCharts.has('elevation') && (
+            <ElevationChart
+              data={timeSeries.elevation}
+              syncedHover={syncedHover}
+              onMouseMove={handleMouseMove}
+              onMouseLeave={handleMouseLeave}
+            />
+          )}
+        </>
       )}
     </div>
   );

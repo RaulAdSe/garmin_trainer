@@ -8,10 +8,14 @@ import { useAthleteContext, useVO2MaxTrend } from "@/hooks/useAthleteContext";
 import { useUserProgress, useAchievements } from "@/hooks/useAchievements";
 import { useDataFreshness } from "@/hooks/useDataFreshness";
 import { useWorkouts } from "@/hooks/useWorkouts";
+import { useRecoveryScore } from "@/hooks/useRecovery";
+import { usePatternSummary } from "@/hooks/usePatterns";
+import { useCurrentEconomy } from "@/hooks/useRunningEconomy";
 import { useAuth } from "@/contexts/auth-context";
 import { hasAuthToken } from "@/lib/auth-fetch";
 import { ReadinessGauge } from "@/components/athlete/ReadinessGauge";
 import { VO2MaxCard } from "@/components/athlete/VO2MaxCard";
+import { EconomyCard } from "@/components/economy/EconomyCard";
 import {
   GamificationHeader,
   GamificationHeaderSkeleton,
@@ -42,6 +46,11 @@ export default function Dashboard() {
   const { total: workoutCount } = useWorkouts({ pageSize: 1 });
   const dataFreshness = useDataFreshness({ staleThresholdHours: 72 });
   const [viewMode, setViewMode, isViewModeLoaded] = useDashboardViewMode();
+  
+  // Phase 5 widgets
+  const { data: recoveryScore } = useRecoveryScore();
+  const { data: patternSummary } = usePatternSummary(90);
+  const { data: economyData } = useCurrentEconomy();
 
   // Compute onboarding tooltip data
   const achievementCount = useMemo(
@@ -285,6 +294,92 @@ export default function Dashboard() {
           style={{ animationDelay: "0.15s" }}
         />
       )}
+
+      {/* Phase 5 Widgets - Recovery, Patterns, Economy */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 animate-slideUp" style={{ animationDelay: "0.2s" }}>
+        {/* Recovery Score Widget */}
+        {recoveryScore?.success && recoveryScore.recoveryScore !== undefined && (
+          <Card className="hover:border-teal-500/50 transition-colors">
+            <CardHeader>
+              <CardTitle className="text-sm">Recovery Score</CardTitle>
+            </CardHeader>
+            <div className="flex items-center gap-4">
+              <div className="text-3xl font-bold text-teal-400">
+                {Math.round(recoveryScore.recoveryScore)}
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-gray-400 capitalize">
+                  {recoveryScore.recoveryStatus || 'good'}
+                </p>
+                <Link
+                  href="/recovery"
+                  className="text-xs text-teal-400 hover:text-teal-300 mt-1 inline-block"
+                >
+                  View Details →
+                </Link>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* Pattern Insights Widget */}
+        {patternSummary && (
+          <Card className="hover:border-teal-500/50 transition-colors">
+            <CardHeader>
+              <CardTitle className="text-sm">Training Patterns</CardTitle>
+            </CardHeader>
+            <div className="space-y-2">
+              {patternSummary.timing_correlations?.best_time_slot && (
+                <div className="text-sm">
+                  <span className="text-gray-400">Best time: </span>
+                  <span className="text-gray-200 capitalize">
+                    {patternSummary.timing_correlations.best_time_slot.replace('_', ' ')}
+                  </span>
+                </div>
+              )}
+              <Link
+                href="/patterns"
+                className="text-xs text-teal-400 hover:text-teal-300 inline-block"
+              >
+                View Insights →
+              </Link>
+            </div>
+          </Card>
+        )}
+
+        {/* Economy Quick View */}
+        {economyData?.has_data && (
+          <Card className="hover:border-teal-500/50 transition-colors">
+            <CardHeader>
+              <CardTitle className="text-sm">Running Economy</CardTitle>
+            </CardHeader>
+            <div className="space-y-2">
+              {economyData.metrics && (
+                <div className="text-sm">
+                  <span className="text-gray-400">Current: </span>
+                  <span className="text-gray-200 font-medium">
+                    {economyData.metrics.economy_ratio.toFixed(2)}
+                  </span>
+                  {economyData.metrics.comparison_to_best && (
+                    <span className={`ml-2 text-xs ${
+                      economyData.metrics.comparison_to_best < 0 ? 'text-green-400' : 'text-gray-500'
+                    }`}>
+                      ({economyData.metrics.comparison_to_best > 0 ? '+' : ''}
+                      {economyData.metrics.comparison_to_best.toFixed(1)}%)
+                    </span>
+                  )}
+                </div>
+              )}
+              <Link
+                href="/economy"
+                className="text-xs text-teal-400 hover:text-teal-300 inline-block"
+              >
+                View Details →
+              </Link>
+            </div>
+          </Card>
+        )}
+      </div>
 
       {/* Quick Action Links */}
       <div className="flex flex-wrap gap-3 animate-slideUp" style={{ animationDelay: "0.2s" }}>

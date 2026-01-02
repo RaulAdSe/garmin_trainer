@@ -458,3 +458,4 @@ The architecture is designed for extension:
 3. **New Export Formats**: Add encoders in `fit/` or new `export/`
 4. **New Data Sources**: Add integrations in `services/`
 5. **New Repositories**: Add data access patterns in `db/repository.py`
+

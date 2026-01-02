@@ -1679,4 +1679,425 @@ export async function cancelComebackChallenge(
   return handleResponse<ComebackChallenge | null>(response);
 }
 
+// ============================================
+// Workout Comparison API
+// ============================================
+
+import type {
+  ComparableWorkoutsResponse,
+  NormalizedTimeSeries,
+  WorkoutComparisonData,
+  NormalizationMode,
+} from '@/types/comparison';
+
+/**
+ * Get workouts comparable to the specified activity.
+ */
+export async function getComparableWorkouts(
+  activityId: string,
+  options: {
+    limit?: number;
+    workoutType?: string;
+    dateStart?: string;
+    dateEnd?: string;
+    minDistance?: number;
+    maxDistance?: number;
+  } = {}
+): Promise<ComparableWorkoutsResponse> {
+  const params = new URLSearchParams();
+
+  if (options.limit) params.set('limit', String(options.limit));
+  if (options.workoutType) params.set('workout_type', options.workoutType);
+  if (options.dateStart) params.set('date_start', options.dateStart);
+  if (options.dateEnd) params.set('date_end', options.dateEnd);
+  if (options.minDistance !== undefined) params.set('min_distance', String(options.minDistance));
+  if (options.maxDistance !== undefined) params.set('max_distance', String(options.maxDistance));
+
+  const queryString = params.toString();
+  const url = `${API_BASE}/comparison/${activityId}/comparable${queryString ? `?${queryString}` : ''}`;
+
+  const response = await authFetch(url);
+  return handleResponse<ComparableWorkoutsResponse>(response);
+}
+
+/**
+ * Get normalized time series data for an activity.
+ */
+export async function getNormalizedData(
+  activityId: string,
+  mode: NormalizationMode = 'percentage',
+  sampleCount: number = 100
+): Promise<NormalizedTimeSeries> {
+  const params = new URLSearchParams();
+  params.set('mode', mode);
+  params.set('sample_count', String(sampleCount));
+
+  const url = `${API_BASE}/comparison/${activityId}/normalized?${params.toString()}`;
+
+  const response = await authFetch(url);
+  return handleResponse<NormalizedTimeSeries>(response);
+}
+
+/**
+ * Compare two workouts and get normalized overlay data.
+ */
+export async function compareWorkouts(
+  primaryId: string,
+  comparisonId: string,
+  normalizationMode: NormalizationMode = 'percentage',
+  sampleCount: number = 100
+): Promise<WorkoutComparisonData> {
+  const response = await authFetch(`${API_BASE}/comparison/${primaryId}/compare`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      comparison_id: comparisonId,
+      normalization_mode: normalizationMode,
+      sample_count: sampleCount,
+    }),
+  });
+  return handleResponse<WorkoutComparisonData>(response);
+}
+
+// ============================================
+// Race Pacing API
+// ============================================
+
+import type {
+  PacingPlan,
+  GeneratePacingPlanRequest,
+  WeatherAdjustment,
+  WeatherAdjustmentRequest,
+  AvailableStrategiesResponse,
+  RaceDistance,
+} from './types';
+
+/**
+ * Generate a pacing plan for a race.
+ */
+export async function generatePacingPlan(
+  request: GeneratePacingPlanRequest
+): Promise<PacingPlan> {
+  const response = await authFetch(`${API_BASE}/race/pacing-plan`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<PacingPlan>(response);
+}
+
+/**
+ * Calculate weather impact on pace.
+ */
+export async function calculateWeatherAdjustment(
+  request: WeatherAdjustmentRequest
+): Promise<WeatherAdjustment> {
+  const response = await authFetch(`${API_BASE}/race/weather-adjustment`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<WeatherAdjustment>(response);
+}
+
+/**
+ * Get available pacing strategies and race distances.
+ */
+export async function getAvailableStrategies(): Promise<AvailableStrategiesResponse> {
+  const response = await authFetch(`${API_BASE}/race/strategies`);
+  return handleResponse<AvailableStrategiesResponse>(response);
+}
+
+/**
+ * Quick pacing plan generator with minimal input.
+ */
+export async function getQuickPacingPlan(
+  raceDistance: RaceDistance,
+  targetTimeHours: number,
+  targetTimeMinutes: number,
+  targetTimeSeconds: number = 0,
+  customDistanceKm?: number
+): Promise<PacingPlan> {
+  const params = new URLSearchParams();
+  params.set('race_distance', raceDistance);
+  params.set('target_time_hours', String(targetTimeHours));
+  params.set('target_time_minutes', String(targetTimeMinutes));
+  params.set('target_time_seconds', String(targetTimeSeconds));
+  if (customDistanceKm !== undefined) {
+    params.set('custom_distance_km', String(customDistanceKm));
+  }
+
+  const response = await authFetch(`${API_BASE}/race/quick-plan?${params.toString()}`);
+  return handleResponse<PacingPlan>(response);
+}
+
+// ============================================
+// Pattern Recognition API
+// ============================================
+
+import type {
+  TimingAnalysis,
+  TSBOptimalRange,
+  FitnessPrediction,
+  PerformanceCorrelations,
+  PatternSummary,
+} from '@/types/patterns';
+
+/**
+ * Get timing pattern analysis (best times/days to train).
+ */
+export async function getTimingAnalysis(
+  days: number = 90
+): Promise<TimingAnalysis> {
+  const response = await authFetch(`${API_BASE}/patterns/timing?days=${days}`);
+  return handleResponse<TimingAnalysis>(response);
+}
+
+/**
+ * Get optimal TSB range for peak performance.
+ */
+export async function getTSBOptimalRange(
+  days: number = 180
+): Promise<TSBOptimalRange> {
+  const response = await authFetch(`${API_BASE}/patterns/tsb-optimal?days=${days}`);
+  return handleResponse<TSBOptimalRange>(response);
+}
+
+/**
+ * Get peak fitness prediction.
+ */
+export async function getPeakFitnessPrediction(
+  targetDate?: string,
+  horizonDays: number = 90
+): Promise<FitnessPrediction> {
+  const params = new URLSearchParams();
+  if (targetDate) params.set('target_date', targetDate);
+  params.set('horizon_days', String(horizonDays));
+
+  const response = await authFetch(`${API_BASE}/patterns/peak-prediction?${params.toString()}`);
+  return handleResponse<FitnessPrediction>(response);
+}
+
+/**
+ * Get performance correlations analysis.
+ */
+export async function getPerformanceCorrelations(
+  days: number = 180
+): Promise<PerformanceCorrelations> {
+  const response = await authFetch(`${API_BASE}/patterns/correlations?days=${days}`);
+  return handleResponse<PerformanceCorrelations>(response);
+}
+
+/**
+ * Get combined pattern analysis summary.
+ */
+export async function getPatternSummary(
+  days: number = 90
+): Promise<PatternSummary> {
+  const response = await authFetch(`${API_BASE}/patterns/summary?days=${days}`);
+  return handleResponse<PatternSummary>(response);
+}
+
+// ============================================
+// Recovery Module API
+// ============================================
+
+import type {
+  RecoveryModuleResponse,
+  SleepDebtResponse,
+  HRVTrendResponse,
+  RecoveryTimeResponse,
+  RecoveryScoreResponse,
+} from './types';
+
+/**
+ * Get complete recovery module data including sleep debt, HRV trend, and recovery time.
+ */
+export async function getRecoveryData(
+  options: {
+    targetDate?: string;
+    includeSleepDebt?: boolean;
+    includeHrvTrend?: boolean;
+    includeRecoveryTime?: boolean;
+    sleepTargetHours?: number;
+  } = {}
+): Promise<RecoveryModuleResponse> {
+  const params = new URLSearchParams();
+
+  if (options.targetDate) params.set('target_date', options.targetDate);
+  if (options.includeSleepDebt !== undefined) params.set('include_sleep_debt', String(options.includeSleepDebt));
+  if (options.includeHrvTrend !== undefined) params.set('include_hrv_trend', String(options.includeHrvTrend));
+  if (options.includeRecoveryTime !== undefined) params.set('include_recovery_time', String(options.includeRecoveryTime));
+  if (options.sleepTargetHours !== undefined) params.set('sleep_target_hours', String(options.sleepTargetHours));
+
+  const queryString = params.toString();
+  const url = `${API_BASE}/recovery${queryString ? `?${queryString}` : ''}`;
+
+  const response = await authFetch(url);
+
+  // Return empty response for 401 (not logged in)
+  if (response.status === 401) {
+    return {
+      success: false,
+      error: 'Authentication required',
+    };
+  }
+
+  return handleResponse<RecoveryModuleResponse>(response);
+}
+
+/**
+ * Get 7-day rolling sleep debt analysis.
+ */
+export async function getSleepDebt(
+  targetHours: number = 8.0,
+  windowDays: number = 7
+): Promise<SleepDebtResponse> {
+  const params = new URLSearchParams();
+  params.set('target_hours', String(targetHours));
+  params.set('window_days', String(windowDays));
+
+  const url = `${API_BASE}/recovery/sleep-debt?${params.toString()}`;
+  const response = await authFetch(url);
+
+  if (response.status === 401) {
+    return {
+      success: false,
+      error: 'Authentication required',
+    };
+  }
+
+  return handleResponse<SleepDebtResponse>(response);
+}
+
+/**
+ * Get HRV trend analysis with rolling averages and coefficient of variation.
+ */
+export async function getHRVTrend(): Promise<HRVTrendResponse> {
+  const response = await authFetch(`${API_BASE}/recovery/hrv-trend`);
+
+  if (response.status === 401) {
+    return {
+      success: false,
+      error: 'Authentication required',
+    };
+  }
+
+  return handleResponse<HRVTrendResponse>(response);
+}
+
+/**
+ * Get post-workout recovery time estimation.
+ */
+export async function getRecoveryTimeEstimate(
+  workoutId?: string
+): Promise<RecoveryTimeResponse> {
+  const params = new URLSearchParams();
+  if (workoutId) params.set('workout_id', workoutId);
+
+  const queryString = params.toString();
+  const url = `${API_BASE}/recovery/recovery-time${queryString ? `?${queryString}` : ''}`;
+
+  const response = await authFetch(url);
+
+  if (response.status === 401) {
+    return {
+      success: false,
+      error: 'Authentication required',
+    };
+  }
+
+  return handleResponse<RecoveryTimeResponse>(response);
+}
+
+/**
+ * Get just the recovery score and status for dashboard widgets.
+ */
+export async function getRecoveryScore(): Promise<RecoveryScoreResponse> {
+  const response = await authFetch(`${API_BASE}/recovery/score`);
+
+  if (response.status === 401) {
+    return {
+      success: false,
+      error: 'Authentication required',
+    };
+  }
+
+  return handleResponse<RecoveryScoreResponse>(response);
+}
+
+// ============================================
+// Running Economy API
+// ============================================
+
+/**
+ * Get the most recent running economy metrics.
+ */
+export async function getCurrentEconomy(): Promise<any> {
+  const response = await authFetch(`${API_BASE}/economy/current`);
+
+  if (response.status === 401) {
+    return {
+      has_data: false,
+      message: 'Authentication required',
+    };
+  }
+
+  return handleResponse(response);
+}
+
+/**
+ * Get running economy trend over time.
+ */
+export async function getEconomyTrend(days: number = 90): Promise<any> {
+  const response = await authFetch(`${API_BASE}/economy/trend?days=${days}`);
+
+  if (response.status === 401) {
+    return {
+      success: false,
+      message: 'Authentication required',
+    };
+  }
+
+  return handleResponse(response);
+}
+
+/**
+ * Get cardiac drift analysis for a specific workout.
+ */
+export async function getCardiacDrift(workoutId: string): Promise<any> {
+  const response = await authFetch(`${API_BASE}/economy/drift/${workoutId}`);
+
+  if (response.status === 401) {
+    return {
+      success: false,
+      message: 'Authentication required',
+    };
+  }
+
+  return handleResponse(response);
+}
+
+/**
+ * Get economy metrics by pace zone.
+ */
+export async function getPaceZonesEconomy(days: number = 90): Promise<any> {
+  const response = await authFetch(`${API_BASE}/economy/zones?days=${days}`);
+
+  if (response.status === 401) {
+    return {
+      success: false,
+      message: 'Authentication required',
+    };
+  }
+
+  return handleResponse(response);
+}
+
 export { ApiClientError };

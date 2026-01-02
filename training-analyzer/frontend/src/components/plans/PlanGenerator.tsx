@@ -8,11 +8,10 @@ import type {
 } from '@/lib/types';
 
 const DISTANCES: { value: RaceDistance; label: string; icon: string }[] = [
-  { value: '5k', label: '5K', icon: '5' },
-  { value: '10k', label: '10K', icon: '10' },
+  { value: '5K', label: '5K', icon: '5' },
+  { value: '10K', label: '10K', icon: '10' },
   { value: 'half_marathon', label: 'Half', icon: '21' },
   { value: 'marathon', label: 'Marathon', icon: '42' },
-  { value: 'ultra', label: 'Ultra', icon: '50+' },
   { value: 'custom', label: 'Custom', icon: '?' },
 ];
 

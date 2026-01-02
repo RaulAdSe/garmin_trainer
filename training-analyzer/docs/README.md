@@ -179,3 +179,4 @@ pytest tests/ --cov=src/training_analyzer
 - **[README.md](../README.md)** - Project root documentation
 - **[pyproject.toml](../pyproject.toml)** - Python dependencies
 - **[tests/](../tests/)** - Test suite
+

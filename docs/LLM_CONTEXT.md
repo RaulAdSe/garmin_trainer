@@ -304,3 +304,4 @@ When working with this codebase:
 7. All metrics use **personal baselines**, not population averages
 8. Documentation is in each app's `docs/` folder
 
+

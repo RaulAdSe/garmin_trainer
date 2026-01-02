@@ -119,7 +119,7 @@ This creates a fundamental tension between feature richness and accessibility.
 7. **Emotional Support for Red Zones**
    - Replace clinical "Recovery Focus" with:
    - "Your body is asking for rest. Recovery isn't falling behind—it's building strength."
-   - *Basis: Psychological safety (Edmondson, 1999)*
+   - *Basis: Psychologica (Edmondson, 1999)*
 
 8. **Earn-Your-Freeze Tokens**
    - Change from static allocation to earned reward
@@ -542,31 +542,35 @@ All three experts identified that the app alienates beginners:
 
 **Success Metric**: Beginner segment (CTL <30) retention matches overall
 
-### Phase 4: Emotional Connection (Weeks 13-16) ✅ COMPLETED
+### Phase 4: Emotional Connection (Weeks 13-16)
 
 **Focus**: From dashboard to coach
 
-- [x] Dynamic streak recovery (Comeback Challenge with 1.5x XP bonus)
-- [x] Emotional support messaging (Context-aware supportive messages)
-- [x] PR detection and celebration (Multi-metric PR detection with celebratory UI)
-- [x] Identity commitment feature (Psychological commitment statements)
-- [x] Social proof layer (Community stats, percentile rankings)
+- [ ] Dynamic streak recovery
+- [ ] Emotional support messaging
+- [ ] PR detection and celebration
+- [ ] Identity commitment feature
+- [ ] Social proof layer
 
 **Success Metric**: NPS increases; "coach-like" mentioned in feedback
 
-> **Implementation**: See [Implementation 7](#implementation-7-phase-4---emotional-connection-completed) for details.
-
-### Phase 5: Advanced Features (Weeks 17+)
+### Phase 5: Advanced Features (Weeks 17+) ⚠️ BACKEND COMPLETE, FRONTEND PENDING
 
 **Focus**: Differentiation and power users
 
-- [ ] Enhanced recovery module
-- [ ] AI pattern recognition
-- [ ] Race pacing generator
-- [ ] Chart comparison mode
-- [ ] Running economy tracking
+- [x] Enhanced recovery module (Backend ✅, Frontend ❌)
+- [x] AI pattern recognition (Backend ✅, Frontend ❌)
+- [x] Race pacing generator (Backend ✅, Frontend ⚠️ Component exists but not integrated)
+- [x] Chart comparison mode (Backend ✅, Frontend ⚠️ Component exists but not integrated)
+- [x] Running economy tracking (Backend ✅, Frontend ❌)
+
+**Status Summary:**
+- **Backend**: All 5 features fully implemented with services and API routes
+- **Frontend**: Components exist for race pacing and chart comparison, but not integrated into pages. Recovery, patterns, and economy have no frontend UI yet.
 
 **Success Metric**: Power user engagement increases; competitive advantage established
+
+> **Implementation**: See [Implementation 7](#implementation-7-phase-5---advanced-features-backend-complete) for details.
 
 ---
 
@@ -1656,261 +1660,414 @@ Phase 2 targets from the roadmap:
 
 ---
 
-## Implementation 7: Phase 4 - Emotional Connection (COMPLETED)
+## Implementation 7: Phase 5 - Advanced Features (BACKEND COMPLETE)
 
-This section documents the completed Phase 4 implementation focusing on emotional design patterns from sports psychology research.
+This section documents the Phase 5 implementation. **Backend is 100% complete** with all services and API routes implemented. **Frontend integration is pending** - components exist for race pacing and chart comparison but are not yet integrated into pages. Recovery, patterns, and economy features need frontend UI development.
 
-### 7.1 Overview
+### 7.1 Enhanced Recovery Module
 
-Phase 4 transforms the app from a "dashboard" into a "coach" by implementing emotional connection features based on behavioral psychology research.
+**Files Created:**
+- `src/services/recovery_module_service.py` - Core recovery analysis service (896 lines)
+- `src/api/routes/recovery.py` - Recovery API endpoints
+- `src/models/recovery.py` - Recovery data models
 
-**Key Psychological Frameworks Applied:**
-- Growth Mindset (Dweck, 2006) - Comeback challenges
-- Peak Experiences (Csikszentmihalyi, 1990) - PR celebrations
-- Identity Commitment (Cialdini, 2006) - Identity statements
-- Social Proof (Cialdini, 2006) - Community statistics
-- Psychological Safety (Edmondson, 1999) - Supportive messaging
+**Key Features:**
+1. **7-Day Rolling Sleep Debt Analysis**
+   - Tracks sleep debt accumulation over rolling 7-day window
+   - Impact levels: minimal, moderate, significant, severe
+   - Personalized recommendations based on debt level
 
-### 7.2 Comeback Challenge System
+2. **HRV Trend Analysis**
+   - Coefficient of Variation (CV) calculation for HRV stability
+   - Trend direction detection (improving, stable, declining)
+   - Relative to baseline comparison
+   - Minimum 7 days of data required for analysis
 
-**Purpose**: Convert streak breaks from failures into growth opportunities.
+3. **Post-Workout Recovery Time Estimation**
+   - Factors in workout intensity, duration, and HRSS
+   - Adjusts based on current TSB, sleep debt, and HRV status
+   - VO2max consideration for personalized estimates
+   - Returns recovery time in hours with confidence level
 
-**Implementation:**
-- Detects when a user's streak breaks
-- Offers "Comeback Challenge" with 1.5x XP multiplier
-- Time-limited challenges (7 days) with clear targets
-- Growth mindset framing: "Every champion has comebacks"
+4. **Overall Recovery Score**
+   - Combines all recovery factors into single score (0-100)
+   - Recovery status: excellent, good, fair, poor, critical
+   - Data freshness tracking
+   - Comprehensive recommendations
 
-**Files:**
-```
-src/services/comeback_service.py      # Challenge management
-src/db/models/comeback.py             # ComebackChallenge model
-frontend/src/components/emotional/ComebackChallengeCard.tsx
-frontend/src/components/emotional/ComebackChallengeModal.tsx
-frontend/src/hooks/useComebackChallenge.ts
-```
+**API Endpoints:**
+- `GET /api/recovery/` - Get complete recovery module data
+- `GET /api/recovery/sleep-debt` - Get sleep debt analysis
+- `GET /api/recovery/hrv-trend` - Get HRV trend analysis
+- `GET /api/recovery/recovery-time` - Get recovery time estimate
 
-### 7.3 PR Detection & Celebration
-
-**Purpose**: Recognize and celebrate personal records to create peak experience memory anchors.
-
-**Implementation:**
-- Auto-detects multiple PR types (pace, distance, power, heart rate, cadence)
-- Sport-specific PR metrics (running, cycling, swimming, strength)
-- Celebratory modal with confetti animation
-- PR history and badge display
-
-**PR Types:**
-- Running: Fastest pace, longest distance, best 5K/10K/HM/M times
-- Cycling: Max power, longest ride, best normalized power
-- General: Best consistency, training load, recovery score
-
-**Files:**
-```
-src/services/pr_detection_service.py  # Multi-metric detection
-src/models/personal_records.py        # PR types and models
-frontend/src/components/emotional/PRCelebrationModal.tsx
-frontend/src/components/emotional/PRBadge.tsx
-frontend/src/components/emotional/PRHistory.tsx
-frontend/src/hooks/usePRDetection.ts
-```
-
-### 7.4 Identity Commitment Feature
-
-**Purpose**: Leverage psychological commitment to increase consistency through identity-based motivation.
-
-**Implementation:**
-- Prompt at Level 3: "I am someone who..." identity statement
-- User can edit and refine their identity statements
-- Displayed on profile and reinforced during workouts
-- Tracks statement strength and reinforcement history
-
-**Psychological Basis:**
-> "Public commitment increases consistency by 39%" - Cialdini, 2006
-
-**Files:**
-```
-src/services/identity_service.py      # Identity management
-src/db/schema.py                      # identity_statements table
-frontend/src/components/emotional/IdentityBadge.tsx
-frontend/src/components/emotional/IdentityStatementEditor.tsx
-frontend/src/components/emotional/IdentityReinforcement.tsx
-frontend/src/hooks/useIdentity.ts
-```
-
-### 7.5 Social Proof Layer
-
-**Purpose**: Motivate through community connection without creating comparison anxiety.
-
-**Implementation:**
-- Anonymous community statistics ("2,340 athletes trained today")
-- Percentile rankings ("Top 15% for consistency this month")
-- Community pulse indicators (active athletes, recent workouts)
-- No social network required - privacy-first approach
-
-**Files:**
-```
-src/services/social_proof_service.py  # Community stats
-frontend/src/components/emotional/SocialProofBanner.tsx
-frontend/src/components/emotional/PercentileCard.tsx
-frontend/src/components/emotional/CommunityPulse.tsx
-frontend/src/hooks/useSocialProof.ts
-```
-
-### 7.6 Emotional Support Messaging
-
-**Purpose**: Provide context-aware supportive messages that feel like a coach, not a dashboard.
-
-**Implementation:**
-- Detects user state (recovering, plateauing, progressing, fatigued)
-- Provides appropriate emotional support messages
-- Plateau encouragement with breakthrough suggestions
-- Recovery support with reassurance messaging
-
-**Message Categories:**
-- Recovery support: "Your body is building strength. Trust the process."
-- Plateau encouragement: "Breakthroughs come after persistence."
-- Progress celebration: "Your consistency is paying off."
-- Fatigue acknowledgment: "Rest is part of training."
-
-**Files:**
-```
-src/services/emotional_messaging_service.py
-frontend/src/lib/emotional-messages.ts
-frontend/src/components/emotional/EmotionalMessageCard.tsx
-frontend/src/components/emotional/PlateauEncouragement.tsx
-frontend/src/components/emotional/RecoverySupport.tsx
-frontend/src/hooks/useEmotionalMessage.ts
-```
-
-### 7.7 API Routes
-
-All emotional features are exposed through `/api/emotional/*` endpoints:
-
-```python
-# src/api/routes/emotional.py
-
-# Comeback Challenge
-POST   /api/emotional/comeback/start
-GET    /api/emotional/comeback/active
-POST   /api/emotional/comeback/{id}/complete
-DELETE /api/emotional/comeback/{id}
-
-# PR Detection
-GET    /api/emotional/prs
-GET    /api/emotional/prs/recent
-POST   /api/emotional/prs/detect
-GET    /api/emotional/prs/{pr_type}
-
-# Identity
-GET    /api/emotional/identity
-POST   /api/emotional/identity
-PUT    /api/emotional/identity/{id}
-DELETE /api/emotional/identity/{id}
-POST   /api/emotional/identity/{id}/reinforce
-
-# Social Proof
-GET    /api/emotional/social/stats
-GET    /api/emotional/social/percentile
-GET    /api/emotional/social/pulse
-
-# Emotional Messages
-GET    /api/emotional/message
-GET    /api/emotional/message/{context}
-```
-
-### 7.8 i18n Support
-
-Full internationalization for English and Spanish:
-
+**Example Response:**
 ```json
-// messages/en.json + messages/es.json additions (~300 lines each)
 {
-  "emotional": {
-    "comeback": {
-      "title": "Comeback Challenge",
-      "description": "Every champion has comebacks",
-      "bonus": "1.5x XP bonus active!"
+  "success": true,
+  "data": {
+    "recovery_score": 78,
+    "recovery_status": "good",
+    "sleep_debt": {
+      "total_debt_hours": 3.5,
+      "impact_level": "moderate",
+      "recommendation": "Aim for 8.5 hours tonight"
     },
-    "pr": {
-      "celebration": "🎉 New Personal Record!",
-      "fastest": "Fastest Ever",
-      "longest": "Longest Distance"
+    "hrv_trend": {
+      "trend_direction": "improving",
+      "cv_percent": 8.2,
+      "relative_to_baseline": 1.05
     },
-    "identity": {
-      "prompt": "I am someone who...",
-      "reinforcement": "Remember: {statement}"
-    },
-    "social": {
-      "athletesToday": "{count} athletes trained today",
-      "percentile": "Top {percent}% for {metric}"
-    },
-    "support": {
-      "recovery": "Your body is building strength",
-      "plateau": "Breakthroughs come after persistence"
+    "recovery_time": {
+      "estimated_hours": 24,
+      "confidence": "high"
     }
   }
 }
 ```
 
-### 7.9 File Structure
+### 7.2 AI Pattern Recognition Service
+
+**Files Created:**
+- `src/services/pattern_recognition_service.py` - Pattern analysis service
+- `src/api/routes/patterns.py` - Pattern recognition API endpoints
+- `src/models/patterns.py` - Pattern data models
+
+**Key Features:**
+1. **Timing Pattern Analysis**
+   - Performance by time of day (early morning, morning, afternoon, evening, night)
+   - Performance by day of week
+   - Identifies optimal training windows
+   - Minimum 10 workouts required for analysis
+
+2. **TSB Performance Correlation**
+   - Identifies optimal TSB range for peak performance
+   - Performance statistics by TSB zone (negative, low, optimal, high)
+   - Individual optimal TSB range calculation
+   - Correlation strength analysis
+
+3. **Fitness Prediction**
+   - CTL trajectory projection (7, 14, 30 days)
+   - Peak fitness date prediction
+   - Confidence intervals based on historical data
+   - Planned event consideration
+
+4. **Performance Correlations**
+   - Multi-factor correlation analysis
+   - Identifies factors most correlated with performance
+   - Statistical significance testing
+
+**API Endpoints:**
+- `GET /api/patterns/timing` - Get timing pattern analysis
+- `GET /api/patterns/tsb-optimal` - Get optimal TSB range
+- `GET /api/patterns/fitness-prediction` - Get fitness predictions
+- `GET /api/patterns/correlations` - Get performance correlations
+
+**Example Response:**
+```json
+{
+  "optimal_time_slot": {
+    "time_of_day": "morning",
+    "avg_performance_score": 0.85,
+    "workout_count": 42
+  },
+  "optimal_day": {
+    "day_of_week": "tuesday",
+    "avg_performance_score": 0.82
+  },
+  "optimal_tsb_range": {
+    "min": 5.0,
+    "max": 15.0,
+    "avg_performance": 0.88
+  }
+}
+```
+
+### 7.3 Race Pacing Generator
+
+**Files Created:**
+- `src/services/race_pacing_service.py` - Pacing plan generation service (409 lines)
+- `src/api/routes/race_pacing.py` - Race pacing API endpoints
+- `src/models/race_pacing.py` - Pacing data models
+- `frontend/src/components/race/PacingPlanGenerator.tsx` - Frontend UI component
+
+**Key Features:**
+1. **Pacing Strategy Selection**
+   - Even split: Consistent pace throughout
+   - Negative split: Faster second half (recommended for most distances)
+   - Positive split: Faster first half (rarely optimal)
+   - Variable: Terrain-adjusted pacing
+
+2. **Weather Adjustments**
+   - Temperature adjustments (+1.5% per degree above 12°C)
+   - Humidity adjustments (+0.5% per 10% above 60%)
+   - Wind adjustments (headwind/tailwind)
+   - Altitude adjustments
+
+3. **Elevation Profile Support**
+   - Uphill adjustments (+8% pace per 1% grade)
+   - Downhill adjustments (-3% pace per 1% grade, capped)
+   - Net elevation gain consideration
+   - Per-km elevation adjustments
+
+4. **Split Generation**
+   - Per-km or per-mile splits
+   - Cumulative time tracking
+   - Elevation-adjusted pace per split
+   - Strategy-specific pace modifiers
+   - Split notes and recommendations
+
+**API Endpoints:**
+- `POST /api/race-pacing/pacing-plan` - Generate pacing plan
+- `POST /api/race-pacing/weather-adjustment` - Calculate weather adjustments
+- `GET /api/race-pacing/strategies` - Get available strategies
+
+**Example Request:**
+```json
+{
+  "target_time_sec": 10800,
+  "distance_km": 21.0975,
+  "race_distance": "half_marathon",
+  "strategy": "negative",
+  "weather_conditions": {
+    "temperature_c": 18,
+    "humidity_pct": 65,
+    "wind_speed_kmh": 15
+  },
+  "course_profile": {
+    "total_elevation_gain_m": 200,
+    "net_elevation_gain_m": 50
+  }
+}
+```
+
+### 7.4 Chart Comparison Mode
+
+**Files Created:**
+- `frontend/src/hooks/useChartComparison.ts` - Comparison state management hook
+- `frontend/src/components/charts/ComparisonChart.tsx` - Comparison chart component
+- `frontend/src/components/charts/ComparisonSelector.tsx` - Comparison selector UI
+- `frontend/src/components/charts/ComparisonLegend.tsx` - Comparison legend
+- `frontend/src/types/comparison.ts` - Comparison type definitions
+- `src/api/routes/comparison.py` - Comparison API endpoints (backend)
+
+**Key Features:**
+1. **Workout Comparison**
+   - Compare any two workouts side-by-side
+   - Normalized time series alignment
+   - Multiple normalization modes (percentage, distance, time)
+   - Quick selection presets (PR, best 10K, last week, etc.)
+
+2. **Multi-Metric Comparison**
+   - Heart rate comparison
+   - Pace comparison
+   - Power comparison (cycling)
+   - Cadence comparison
+   - Elevation comparison
+
+3. **Visual Features**
+   - Overlaid line charts with different styles
+   - Difference area shading between lines
+   - Synchronized tooltips
+   - Statistical summary display
+   - Toggle comparison on/off
+
+4. **Comparison Statistics**
+   - Average difference calculation
+   - Peak difference identification
+   - Performance delta percentages
+   - Zone distribution comparison
+
+**API Endpoints:**
+- `GET /api/comparison/comparable/{activity_id}` - Get comparable workouts
+- `GET /api/comparison/normalized/{activity_id}` - Get normalized data
+- `POST /api/comparison/compare` - Compare two workouts
+
+**Usage Example:**
+```typescript
+const {
+  isComparisonEnabled,
+  comparableWorkouts,
+  selectComparison,
+  comparisonData,
+} = useChartComparison({ activityId: workout.id });
+
+// Enable comparison mode
+enableComparison();
+
+// Select a workout to compare
+selectComparison('workout-123');
+
+// Display comparison chart
+<ComparisonChart
+  primaryData={workoutData}
+  comparisonData={comparisonData}
+  metric="heart_rate"
+  showDifference={true}
+/>
+```
+
+### 7.5 Running Economy Tracking
+
+**Files Created:**
+- `src/services/running_economy_service.py` - Running economy service (215 lines)
+- `src/api/routes/economy.py` - Economy API endpoints
+- `src/models/running_economy.py` - Economy data models
+
+**Key Features:**
+1. **Economy Ratio Calculation**
+   - Formula: `pace_seconds_per_km / avg_hr`
+   - Lower values indicate better economy
+   - Personal best tracking
+   - Comparison to best economy
+
+2. **Pace Zone Economy Analysis**
+   - Economy by pace zone (easy, tempo, threshold, interval)
+   - Zone-specific economy trends
+   - Identifies most efficient zones
+   - Improvement tracking per zone
+
+3. **Cardiac Drift Detection**
+   - First half vs second half HR comparison
+   - Decoupling percentage calculation
+   - Severity classification (minimal, moderate, significant)
+   - Aerobic base deficiency detection
+
+4. **Economy Trends**
+   - 7, 30, 90-day trend analysis
+   - Improvement/decline detection
+   - Statistical significance testing
+   - Confidence intervals
+
+**API Endpoints:**
+- `GET /api/economy/current` - Get current economy metrics
+- `GET /api/economy/trend` - Get economy trend analysis
+- `GET /api/economy/cardiac-drift/{activity_id}` - Get cardiac drift analysis
+- `GET /api/economy/pace-zones` - Get economy by pace zone
+
+**Example Response:**
+```json
+{
+  "has_data": true,
+  "current": {
+    "economy_ratio": 2.05,
+    "pace_sec_per_km": 300,
+    "avg_hr": 146,
+    "pace_zone": "easy",
+    "comparison_to_best": -2.4,
+    "economy_label": "Good"
+  },
+  "trend": {
+    "direction": "improving",
+    "change_percent": 3.2,
+    "confidence": "high"
+  }
+}
+```
+
+### 7.6 File Structure Summary
 
 ```
-frontend/src/
-├── components/emotional/
-│   ├── index.ts                      # Barrel export
-│   ├── ComebackChallengeCard.tsx     # Challenge display
-│   ├── ComebackChallengeModal.tsx    # Challenge acceptance
-│   ├── CommunityPulse.tsx            # Active community
-│   ├── EmotionalMessageCard.tsx      # Support messages
-│   ├── IdentityBadge.tsx             # Identity display
-│   ├── IdentityReinforcement.tsx     # In-workout reinforcement
-│   ├── IdentityStatementEditor.tsx   # Edit statements
-│   ├── PercentileCard.tsx            # Ranking display
-│   ├── PlateauEncouragement.tsx      # Plateau support
-│   ├── PRBadge.tsx                   # PR indicator
-│   ├── PRCelebrationModal.tsx        # PR celebration
-│   ├── PRHistory.tsx                 # PR timeline
-│   ├── RecoverySupport.tsx           # Recovery messaging
-│   └── SocialProofBanner.tsx         # Community stats
-├── hooks/
-│   ├── useComebackChallenge.ts       # Comeback state
-│   ├── useEmotionalMessage.ts        # Message context
-│   ├── useIdentity.ts                # Identity management
-│   ├── usePRDetection.ts             # PR tracking
-│   └── useSocialProof.ts             # Social stats
-└── lib/
-    └── emotional-messages.ts         # Message generation
-
 src/
 ├── services/
-│   ├── comeback_service.py           # +467 lines
-│   ├── emotional_messaging_service.py # +423 lines
-│   ├── identity_service.py           # +334 lines
-│   ├── pr_detection_service.py       # +770 lines
-│   └── social_proof_service.py       # +338 lines
-├── models/
-│   └── personal_records.py           # +188 lines
-├── db/models/
-│   ├── __init__.py
-│   └── comeback.py                   # +126 lines
-└── api/routes/
-    └── emotional.py                  # +1396 lines
+│   ├── recovery_module_service.py      # 896 lines
+│   ├── pattern_recognition_service.py  # Pattern analysis
+│   ├── race_pacing_service.py       # 409 lines
+│   └── running_economy_service.py     # 215 lines
+├── api/routes/
+│   ├── recovery.py                    # Recovery endpoints
+│   ├── patterns.py                    # Pattern endpoints
+│   ├── race_pacing.py                 # Pacing endpoints
+│   ├── economy.py                     # Economy endpoints
+│   └── comparison.py                  # Comparison endpoints
+└── models/
+    ├── recovery.py                    # Recovery models
+    ├── patterns.py                    # Pattern models
+    ├── race_pacing.py                 # Pacing models
+    └── running_economy.py             # Economy models
+
+frontend/src/
+├── components/
+│   ├── charts/
+│   │   ├── ComparisonChart.tsx        # Comparison visualization
+│   │   ├── ComparisonSelector.tsx     # Comparison UI
+│   │   └── ComparisonLegend.tsx        # Legend component
+│   └── race/
+│       └── PacingPlanGenerator.tsx     # Pacing plan UI
+├── hooks/
+│   └── useChartComparison.ts           # Comparison hook
+└── types/
+    └── comparison.ts                   # Comparison types
 ```
 
-### 7.10 Success Metrics
+### 7.7 Frontend Integration Status
 
-Phase 4 targets from the roadmap:
-- **NPS increase**: Target improvement in Net Promoter Score
-- **"Coach-like" feedback**: Track mentions of coaching feel in user feedback
-- **Comeback completion rate**: >50% of streak-broken users should attempt comeback
-- **PR celebration engagement**: Track modal interaction rates
-- **Identity statement adoption**: >40% of Level 3+ users should have statements
+**Completed:**
+- ✅ Backend services and API routes for all 5 features
+- ✅ Frontend components created for:
+  - `ComparisonChart.tsx` - Chart comparison visualization
+  - `PacingPlanGenerator.tsx` - Race pacing plan generator
+  - `useChartComparison.ts` - Comparison state management hook
+
+**Pending:**
+- ❌ **Recovery Module UI**: No frontend pages/components
+  - Need: Recovery dashboard page or widget
+  - Need: Sleep debt visualization
+  - Need: HRV trend charts
+  - Need: Recovery time estimates display
+
+- ❌ **Pattern Recognition UI**: No frontend pages/components
+  - Need: Pattern analysis dashboard
+  - Need: Timing pattern visualizations
+  - Need: TSB optimal range display
+  - Need: Fitness prediction charts
+
+- ⚠️ **Race Pacing Generator**: Component exists but not integrated
+  - Component: `PacingPlanGenerator.tsx` exists
+  - Missing: Page route (e.g., `/race-pacing` or `/plans/race-pacing`)
+  - Missing: Navigation link to access the feature
+
+- ⚠️ **Chart Comparison Mode**: Components exist but not integrated
+  - Components: `ComparisonChart.tsx`, `ComparisonSelector.tsx` exist
+  - Missing: Integration into workout detail page
+  - Missing: UI to enable/disable comparison mode
+
+- ❌ **Running Economy UI**: No frontend pages/components
+  - Need: Economy metrics display
+  - Need: Economy trend charts
+  - Need: Cardiac drift visualization
+  - Need: Pace zone economy analysis
+
+### 7.8 Next Steps for Frontend Integration
+
+**Priority 1: Quick Wins (Components Already Exist)**
+1. Create `/race-pacing` page and integrate `PacingPlanGenerator`
+2. Add comparison toggle to workout detail page
+3. Integrate `ComparisonChart` into workout charts section
+
+**Priority 2: New UI Development**
+4. Create recovery dashboard page (`/recovery`)
+5. Create pattern analysis page (`/patterns` or `/insights`)
+6. Create economy tracking page (`/economy`)
+
+**Priority 3: Dashboard Integration**
+7. Add recovery score widget to main dashboard
+8. Add pattern insights summary to dashboard
+9. Add economy quick view to dashboard
+
+### 7.9 Success Metrics
+
+Phase 5 targets from the roadmap:
+- **Power user engagement**: Track usage of advanced features
+- **Competitive advantage**: Differentiation through unique features
+- **Feature adoption**: Monitor usage rates for each feature
 
 **Tracking Points:**
-1. Comeback challenge start/completion rates
-2. PR celebration modal engagement
-3. Identity statement creation and edit frequency
-4. Social proof banner interaction
-5. Emotional message click-through rates
-6. User sentiment in feedback mentioning "coach" or "supportive"
+1. Recovery module usage frequency
+2. Pattern recognition insights generated
+3. Pacing plans generated
+4. Workout comparisons performed
+5. Economy trend analysis views
+6. Feature-specific user retention
+
+**Current Status**: Backend ready for frontend integration. Frontend work needed to make features accessible to users.

@@ -150,3 +150,4 @@ Based on recovery, your target strain is:
 - **[VISION.md](../VISION.md)** - Full product vision and roadmap
 - **[pyproject.toml](../pyproject.toml)** - Python dependencies
 - **[frontend/package.json](../frontend/package.json)** - Node.js dependencies
+

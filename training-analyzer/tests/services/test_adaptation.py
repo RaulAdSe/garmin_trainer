@@ -355,3 +355,4 @@ class TestAdaptationRecommendation:
         assert data["confidence"] == 0.85
 
 
+

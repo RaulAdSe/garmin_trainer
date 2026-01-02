@@ -33,6 +33,13 @@ export { useDataFreshness } from './useDataFreshness';
 
 export { useTouchChart } from './useTouchChart';
 
+export {
+  useChartComparison,
+  useQuickSelectionLabel,
+  comparisonKeys,
+} from './useChartComparison';
+export type { UseChartComparisonOptions, UseChartComparisonReturn } from './useChartComparison';
+
 export { usePurpose, type PurposeType, type UserPurpose } from './usePurpose';
 
 export {
@@ -116,6 +123,23 @@ export {
   type RecordWorkoutResponse,
   type ChallengeHistoryResponse,
 } from './useComebackChallenge';
+
+export {
+  useAvailableStrategies,
+  useGeneratePacingPlan,
+  useCalculateWeatherAdjustment,
+  useQuickPacingPlan,
+  formatPace,
+  formatTime,
+  parseTimeString,
+  getTimeComponents,
+  racePacingKeys,
+  type PacingPlan,
+  type GeneratePacingPlanRequest,
+  type WeatherAdjustment,
+  type WeatherAdjustmentRequest,
+  type AvailableStrategiesResponse,
+} from './useRacePacing';
 
 // Re-export onboarding context hook for convenience
 export { useOnboarding } from '@/contexts/onboarding-context';

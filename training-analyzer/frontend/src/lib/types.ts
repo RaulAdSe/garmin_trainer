@@ -187,14 +187,6 @@ export type SessionType =
   | 'strength'
   | 'rest';
 
-export type RaceDistance =
-  | '5k'
-  | '10k'
-  | 'half_marathon'
-  | 'marathon'
-  | 'ultra'
-  | 'custom';
-
 export type PeriodizationType = 'linear' | 'undulating' | 'block' | 'polarized';
 
 export type CompletionStatus = 'pending' | 'completed' | 'skipped' | 'partial';
@@ -1227,5 +1219,355 @@ export const PR_TYPE_COLORS: Record<PRType, {
     bg: 'bg-orange-500/20',
     text: 'text-orange-400',
     border: 'border-orange-500/30',
+  },
+};
+
+// ============================================
+// Race Pacing Types
+// ============================================
+
+export type PacingStrategy = 'even' | 'negative_split' | 'positive_split' | 'course_specific';
+
+export type RaceDistance = '5K' | '10K' | 'half_marathon' | 'marathon' | 'custom';
+
+export type WindDirection = 'headwind' | 'tailwind' | 'crosswind' | 'variable';
+
+export interface ElevationPoint {
+  distance_km: number;
+  elevation_m: number;
+}
+
+export interface CourseProfile {
+  name?: string;
+  total_distance_km: number;
+  elevation_points: ElevationPoint[];
+  total_elevation_gain_m?: number;
+  total_elevation_loss_m?: number;
+}
+
+export interface WeatherConditions {
+  temperature_c: number;
+  humidity_pct: number;
+  wind_speed_kmh: number;
+  wind_direction: WindDirection;
+  altitude_m: number;
+}
+
+export interface WeatherAdjustment {
+  temperature_adjustment_pct: number;
+  humidity_adjustment_pct: number;
+  wind_adjustment_pct: number;
+  altitude_adjustment_pct: number;
+  total_adjustment_pct: number;
+  adjusted_target_pace_sec_km?: number;
+}
+
+export interface SplitTarget {
+  split_number: number;
+  distance_km: number;
+  target_pace_sec_km: number;
+  target_pace_formatted: string;
+  cumulative_time_sec: number;
+  cumulative_time_formatted: string;
+  elevation_adjustment_pct: number;
+  notes?: string;
+}
+
+export interface StrategyRecommendation {
+  strategy: PacingStrategy;
+  confidence: number;
+  reasoning: string;
+}
+
+export interface PacingPlan {
+  race_name?: string;
+  race_distance: RaceDistance;
+  distance_km: number;
+  target_time_sec: number;
+  target_time_formatted: string;
+  base_pace_sec_km: number;
+  base_pace_formatted: string;
+  strategy: PacingStrategy;
+  strategy_recommendation?: StrategyRecommendation;
+  splits: SplitTarget[];
+  weather_conditions?: WeatherConditions;
+  weather_adjustment?: WeatherAdjustment;
+  course_profile?: CourseProfile;
+  tips: string[];
+}
+
+export interface GeneratePacingPlanRequest {
+  target_time_sec: number;
+  distance_km?: number;
+  race_distance: RaceDistance;
+  race_name?: string;
+  strategy?: PacingStrategy;
+  course_profile?: CourseProfile;
+  weather_conditions?: WeatherConditions;
+  split_unit?: 'km' | 'mile';
+}
+
+export interface WeatherAdjustmentRequest {
+  base_pace_sec_km: number;
+  weather_conditions: WeatherConditions;
+}
+
+export interface StrategyInfo {
+  id: PacingStrategy;
+  name: string;
+  description: string;
+  best_for: string;
+  pros: string[];
+  cons: string[];
+}
+
+export interface RaceDistanceInfo {
+  id: RaceDistance;
+  name: string;
+  distance_km: number | null;
+  distance_miles: number | null;
+}
+
+export interface AvailableStrategiesResponse {
+  strategies: StrategyInfo[];
+  race_distances: RaceDistanceInfo[];
+}
+
+// Race distance display names
+export const RACE_DISTANCE_NAMES: Record<RaceDistance, string> = {
+  '5K': '5K',
+  '10K': '10K',
+  'half_marathon': 'Half Marathon',
+  'marathon': 'Marathon',
+  'custom': 'Custom Distance',
+};
+
+// Race distance in km
+export const RACE_DISTANCES_KM: Record<RaceDistance, number | null> = {
+  '5K': 5.0,
+  '10K': 10.0,
+  'half_marathon': 21.0975,
+  'marathon': 42.195,
+  'custom': null,
+};
+
+// Strategy display names
+export const STRATEGY_NAMES: Record<PacingStrategy, string> = {
+  'even': 'Even Pacing',
+  'negative_split': 'Negative Split',
+  'positive_split': 'Positive Split',
+  'course_specific': 'Course-Specific',
+};
+
+// ============================================
+// Recovery Module Types
+// ============================================
+
+export type SleepDebtImpact = 'minimal' | 'moderate' | 'significant' | 'critical';
+
+export type HRVTrendDirection = 'improving' | 'stable' | 'declining' | 'insufficient_data';
+
+export type RecoveryStatus = 'excellent' | 'good' | 'moderate' | 'poor' | 'critical';
+
+export interface SleepRecord {
+  date: string;
+  durationHours: number;
+  qualityScore?: number;
+  deepSleepHours?: number;
+  remSleepHours?: number;
+  lightSleepHours?: number;
+  awakeTimeHours?: number;
+  sleepStart?: string;
+  sleepEnd?: string;
+}
+
+export interface SleepDebtAnalysis {
+  totalDebtHours: number;
+  dailyDebtBreakdown: number[];
+  targetHours: number;
+  windowDays: number;
+  averageSleepHours: number;
+  impactLevel: SleepDebtImpact;
+  recommendation: string;
+  trend: string;
+  sleepConsistencyScore?: number;
+  averageQuality?: number;
+}
+
+export interface HRVRecord {
+  date: string;
+  rmssd: number;
+  sdnn?: number;
+  lfPower?: number;
+  hfPower?: number;
+  lfHfRatio?: number;
+  measurementTime?: string;
+}
+
+export interface HRVTrendAnalysis {
+  currentRmssd?: number;
+  currentDate?: string;
+  rollingAverage7d?: number;
+  rollingAverage30d?: number;
+  cv7d?: number;
+  cv30d?: number;
+  currentLfHfRatio?: number;
+  averageLfHfRatio7d?: number;
+  trendDirection: HRVTrendDirection;
+  trendPercentage?: number;
+  baselineRmssd?: number;
+  relativeToBaseline?: number;
+  interpretation: string;
+  dataPoints7d: number;
+  dataPoints30d: number;
+}
+
+export interface RecoveryTimeEstimate {
+  hoursUntilRecovered: number;
+  hoursUntilFresh: number;
+  nextEasyWorkoutAt: string;
+  nextHardWorkoutAt: string;
+  factors: Record<string, number>;
+  workoutIntensityImpact: number;
+  sleepDebtImpact: number;
+  hrvStatusImpact: number;
+  currentFatigueImpact: number;
+  recoveryActivities: string[];
+  sleepRecommendationHours: number;
+}
+
+export interface RecoveryModuleData {
+  sleepDebt?: SleepDebtAnalysis;
+  hrvTrend?: HRVTrendAnalysis;
+  recoveryTime?: RecoveryTimeEstimate;
+  overallRecoveryStatus: RecoveryStatus;
+  recoveryScore: number;
+  summaryMessage: string;
+  recommendations: string[];
+  generatedAt: string;
+  dataFreshnessHours?: number;
+}
+
+export interface RecoveryModuleResponse {
+  success: boolean;
+  data?: RecoveryModuleData;
+  error?: string;
+}
+
+export interface SleepDebtResponse {
+  success: boolean;
+  data?: SleepDebtAnalysis;
+  error?: string;
+}
+
+export interface HRVTrendResponse {
+  success: boolean;
+  data?: HRVTrendAnalysis;
+  error?: string;
+}
+
+export interface RecoveryTimeResponse {
+  success: boolean;
+  data?: RecoveryTimeEstimate;
+  workoutId?: string;
+  error?: string;
+}
+
+export interface RecoveryScoreResponse {
+  success: boolean;
+  recoveryScore?: number;
+  recoveryStatus?: RecoveryStatus;
+  summaryMessage?: string;
+  hasData?: boolean;
+  error?: string;
+}
+
+// Recovery status colors
+export const RECOVERY_STATUS_COLORS: Record<RecoveryStatus, {
+  bg: string;
+  text: string;
+  fill: string;
+  border: string;
+}> = {
+  excellent: {
+    bg: 'bg-green-500/10',
+    text: 'text-green-400',
+    fill: '#22c55e',
+    border: 'border-green-500/30',
+  },
+  good: {
+    bg: 'bg-teal-500/10',
+    text: 'text-teal-400',
+    fill: '#14b8a6',
+    border: 'border-teal-500/30',
+  },
+  moderate: {
+    bg: 'bg-yellow-500/10',
+    text: 'text-yellow-400',
+    fill: '#eab308',
+    border: 'border-yellow-500/30',
+  },
+  poor: {
+    bg: 'bg-orange-500/10',
+    text: 'text-orange-400',
+    fill: '#f97316',
+    border: 'border-orange-500/30',
+  },
+  critical: {
+    bg: 'bg-red-500/10',
+    text: 'text-red-400',
+    fill: '#ef4444',
+    border: 'border-red-500/30',
+  },
+};
+
+// Sleep debt impact colors
+export const SLEEP_DEBT_IMPACT_COLORS: Record<SleepDebtImpact, {
+  bg: string;
+  text: string;
+  fill: string;
+}> = {
+  minimal: {
+    bg: 'bg-green-500/10',
+    text: 'text-green-400',
+    fill: '#22c55e',
+  },
+  moderate: {
+    bg: 'bg-yellow-500/10',
+    text: 'text-yellow-400',
+    fill: '#eab308',
+  },
+  significant: {
+    bg: 'bg-orange-500/10',
+    text: 'text-orange-400',
+    fill: '#f97316',
+  },
+  critical: {
+    bg: 'bg-red-500/10',
+    text: 'text-red-400',
+    fill: '#ef4444',
+  },
+};
+
+// HRV trend direction colors
+export const HRV_TREND_COLORS: Record<HRVTrendDirection, {
+  bg: string;
+  text: string;
+}> = {
+  improving: {
+    bg: 'bg-green-500/10',
+    text: 'text-green-400',
+  },
+  stable: {
+    bg: 'bg-gray-500/10',
+    text: 'text-gray-400',
+  },
+  declining: {
+    bg: 'bg-orange-500/10',
+    text: 'text-orange-400',
+  },
+  insufficient_data: {
+    bg: 'bg-gray-500/10',
+    text: 'text-gray-500',
   },
 };
