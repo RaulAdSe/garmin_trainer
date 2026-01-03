@@ -137,8 +137,12 @@ class SQLiteConnectionPool:
 
             yield conn
 
-            # Commit on success
-            conn.execute("COMMIT")
+            # Commit on success (may fail if no transaction is active, which is OK)
+            try:
+                conn.execute("COMMIT")
+            except sqlite3.OperationalError:
+                # No transaction active - this is fine in autocommit mode
+                pass
 
         except Exception:
             # Rollback on error
@@ -146,7 +150,7 @@ class SQLiteConnectionPool:
                 try:
                     conn.execute("ROLLBACK")
                 except sqlite3.Error:
-                    # Connection might be broken, will be replaced
+                    # Connection might be broken or no transaction active
                     pass
             raise
 

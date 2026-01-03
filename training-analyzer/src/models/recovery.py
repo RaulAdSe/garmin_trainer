@@ -1,6 +1,6 @@
 """Recovery module data models for sleep debt, HRV trends, and recovery time estimation."""
 
-from datetime import date, datetime
+from datetime import date as date_type, datetime
 from enum import Enum
 from typing import List, Optional, Dict, Any
 
@@ -54,7 +54,7 @@ class SleepRecord(BaseModel):
         populate_by_name=True,
     )
 
-    date: date = Field(..., description="Date of sleep (night ending on this date)")
+    date: date_type = Field(..., description="Date of sleep (night ending on this date)")
     duration_hours: float = Field(..., ge=0, le=24, description="Total sleep duration in hours")
     quality_score: Optional[float] = Field(None, ge=0, le=100, description="Sleep quality score 0-100")
     deep_sleep_hours: Optional[float] = Field(None, ge=0, description="Deep sleep duration")
@@ -108,7 +108,7 @@ class HRVRecord(BaseModel):
         populate_by_name=True,
     )
 
-    date: date = Field(..., description="Date of measurement")
+    date: date_type = Field(..., description="Date of measurement")
     rmssd: float = Field(..., ge=0, description="RMSSD value in milliseconds")
     sdnn: Optional[float] = Field(None, ge=0, description="SDNN value in milliseconds")
     lf_power: Optional[float] = Field(None, ge=0, description="Low frequency power")
@@ -127,7 +127,7 @@ class HRVTrendAnalysis(BaseModel):
 
     # Current values
     current_rmssd: Optional[float] = Field(None, description="Most recent RMSSD")
-    current_date: Optional[date] = Field(None, description="Date of current measurement")
+    current_date: Optional[date_type] = Field(None, description="Date of current measurement")
 
     # Rolling averages
     rolling_average_7d: Optional[float] = Field(None, description="7-day rolling average RMSSD")
@@ -291,7 +291,7 @@ class RecoveryModuleRequest(BaseModel):
         populate_by_name=True,
     )
 
-    target_date: Optional[date] = Field(
+    target_date: Optional[date_type] = Field(
         None, description="Target date for analysis (defaults to today)"
     )
     include_sleep_debt: bool = Field(

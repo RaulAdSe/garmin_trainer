@@ -6,7 +6,7 @@ These endpoints provide running economy tracking and cardiac drift analysis.
 All economy routes require authentication since they expose sensitive performance data.
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Optional
 import logging
 
@@ -57,7 +57,9 @@ async def get_current_economy(
     """
     try:
         # Get recent activities (last 365 days for best economy comparison)
-        activities = training_db.get_activities(days=365)
+        end_date = date.today().isoformat()
+        start_date = (date.today() - timedelta(days=365)).isoformat()
+        activities = training_db.get_activities_range(start_date, end_date)
 
         if not activities:
             return EconomyCurrentResponse(
@@ -107,7 +109,9 @@ async def get_economy_trend(
     """
     try:
         # Get activities for the requested period
-        activities = training_db.get_activities(days=days)
+        end_date = date.today().isoformat()
+        start_date = (date.today() - timedelta(days=days)).isoformat()
+        activities = training_db.get_activities_range(start_date, end_date)
 
         if not activities:
             return EconomyTrendResponse(
@@ -245,7 +249,9 @@ async def get_pace_zones_economy(
     """
     try:
         # Get activities for the requested period
-        activities = training_db.get_activities(days=days)
+        end_date = date.today().isoformat()
+        start_date = (date.today() - timedelta(days=days)).isoformat()
+        activities = training_db.get_activities_range(start_date, end_date)
 
         if not activities:
             return PaceZonesEconomyResponse(
@@ -301,13 +307,15 @@ async def get_cardiac_drift_trend(
     """
     try:
         # Get activities for the requested period
-        activities = training_db.get_activities(days=days)
+        end_date = date.today().isoformat()
+        start_date = (date.today() - timedelta(days=days)).isoformat()
+        activities = training_db.get_activities_range(start_date, end_date)
 
         if not activities:
             return {
                 "success": True,
                 "data": {
-                    "startDate": (date.today()).isoformat(),
+                    "startDate": start_date,
                     "endDate": date.today().isoformat(),
                     "dataPoints": [],
                     "avgDriftPercent": 0,

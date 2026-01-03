@@ -19,9 +19,8 @@ export const viewport: Viewport = {
 };
 
 // Root layout - serves as the base for all pages
-// The actual <html> and <body> tags are rendered in [locale]/layout.tsx
+// The <html> and <body> tags are rendered in [locale]/layout.tsx
 // to properly set the lang attribute based on the current locale.
-// This layout just passes children through.
 export default function RootLayout({
   children,
 }: {

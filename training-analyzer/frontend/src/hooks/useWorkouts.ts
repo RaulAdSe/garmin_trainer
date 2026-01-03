@@ -19,8 +19,8 @@ import type {
 export const workoutKeys = {
   all: ['workouts'] as const,
   lists: () => [...workoutKeys.all, 'list'] as const,
-  list: (filters?: WorkoutListFilters, page?: number) =>
-    [...workoutKeys.lists(), { filters, page }] as const,
+  list: (filters?: WorkoutListFilters, page?: number, pageSize?: number) =>
+    [...workoutKeys.lists(), { filters, page, pageSize }] as const,
   details: () => [...workoutKeys.all, 'detail'] as const,
   detail: (id: string) => [...workoutKeys.details(), id] as const,
   analyses: () => [...workoutKeys.all, 'analysis'] as const,
@@ -96,7 +96,7 @@ export function useWorkouts(options: UseWorkoutsOptions = {}): UseWorkoutsReturn
     error,
     refetch,
   } = useQuery({
-    queryKey: workoutKeys.list(filters, page),
+    queryKey: workoutKeys.list(filters, page, pageSize),
     queryFn: () =>
       getWorkouts({
         page,
@@ -375,7 +375,7 @@ export function useInfiniteWorkouts(
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   const { isLoading, isError, error, refetch } = useQuery({
-    queryKey: workoutKeys.list(filters, currentPage),
+    queryKey: workoutKeys.list(filters, currentPage, pageSize),
     queryFn: async () => {
       const result = await getWorkouts({
         page: currentPage,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef, useMemo, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { ContextualTooltip, type TooltipPosition } from './ContextualTooltip';
@@ -71,26 +71,46 @@ export function TooltipTriggers({
   const prevWorkoutCount = useRef(workoutCount);
   const prevAchievementCount = useRef(achievementCount);
   const prevLevel = useRef(currentLevel);
+  const hasUpdatedConditions = useRef(false);
 
-  // Update conditions based on props
+  // Serialize unlockedFeatures for stable comparison
+  const unlockedFeaturesKey = useMemo(
+    () => JSON.stringify(unlockedFeatures),
+    [unlockedFeatures]
+  );
+
+  // Extract progress values to avoid object reference changes in dependencies
+  const {
+    workoutCountAtFirstSync,
+    hasEarnedFirstAchievement,
+    lastSeenLevel,
+    hasViewedFirstAnalysis,
+  } = progress;
+
+  // Update conditions based on props - only run once when values actually change
   useEffect(() => {
     if (!isLoaded) return;
+
+    // Prevent running multiple times for the same values
+    const conditionsKey = `${hasNoWorkouts}-${workoutCount}-${currentLevel}-${achievementCount}-${isViewingAnalysis}-${unlockedFeaturesKey}`;
+    if (hasUpdatedConditions.current === conditionsKey) return;
+    hasUpdatedConditions.current = conditionsKey;
 
     const justSyncedFirstWorkout =
       workoutCount > 0 &&
       prevWorkoutCount.current === 0 &&
-      progress.workoutCountAtFirstSync === 0;
+      workoutCountAtFirstSync === 0;
 
     const justEarnedFirstAchievement =
       achievementCount > 0 &&
       prevAchievementCount.current === 0 &&
-      !progress.hasEarnedFirstAchievement;
+      !hasEarnedFirstAchievement;
 
     const justLeveledUp =
-      currentLevel > prevLevel.current && currentLevel > progress.lastSeenLevel;
+      currentLevel > prevLevel.current && currentLevel > lastSeenLevel;
 
     const viewingFirstAnalysis =
-      isViewingAnalysis && !progress.hasViewedFirstAnalysis;
+      isViewingAnalysis && !hasViewedFirstAnalysis;
 
     updateConditions({
       hasNoWorkouts,
@@ -126,9 +146,13 @@ export function TooltipTriggers({
     currentLevel,
     achievementCount,
     isViewingAnalysis,
+    unlockedFeaturesKey,
     unlockedFeatures,
     isLoaded,
-    progress,
+    workoutCountAtFirstSync,
+    hasEarnedFirstAchievement,
+    lastSeenLevel,
+    hasViewedFirstAnalysis,
     updateConditions,
     updateProgress,
   ]);

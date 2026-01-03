@@ -1311,7 +1311,16 @@
   },
   "economy": {
     "title": "Running Economy",
-    "subtitle": "Track your running efficiency"
+    "subtitle": "Track your running efficiency",
+    "tooltipTitle": "Running Economy",
+    "tooltipDescription": "Running economy measures how efficiently you use oxygen at a given pace. Better economy means less energy expenditure at the same speed.",
+    "noData": "No running economy data available yet. Complete more runs to see your efficiency metrics.",
+    "trendTitle": "Economy Trend",
+    "noTrendData": "Not enough data to show economy trends. Keep running to build your history.",
+    "zonesTitle": "Economy by Pace Zone",
+    "zonesTooltipTitle": "Pace Zone Economy",
+    "zonesTooltipDescription": "See how your running economy varies across different pace zones. Lower values indicate better efficiency.",
+    "noZonesData": "No pace zone economy data available. Run at different intensities to see zone-specific efficiency."
   },
   "racePacing": {
     "title": "Race Pacing Planner",
@@ -1541,6 +1550,52 @@
       "ariaRoleDescription": "Interactive chart. Use arrow keys to navigate data points.",
       "cleared": "Chart navigation cleared",
       "dataPoint": "Data point {index} of {total}, {percent}% through chart"
+    }
+  },
+  "recovery": {
+    "title": "Recovery",
+    "noData": "No recovery data available",
+    "noSleepData": "No sleep data available",
+    "noHRVData": "No HRV data available",
+    "insufficientHRVData": "Insufficient HRV data for trend analysis",
+    "scoreDescription": "Recovery score based on sleep, HRV, and training load",
+    "connectDevice": "Connect a device to track recovery metrics",
+    "sleepDebt": {
+      "title": "Sleep Debt",
+      "total": "Total Debt",
+      "hours": "{hours}h",
+      "target": "Target: {hours}h/night",
+      "impact": {
+        "minimal": "Minimal impact",
+        "moderate": "Moderate impact",
+        "significant": "Significant impact",
+        "critical": "Critical - rest needed"
+      }
+    },
+    "hrvTrend": {
+      "title": "HRV Trend",
+      "current": "Current",
+      "baseline": "Baseline",
+      "trend": {
+        "improving": "Improving",
+        "stable": "Stable",
+        "declining": "Declining",
+        "insufficient_data": "Insufficient data"
+      }
+    },
+    "recoveryTime": {
+      "title": "Recovery Time",
+      "untilRecovered": "Until recovered",
+      "untilFresh": "Until fresh",
+      "nextEasyWorkout": "Next easy workout",
+      "nextHardWorkout": "Next hard workout"
+    },
+    "status": {
+      "excellent": "Excellent",
+      "good": "Good",
+      "moderate": "Moderate",
+      "poor": "Poor",
+      "critical": "Critical"
     }
   }
 }

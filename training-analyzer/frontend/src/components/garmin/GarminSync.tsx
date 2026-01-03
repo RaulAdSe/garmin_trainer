@@ -41,6 +41,8 @@ export function GarminSync({ onSyncComplete, onClose, className }: GarminSyncPro
   const [days, setDays] = useState(30);
   const [rememberEmail, setRememberEmail] = useState(false);
   const [saveCredentialsChecked, setSaveCredentialsChecked] = useState(true);
+  const [credentialsSavedSuccessfully, setCredentialsSavedSuccessfully] = useState(false);
+  const [credentialSaveError, setCredentialSaveError] = useState<string | null>(null);
   const [syncState, setSyncState] = useState<SyncState>('idle');
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<GarminSyncResponse | null>(null);
@@ -164,6 +166,8 @@ export function GarminSync({ onSyncComplete, onClose, className }: GarminSyncPro
 
     setSyncState('syncing');
     setError(null);
+    setCredentialSaveError(null);
+    setCredentialsSavedSuccessfully(false);
     setResult(null);
     setProgress(0);
     setCurrentStep('Starting sync...');
@@ -176,9 +180,19 @@ export function GarminSync({ onSyncComplete, onClose, className }: GarminSyncPro
         setSavingCredentials(true);
         setCurrentStep('Saving credentials...');
         try {
-          await saveGarminCredentials(email, password);
+          const saveResult = await saveGarminCredentials(email, password);
+          // Check if save actually succeeded (API returns success: false on 401)
+          if (saveResult && 'success' in saveResult && saveResult.success === false) {
+            const errorMsg = saveResult.message || 'Failed to save credentials - authentication required';
+            console.error('Credential save failed:', errorMsg);
+            setCredentialSaveError(errorMsg);
+          } else {
+            setCredentialsSavedSuccessfully(true);
+          }
         } catch (err) {
-          console.error('Failed to save credentials:', err);
+          const errorMsg = err instanceof Error ? err.message : 'Failed to save credentials';
+          console.error('Failed to save credentials:', errorMsg);
+          setCredentialSaveError(errorMsg);
           // Continue with sync even if saving credentials fails
         }
         setSavingCredentials(false);
@@ -357,7 +371,8 @@ export function GarminSync({ onSyncComplete, onClose, className }: GarminSyncPro
             onReset={handleReset}
             onClose={onClose}
             onViewSettings={() => checkCredentialStatus()}
-            credentialsSaved={saveCredentialsChecked}
+            credentialsSaved={credentialsSavedSuccessfully}
+            credentialSaveError={credentialSaveError}
           />
         ) : (
           <form
@@ -512,12 +527,14 @@ function SyncResult({
   onClose,
   onViewSettings,
   credentialsSaved,
+  credentialSaveError,
 }: {
   result: GarminSyncResponse;
   onReset: () => void;
   onClose?: () => void;
   onViewSettings?: () => void;
   credentialsSaved?: boolean;
+  credentialSaveError?: string | null;
 }) {
   return (
     <div className="space-y-4">
@@ -555,6 +572,19 @@ function SyncResult({
             <p className="text-sm text-teal-300">Credentials saved successfully</p>
             <p className="text-xs text-teal-400/80 mt-0.5">
               Automatic sync is now available. Your activities will sync daily at 6 AM UTC.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Credentials save error notice */}
+      {credentialSaveError && (
+        <div className="flex items-start gap-2 p-3 bg-amber-900/20 border border-amber-700 rounded-md">
+          <WarningIcon className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm text-amber-300">Could not save credentials for auto-sync</p>
+            <p className="text-xs text-amber-400/80 mt-0.5">
+              {credentialSaveError}. You can still sync manually.
             </p>
           </div>
         </div>
@@ -703,6 +733,19 @@ function ErrorIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+      />
+    </svg>
+  );
+}
+
+function WarningIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
       />
     </svg>
   );

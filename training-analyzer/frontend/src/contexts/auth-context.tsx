@@ -66,8 +66,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout();
         return false;
       }
-    } catch {
-      logout();
+    } catch (error) {
+      // Network error - don't logout, might be temporary
+      console.error('[Auth] Network error during token refresh:', error);
       return false;
     }
   }, [logout]);
@@ -93,23 +94,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (refreshed) {
           const newToken = localStorage.getItem(TOKEN_KEY);
           if (newToken) {
-            const retryRes = await fetch(`${API_BASE}/auth/me`, {
-              headers: { Authorization: `Bearer ${newToken}` }
-            });
-            if (retryRes.ok) {
-              const data = await retryRes.json();
-              setUser({
-                user_id: data.user.id,
-                email: data.user.email,
-                subscription_tier: data.user.subscription_tier as 'free' | 'pro' | 'enterprise',
-                is_admin: data.user.is_admin,
+            try {
+              const retryRes = await fetch(`${API_BASE}/auth/me`, {
+                headers: { Authorization: `Bearer ${newToken}` }
               });
+              if (retryRes.ok) {
+                const data = await retryRes.json();
+                setUser({
+                  user_id: data.user.id,
+                  email: data.user.email,
+                  subscription_tier: data.user.subscription_tier as 'free' | 'pro' | 'enterprise',
+                  is_admin: data.user.is_admin,
+                });
+              }
+            } catch (retryError) {
+              console.error('[Auth] Network error on retry:', retryError);
             }
           }
         }
       }
     } catch (e) {
-      console.error('Failed to fetch user', e);
+      // Network error - backend might be down
+      console.error('[Auth] Network error fetching user profile. Is the backend running?', e);
     } finally {
       setIsLoading(false);
     }

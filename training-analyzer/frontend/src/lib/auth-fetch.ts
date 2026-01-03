@@ -111,7 +111,16 @@ export async function authFetch(
   const headers = new Headers(options.headers);
   headers.set('Authorization', `Bearer ${token}`);
 
-  const response = await fetch(url, { ...options, headers });
+  let response: Response;
+  try {
+    response = await fetch(url, { ...options, headers });
+  } catch (error) {
+    // Network error - backend might be down
+    console.error(`[authFetch] Network error for ${url}:`, error);
+    throw new Error(
+      `Network error: Unable to connect to the server. Please check if the backend is running on port 8000.`
+    );
+  }
 
   // If we get a 401, try to refresh the token and retry
   if (response.status === 401) {

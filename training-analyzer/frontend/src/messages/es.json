@@ -1276,7 +1276,16 @@
   },
   "economy": {
     "title": "Economia de Carrera",
-    "subtitle": "Rastrea tu eficiencia de carrera"
+    "subtitle": "Rastrea tu eficiencia de carrera",
+    "tooltipTitle": "Economia de Carrera",
+    "tooltipDescription": "La economia de carrera mide que tan eficientemente usas el oxigeno a un ritmo dado. Mejor economia significa menor gasto de energia a la misma velocidad.",
+    "noData": "No hay datos de economia de carrera disponibles aun. Completa mas carreras para ver tus metricas de eficiencia.",
+    "trendTitle": "Tendencia de Economia",
+    "noTrendData": "No hay suficientes datos para mostrar tendencias de economia. Sigue corriendo para construir tu historial.",
+    "zonesTitle": "Economia por Zona de Ritmo",
+    "zonesTooltipTitle": "Economia por Zona de Ritmo",
+    "zonesTooltipDescription": "Mira como varia tu economia de carrera en diferentes zonas de ritmo. Valores mas bajos indican mejor eficiencia.",
+    "noZonesData": "No hay datos de economia por zona de ritmo disponibles. Corre a diferentes intensidades para ver la eficiencia especifica por zona."
   },
   "racePacing": {
     "title": "Planificador de Ritmo de Carrera",
@@ -1506,6 +1515,52 @@
       "ariaRoleDescription": "Grafico interactivo. Usa las flechas para navegar entre puntos de datos.",
       "cleared": "Navegacion del grafico eliminada",
       "dataPoint": "Punto de datos {index} de {total}, {percent}% del grafico"
+    }
+  },
+  "recovery": {
+    "title": "Recuperación",
+    "noData": "No hay datos de recuperación disponibles",
+    "noSleepData": "No hay datos de sueño disponibles",
+    "noHRVData": "No hay datos de VFC disponibles",
+    "insufficientHRVData": "Datos de VFC insuficientes para análisis de tendencia",
+    "scoreDescription": "Puntuación de recuperación basada en sueño, VFC y carga de entrenamiento",
+    "connectDevice": "Conecta un dispositivo para rastrear métricas de recuperación",
+    "sleepDebt": {
+      "title": "Deuda de Sueño",
+      "total": "Deuda Total",
+      "hours": "{hours}h",
+      "target": "Objetivo: {hours}h/noche",
+      "impact": {
+        "minimal": "Impacto mínimo",
+        "moderate": "Impacto moderado",
+        "significant": "Impacto significativo",
+        "critical": "Crítico - descanso necesario"
+      }
+    },
+    "hrvTrend": {
+      "title": "Tendencia VFC",
+      "current": "Actual",
+      "baseline": "Línea base",
+      "trend": {
+        "improving": "Mejorando",
+        "stable": "Estable",
+        "declining": "Declinando",
+        "insufficient_data": "Datos insuficientes"
+      }
+    },
+    "recoveryTime": {
+      "title": "Tiempo de Recuperación",
+      "untilRecovered": "Hasta recuperado",
+      "untilFresh": "Hasta fresco",
+      "nextEasyWorkout": "Próximo entreno suave",
+      "nextHardWorkout": "Próximo entreno intenso"
+    },
+    "status": {
+      "excellent": "Excelente",
+      "good": "Bueno",
+      "moderate": "Moderado",
+      "poor": "Pobre",
+      "critical": "Crítico"
     }
   }
 }

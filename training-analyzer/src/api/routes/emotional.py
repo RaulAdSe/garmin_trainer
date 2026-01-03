@@ -390,10 +390,9 @@ async def detect_emotional_context(
         try:
             end_date = date.today()
             start_date = end_date - timedelta(days=30)
-            workouts = training_db.get_activities(
-                start_date=start_date.isoformat(),
-                end_date=end_date.isoformat(),
-                limit=1
+            workouts = training_db.get_activities_range(
+                start_date.isoformat(),
+                end_date.isoformat()
             )
             if workouts:
                 last_workout_date = date.fromisoformat(workouts[0].date[:10])

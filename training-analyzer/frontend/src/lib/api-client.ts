@@ -834,17 +834,27 @@ export interface GarminSyncStatus {
 export async function syncGarminActivities(
   request: GarminSyncRequest
 ): Promise<GarminSyncResponse> {
-  const response = await fetch(`${API_BASE}/garmin/sync`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      email: request.email,
-      password: request.password,
-      days: request.days ?? 30,
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/garmin/sync`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: request.email,
+        password: request.password,
+        days: request.days ?? 30,
+      }),
+    });
+  } catch (error) {
+    console.error('[API] Network error during Garmin sync:', error);
+    throw new ApiClientError(
+      'Network error: Unable to connect to server. Please check if the backend is running.',
+      0,
+      'NETWORK_ERROR'
+    );
+  }
   return handleResponse<GarminSyncResponse>(response);
 }
 
@@ -879,29 +889,59 @@ export interface SyncJobStatus {
 export async function syncGarminActivitiesAsync(
   request: GarminSyncRequest
 ): Promise<AsyncSyncResponse> {
-  const response = await fetch(`${API_BASE}/garmin/sync-async`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      email: request.email,
-      password: request.password,
-      days: request.days ?? 30,
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/garmin/sync-async`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: request.email,
+        password: request.password,
+        days: request.days ?? 30,
+      }),
+    });
+  } catch (error) {
+    console.error('[API] Network error starting async sync:', error);
+    throw new ApiClientError(
+      'Network error: Unable to connect to server. Please check if the backend is running.',
+      0,
+      'NETWORK_ERROR'
+    );
+  }
   return handleResponse<AsyncSyncResponse>(response);
 }
 
 // Poll for sync job status
 export async function getSyncJobStatus(jobId: string): Promise<SyncJobStatus> {
-  const response = await fetch(`${API_BASE}/garmin/sync-status/${jobId}`);
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/garmin/sync-status/${jobId}`);
+  } catch (error) {
+    console.error('[API] Network error polling sync status:', error);
+    throw new ApiClientError(
+      'Network error: Lost connection to server while checking sync status.',
+      0,
+      'NETWORK_ERROR'
+    );
+  }
   return handleResponse<SyncJobStatus>(response);
 }
 
 // Get Garmin sync status
 export async function getGarminSyncStatus(): Promise<GarminSyncStatus> {
-  const response = await fetch(`${API_BASE}/garmin/status`);
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/garmin/status`);
+  } catch (error) {
+    console.error('[API] Network error getting Garmin status:', error);
+    throw new ApiClientError(
+      'Network error: Unable to connect to server.',
+      0,
+      'NETWORK_ERROR'
+    );
+  }
   return handleResponse<GarminSyncStatus>(response);
 }
 
@@ -924,23 +964,35 @@ export async function saveGarminCredentials(
   email: string,
   password: string
 ): Promise<SaveCredentialsResponse> {
-  const response = await authFetch(`${API_BASE}/garmin/credentials`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ email, password }),
-  });
+  try {
+    const response = await authFetch(`${API_BASE}/garmin/credentials`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, password }),
+    });
 
-  // Return failure response for 401 instead of throwing
-  if (response.status === 401) {
+    // Return failure response for 401 instead of throwing
+    if (response.status === 401) {
+      return {
+        success: false,
+        message: 'Authentication required to save credentials. Please log in again.',
+      };
+    }
+
+    return handleResponse<SaveCredentialsResponse>(response);
+  } catch (error) {
+    // Handle network errors with more detail
+    const errorMessage = error instanceof Error
+      ? `Network error: ${error.message}`
+      : 'Failed to connect to server';
+    console.error('saveGarminCredentials error:', error);
     return {
       success: false,
-      message: 'Authentication required to save credentials',
+      message: errorMessage,
     };
   }
-
-  return handleResponse<SaveCredentialsResponse>(response);
 }
 
 // Delete saved Garmin credentials
@@ -1937,7 +1989,7 @@ export async function getRecoveryData(
   if (options.sleepTargetHours !== undefined) params.set('sleep_target_hours', String(options.sleepTargetHours));
 
   const queryString = params.toString();
-  const url = `${API_BASE}/recovery${queryString ? `?${queryString}` : ''}`;
+  const url = `${API_BASE}/recovery/${queryString ? `?${queryString}` : ''}`;
 
   const response = await authFetch(url);
 
