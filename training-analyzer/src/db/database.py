@@ -2,7 +2,7 @@
 
 import sqlite3
 import os
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple, Union
 from contextlib import contextmanager
@@ -192,6 +192,151 @@ class GarminFitnessData:
             "10k": self.format_race_time(self.race_time_10k),
             "half_marathon": self.format_race_time(self.race_time_half),
             "marathon": self.format_race_time(self.race_time_marathon),
+        }
+
+
+# =============================================================================
+# Wellness Data Classes
+# =============================================================================
+
+
+@dataclass
+class WellnessSleepRecord:
+    """Daily sleep data from Garmin."""
+
+    date: str
+    user_id: str = "default"
+    sleep_start: Optional[str] = None
+    sleep_end: Optional[str] = None
+    total_sleep_seconds: Optional[int] = None
+    deep_sleep_seconds: Optional[int] = None
+    light_sleep_seconds: Optional[int] = None
+    rem_sleep_seconds: Optional[int] = None
+    awake_seconds: Optional[int] = None
+    sleep_score: Optional[int] = None
+    sleep_efficiency: Optional[float] = None
+    avg_spo2: Optional[float] = None
+    avg_respiration: Optional[float] = None
+    updated_at: Optional[str] = None
+
+    @property
+    def total_sleep_hours(self) -> Optional[float]:
+        """Convert total sleep to hours."""
+        if self.total_sleep_seconds:
+            return round(self.total_sleep_seconds / 3600, 2)
+        return None
+
+    @property
+    def deep_sleep_pct(self) -> Optional[float]:
+        """Calculate deep sleep percentage."""
+        if self.total_sleep_seconds and self.deep_sleep_seconds:
+            return round(self.deep_sleep_seconds / self.total_sleep_seconds * 100, 1)
+        return None
+
+    @property
+    def rem_sleep_pct(self) -> Optional[float]:
+        """Calculate REM sleep percentage."""
+        if self.total_sleep_seconds and self.rem_sleep_seconds:
+            return round(self.rem_sleep_seconds / self.total_sleep_seconds * 100, 1)
+        return None
+
+    def to_dict(self) -> dict:
+        return {
+            "date": self.date,
+            "sleep_start": self.sleep_start,
+            "sleep_end": self.sleep_end,
+            "total_sleep_seconds": self.total_sleep_seconds,
+            "total_sleep_hours": self.total_sleep_hours,
+            "deep_sleep_seconds": self.deep_sleep_seconds,
+            "deep_sleep_pct": self.deep_sleep_pct,
+            "light_sleep_seconds": self.light_sleep_seconds,
+            "rem_sleep_seconds": self.rem_sleep_seconds,
+            "rem_sleep_pct": self.rem_sleep_pct,
+            "awake_seconds": self.awake_seconds,
+            "sleep_score": self.sleep_score,
+            "sleep_efficiency": self.sleep_efficiency,
+            "avg_spo2": self.avg_spo2,
+            "avg_respiration": self.avg_respiration,
+        }
+
+
+@dataclass
+class WellnessHRVRecord:
+    """Daily HRV data from Garmin."""
+
+    date: str
+    user_id: str = "default"
+    hrv_weekly_avg: Optional[int] = None
+    hrv_last_night_avg: Optional[int] = None
+    hrv_last_night_5min_high: Optional[int] = None
+    hrv_status: Optional[str] = None
+    baseline_low: Optional[int] = None
+    baseline_balanced_low: Optional[int] = None
+    baseline_balanced_upper: Optional[int] = None
+    updated_at: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        return {
+            "date": self.date,
+            "hrv_weekly_avg": self.hrv_weekly_avg,
+            "hrv_last_night_avg": self.hrv_last_night_avg,
+            "hrv_last_night_5min_high": self.hrv_last_night_5min_high,
+            "hrv_status": self.hrv_status,
+            "baseline_low": self.baseline_low,
+            "baseline_balanced_low": self.baseline_balanced_low,
+            "baseline_balanced_upper": self.baseline_balanced_upper,
+        }
+
+
+@dataclass
+class WellnessStressRecord:
+    """Daily stress and Body Battery data from Garmin."""
+
+    date: str
+    user_id: str = "default"
+    avg_stress_level: Optional[int] = None
+    max_stress_level: Optional[int] = None
+    rest_stress_duration: Optional[int] = None
+    low_stress_duration: Optional[int] = None
+    medium_stress_duration: Optional[int] = None
+    high_stress_duration: Optional[int] = None
+    body_battery_charged: Optional[int] = None
+    body_battery_drained: Optional[int] = None
+    body_battery_high: Optional[int] = None
+    body_battery_low: Optional[int] = None
+    updated_at: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        return {
+            "date": self.date,
+            "avg_stress_level": self.avg_stress_level,
+            "max_stress_level": self.max_stress_level,
+            "rest_stress_duration": self.rest_stress_duration,
+            "low_stress_duration": self.low_stress_duration,
+            "medium_stress_duration": self.medium_stress_duration,
+            "high_stress_duration": self.high_stress_duration,
+            "body_battery_charged": self.body_battery_charged,
+            "body_battery_drained": self.body_battery_drained,
+            "body_battery_high": self.body_battery_high,
+            "body_battery_low": self.body_battery_low,
+        }
+
+
+@dataclass
+class WellnessRestingHRRecord:
+    """Daily resting heart rate."""
+
+    date: str
+    user_id: str = "default"
+    resting_hr: Optional[int] = None
+    measured_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        return {
+            "date": self.date,
+            "resting_hr": self.resting_hr,
+            "measured_at": self.measured_at,
         }
 
 
@@ -993,3 +1138,266 @@ class TrainingDatabase:
                 "SELECT workout_id FROM workout_analyses"
             ).fetchall()
             return [row["workout_id"] for row in rows]
+
+    # =========================================================================
+    # Wellness Data Methods - Sleep, HRV, Stress, Resting HR
+    # =========================================================================
+
+    # === Sleep Methods ===
+
+    def save_sleep_record(self, record: WellnessSleepRecord) -> None:
+        """Save or update daily sleep record."""
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO wellness_sleep
+                (date, user_id, sleep_start, sleep_end, total_sleep_seconds,
+                 deep_sleep_seconds, light_sleep_seconds, rem_sleep_seconds,
+                 awake_seconds, sleep_score, sleep_efficiency, avg_spo2,
+                 avg_respiration, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                (
+                    record.date,
+                    record.user_id,
+                    record.sleep_start,
+                    record.sleep_end,
+                    record.total_sleep_seconds,
+                    record.deep_sleep_seconds,
+                    record.light_sleep_seconds,
+                    record.rem_sleep_seconds,
+                    record.awake_seconds,
+                    record.sleep_score,
+                    record.sleep_efficiency,
+                    record.avg_spo2,
+                    record.avg_respiration,
+                ),
+            )
+
+    def get_sleep_record(self, date_str: str) -> Optional[WellnessSleepRecord]:
+        """Get sleep record for a specific date."""
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM wellness_sleep WHERE date = ?",
+                (date_str,),
+            ).fetchone()
+            if row:
+                return WellnessSleepRecord(**dict(row))
+            return None
+
+    def get_sleep_range(
+        self, start_date: str, end_date: str
+    ) -> List[WellnessSleepRecord]:
+        """Get sleep records for a date range."""
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM wellness_sleep
+                WHERE date >= ? AND date <= ?
+                ORDER BY date DESC
+                """,
+                (start_date, end_date),
+            ).fetchall()
+            return [WellnessSleepRecord(**dict(row)) for row in rows]
+
+    def get_latest_sleep_record(self) -> Optional[WellnessSleepRecord]:
+        """Get the most recent sleep record."""
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM wellness_sleep ORDER BY date DESC LIMIT 1"
+            ).fetchone()
+            if row:
+                return WellnessSleepRecord(**dict(row))
+            return None
+
+    # === HRV Methods ===
+
+    def save_hrv_record(self, record: WellnessHRVRecord) -> None:
+        """Save or update daily HRV record."""
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO wellness_hrv
+                (date, user_id, hrv_weekly_avg, hrv_last_night_avg,
+                 hrv_last_night_5min_high, hrv_status, baseline_low,
+                 baseline_balanced_low, baseline_balanced_upper, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                (
+                    record.date,
+                    record.user_id,
+                    record.hrv_weekly_avg,
+                    record.hrv_last_night_avg,
+                    record.hrv_last_night_5min_high,
+                    record.hrv_status,
+                    record.baseline_low,
+                    record.baseline_balanced_low,
+                    record.baseline_balanced_upper,
+                ),
+            )
+
+    def get_hrv_record(self, date_str: str) -> Optional[WellnessHRVRecord]:
+        """Get HRV record for a specific date."""
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM wellness_hrv WHERE date = ?",
+                (date_str,),
+            ).fetchone()
+            if row:
+                return WellnessHRVRecord(**dict(row))
+            return None
+
+    def get_hrv_range(
+        self, start_date: str, end_date: str
+    ) -> List[WellnessHRVRecord]:
+        """Get HRV records for a date range."""
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM wellness_hrv
+                WHERE date >= ? AND date <= ?
+                ORDER BY date DESC
+                """,
+                (start_date, end_date),
+            ).fetchall()
+            return [WellnessHRVRecord(**dict(row)) for row in rows]
+
+    def get_latest_hrv_record(self) -> Optional[WellnessHRVRecord]:
+        """Get the most recent HRV record."""
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM wellness_hrv ORDER BY date DESC LIMIT 1"
+            ).fetchone()
+            if row:
+                return WellnessHRVRecord(**dict(row))
+            return None
+
+    # === Stress/Body Battery Methods ===
+
+    def save_stress_record(self, record: WellnessStressRecord) -> None:
+        """Save or update daily stress/body battery record."""
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO wellness_stress
+                (date, user_id, avg_stress_level, max_stress_level,
+                 rest_stress_duration, low_stress_duration, medium_stress_duration,
+                 high_stress_duration, body_battery_charged, body_battery_drained,
+                 body_battery_high, body_battery_low, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                (
+                    record.date,
+                    record.user_id,
+                    record.avg_stress_level,
+                    record.max_stress_level,
+                    record.rest_stress_duration,
+                    record.low_stress_duration,
+                    record.medium_stress_duration,
+                    record.high_stress_duration,
+                    record.body_battery_charged,
+                    record.body_battery_drained,
+                    record.body_battery_high,
+                    record.body_battery_low,
+                ),
+            )
+
+    def get_stress_record(self, date_str: str) -> Optional[WellnessStressRecord]:
+        """Get stress record for a specific date."""
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM wellness_stress WHERE date = ?",
+                (date_str,),
+            ).fetchone()
+            if row:
+                return WellnessStressRecord(**dict(row))
+            return None
+
+    def get_stress_range(
+        self, start_date: str, end_date: str
+    ) -> List[WellnessStressRecord]:
+        """Get stress records for a date range."""
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM wellness_stress
+                WHERE date >= ? AND date <= ?
+                ORDER BY date DESC
+                """,
+                (start_date, end_date),
+            ).fetchall()
+            return [WellnessStressRecord(**dict(row)) for row in rows]
+
+    # === Resting HR Methods ===
+
+    def save_resting_hr_record(self, record: WellnessRestingHRRecord) -> None:
+        """Save or update resting HR record."""
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO wellness_resting_hr
+                (date, user_id, resting_hr, measured_at, updated_at)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                (record.date, record.user_id, record.resting_hr, record.measured_at),
+            )
+
+    def get_resting_hr_record(self, date_str: str) -> Optional[WellnessRestingHRRecord]:
+        """Get resting HR for a specific date."""
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM wellness_resting_hr WHERE date = ?",
+                (date_str,),
+            ).fetchone()
+            if row:
+                return WellnessRestingHRRecord(**dict(row))
+            return None
+
+    def get_resting_hr_range(
+        self, start_date: str, end_date: str
+    ) -> List[WellnessRestingHRRecord]:
+        """Get resting HR records for a date range."""
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM wellness_resting_hr
+                WHERE date >= ? AND date <= ?
+                ORDER BY date DESC
+                """,
+                (start_date, end_date),
+            ).fetchall()
+            return [WellnessRestingHRRecord(**dict(row)) for row in rows]
+
+    # === Combined Wellness Data Method ===
+
+    def get_wellness_data(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        days: int = 30,
+    ) -> Dict[str, Any]:
+        """
+        Get combined wellness data (sleep + HRV + stress + resting HR).
+
+        Args:
+            start_date: Optional start date (YYYY-MM-DD)
+            end_date: Optional end date (YYYY-MM-DD)
+            days: If dates not provided, fetch last N days
+
+        Returns:
+            Dictionary with sleep, hrv, stress, and resting_hr lists
+        """
+        if not start_date or not end_date:
+            end_date = date.today().isoformat()
+            start_date = (date.today() - timedelta(days=days)).isoformat()
+
+        return {
+            "sleep": self.get_sleep_range(start_date, end_date),
+            "hrv": self.get_hrv_range(start_date, end_date),
+            "stress": self.get_stress_range(start_date, end_date),
+            "resting_hr": self.get_resting_hr_range(start_date, end_date),
+            "date_range": {
+                "start": start_date,
+                "end": end_date,
+            },
+        }

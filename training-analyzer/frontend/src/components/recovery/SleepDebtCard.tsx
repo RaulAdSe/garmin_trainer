@@ -23,8 +23,8 @@ export function SleepDebtCard({ data }: SleepDebtCardProps) {
   }
 
   const sleepDebt = data.data;
-  const debtHours = sleepDebt.totalDebtHours;
-  const impact = sleepDebt.impactLevel;
+  const debtHours = sleepDebt.totalDebtHours ?? 0;
+  const impact = sleepDebt.impactLevel ?? 'minimal';
 
   // Color based on impact
   const getImpactColor = (impact: string) => {
@@ -75,7 +75,7 @@ export function SleepDebtCard({ data }: SleepDebtCardProps) {
         <div className="flex items-center justify-between">
           <span className="text-sm text-gray-400">Average Sleep</span>
           <span className="text-sm text-gray-300">
-            {sleepDebt.averageSleepHours.toFixed(1)}h / {sleepDebt.targetHours}h target
+            {(sleepDebt.averageSleepHours ?? 0).toFixed(1)}h / {sleepDebt.targetHours ?? 8}h target
           </span>
         </div>
 

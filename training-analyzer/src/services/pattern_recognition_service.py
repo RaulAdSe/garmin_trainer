@@ -100,8 +100,13 @@ class PatternRecognitionService:
             if start_time:
                 try:
                     if isinstance(start_time, str):
-                        # Parse time from string (HH:MM:SS)
-                        hour = int(start_time.split(":")[0])
+                        # Handle ISO datetime format (YYYY-MM-DDTHH:MM:SS)
+                        if "T" in start_time:
+                            time_part = start_time.split("T")[1]
+                            hour = int(time_part.split(":")[0])
+                        else:
+                            # Fallback for just time (HH:MM:SS)
+                            hour = int(start_time.split(":")[0])
                     elif isinstance(start_time, datetime):
                         hour = start_time.hour
                     else:
@@ -714,7 +719,7 @@ class PatternRecognitionService:
     ) -> List[Dict]:
         """Fetch workouts with performance data."""
         try:
-            activities = self._db.get_activities_in_range(
+            activities = self._db.get_activities_range(
                 start_date.isoformat(),
                 end_date.isoformat(),
             )
@@ -732,17 +737,43 @@ class PatternRecognitionService:
         """Fetch workouts with fitness metrics (CTL, ATL, TSB)."""
         try:
             # Get workouts
-            activities = self._db.get_activities_in_range(
+            activities = self._db.get_activities_range(
                 start_date.isoformat(),
                 end_date.isoformat(),
             )
             workout_list = [a.to_dict() if hasattr(a, "to_dict") else a for a in activities]
 
-            # Enrich with fitness data if available
+            # Fetch all fitness data for the date range (with some buffer)
+            fitness_start = (start_date - timedelta(days=7)).isoformat()
+            fitness_end = end_date.isoformat()
+            fitness_list = self._db.get_fitness_range(fitness_start, fitness_end)
+
+            # Build a lookup dict by date
+            fitness_by_date = {}
+            for f in fitness_list:
+                f_dict = f.to_dict() if hasattr(f, "to_dict") else f
+                f_date = f_dict.get("date")
+                if f_date:
+                    fitness_by_date[f_date] = f_dict
+
+            # Sort fitness dates for finding closest match
+            sorted_fitness_dates = sorted(fitness_by_date.keys())
+
+            # Enrich with fitness data
             for w in workout_list:
                 workout_date = w.get("date")
                 if workout_date:
-                    fitness = self._db.get_fitness_metrics_for_date(workout_date)
+                    # Try exact match first
+                    if workout_date in fitness_by_date:
+                        fitness = fitness_by_date[workout_date]
+                    else:
+                        # Find closest earlier date
+                        fitness = None
+                        for f_date in reversed(sorted_fitness_dates):
+                            if f_date <= workout_date:
+                                fitness = fitness_by_date[f_date]
+                                break
+
                     if fitness:
                         w["ctl"] = fitness.get("ctl", 0)
                         w["atl"] = fitness.get("atl", 0)
@@ -765,7 +796,10 @@ class PatternRecognitionService:
     def _get_current_fitness(self, user_id: str) -> Optional[Dict]:
         """Get current fitness state."""
         try:
-            return self._db.get_current_fitness_metrics()
+            fitness = self._db.get_latest_fitness_metrics()
+            if fitness:
+                return fitness.to_dict() if hasattr(fitness, 'to_dict') else fitness
+            return None
         except Exception as e:
             logger.error(f"Failed to get current fitness: {e}")
             return None
@@ -778,7 +812,7 @@ class PatternRecognitionService:
             for week in range(weeks):
                 start = today - timedelta(days=7 * (week + 1))
                 end = today - timedelta(days=7 * week)
-                activities = self._db.get_activities_in_range(
+                activities = self._db.get_activities_range(
                     start.isoformat(),
                     end.isoformat(),
                 )
@@ -795,7 +829,13 @@ class PatternRecognitionService:
     def _get_historical_fitness(self, user_id: str, days: int = 30) -> List[Dict]:
         """Get historical fitness metrics."""
         try:
-            return self._db.get_fitness_history(days) or []
+            end_date = date.today()
+            start_date = end_date - timedelta(days=days)
+            fitness_list = self._db.get_fitness_range(
+                start_date.isoformat(),
+                end_date.isoformat(),
+            )
+            return [f.to_dict() if hasattr(f, 'to_dict') else f for f in fitness_list]
         except Exception as e:
             logger.error(f"Failed to get fitness history: {e}")
             return []
@@ -835,12 +875,14 @@ class PatternRecognitionService:
 
         # HR efficiency (lower HR for same pace = better)
         avg_hr = workout.get("avg_hr")
-        avg_pace = workout.get("avg_pace_sec_km")
+        avg_pace = workout.get("pace_sec_per_km") or workout.get("avg_pace_sec_km")
         if avg_hr and avg_pace and avg_pace > 0:
             # HR per pace unit (lower is better)
+            # efficiency = HR / (pace_min_per_km)
             efficiency = avg_hr / (avg_pace / 60)  # HR per min/km
-            # Normalize: typical range is 30-50
-            efficiency_score = max(0, min(100, (50 - efficiency) * 5 + 50))
+            # Normalize: typical range is 10-40 (10=excellent, 40=poor)
+            # Linear scale: efficiency 10 -> 100, efficiency 40 -> 0
+            efficiency_score = max(0, min(100, 100 - (efficiency - 10) * (100 / 30)))
             scores.append(efficiency_score)
 
         # Pace relative to expected (if zones available)
@@ -879,7 +921,7 @@ class PatternRecognitionService:
                 performances.append(perf)
 
             avg_hr = w.get("avg_hr")
-            avg_pace = w.get("avg_pace_sec_km")
+            avg_pace = w.get("pace_sec_per_km") or w.get("avg_pace_sec_km")
             if avg_hr and avg_pace and avg_pace > 0:
                 hr_efficiencies.append(avg_hr / (avg_pace / 60))
 

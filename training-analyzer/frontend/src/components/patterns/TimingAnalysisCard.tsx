@@ -43,7 +43,7 @@ export function TimingAnalysisCard({ data }: TimingAnalysisCardProps) {
               {formatLabel(data.best_time_slot)}
             </p>
             <p className="text-sm text-gray-500">
-              Performance Boost: +{(data.best_time_slot_boost * 100).toFixed(1)}%
+              Performance Boost: +{data.best_time_slot_boost.toFixed(1)}%
             </p>
           </div>
         )}
@@ -56,7 +56,7 @@ export function TimingAnalysisCard({ data }: TimingAnalysisCardProps) {
               {formatLabel(data.best_day)}
             </p>
             <p className="text-sm text-gray-500">
-              Performance Boost: +{(data.best_day_boost * 100).toFixed(1)}%
+              Performance Boost: +{data.best_day_boost.toFixed(1)}%
             </p>
           </div>
         )}

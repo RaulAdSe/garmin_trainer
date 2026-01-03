@@ -71,7 +71,7 @@ export function TooltipTriggers({
   const prevWorkoutCount = useRef(workoutCount);
   const prevAchievementCount = useRef(achievementCount);
   const prevLevel = useRef(currentLevel);
-  const hasUpdatedConditions = useRef(false);
+  const hasUpdatedConditions = useRef<string | null>(null);
 
   // Serialize unlockedFeatures for stable comparison
   const unlockedFeaturesKey = useMemo(

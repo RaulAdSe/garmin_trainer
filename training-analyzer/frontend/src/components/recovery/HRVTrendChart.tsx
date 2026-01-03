@@ -48,7 +48,7 @@ export function HRVTrendChart({ data }: HRVTrendChartProps) {
           <span className="text-sm text-gray-400">Trend:</span>
           <span className={`text-sm font-medium ${getTrendColor(hrvTrend.trendDirection)}`}>
             {formatTrendDirection(hrvTrend.trendDirection)}
-            {hrvTrend.trendPercentage !== undefined && (
+            {hrvTrend.trendPercentage != null && (
               <span className="ml-1">({hrvTrend.trendPercentage > 0 ? '+' : ''}{hrvTrend.trendPercentage.toFixed(1)}%)</span>
             )}
           </span>
@@ -84,7 +84,7 @@ export function HRVTrendChart({ data }: HRVTrendChartProps) {
       </div>
 
       {/* Baseline Comparison */}
-      {hrvTrend.baselineRmssd !== undefined && hrvTrend.relativeToBaseline !== undefined && (
+      {hrvTrend.baselineRmssd != null && hrvTrend.relativeToBaseline != null && (
         <div className="mt-4 p-3 bg-gray-800/50 rounded-lg">
           <div className="flex items-center justify-between">
             <span className="text-sm text-gray-400">Relative to Baseline ({hrvTrend.baselineRmssd.toFixed(0)} ms)</span>

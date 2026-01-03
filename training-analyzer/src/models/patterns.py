@@ -304,6 +304,7 @@ class CorrelationAnalysis(BaseModel):
     timing_correlations: Optional[TimingAnalysis] = None
     tsb_correlations: Optional[TSBOptimalRange] = None
     performance_correlations: Optional[PerformanceCorrelations] = None
+    fitness_prediction: Optional[FitnessPrediction] = None
 
 
 # ==============================================================================

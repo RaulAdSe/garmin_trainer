@@ -9,7 +9,15 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional, List
 
-from ..db.database import TrainingDatabase, ActivityMetrics, GarminFitnessData
+from ..db.database import (
+    TrainingDatabase,
+    ActivityMetrics,
+    GarminFitnessData,
+    WellnessSleepRecord,
+    WellnessHRVRecord,
+    WellnessStressRecord,
+    WellnessRestingHRRecord,
+)
 from ..metrics.load import calculate_hrss, calculate_trimp
 from .encryption import CredentialEncryption, CredentialEncryptionError
 
@@ -507,12 +515,12 @@ class GarminSyncService:
 
         return result
 
-    def sync_wellness(self, user_id: str, date: str) -> SyncResult:
+    def sync_wellness(self, user_id: str, date_str: str) -> SyncResult:
         """Sync wellness data for a specific date.
 
         Args:
             user_id: The user ID.
-            date: Date to sync (YYYY-MM-DD format).
+            date_str: Date to sync (YYYY-MM-DD format).
 
         Returns:
             SyncResult with sync details.
@@ -536,11 +544,66 @@ class GarminSyncService:
             client = Garmin(credentials.email, credentials.password)
             client.login()
 
-            # Sync sleep, HRV, stress data
-            # Implementation would follow the pattern in garmin.py
-            # For now, mark as successful placeholder
+            synced = False
+
+            # Fetch and store sleep data
+            try:
+                sleep_data = client.get_sleep_data(date_str)
+                if sleep_data:
+                    sleep_record = self._parse_sleep_data(date_str, sleep_data, user_id)
+                    if sleep_record:
+                        self.db.save_sleep_record(sleep_record)
+                        synced = True
+                        logger.info(f"Synced sleep data for {date_str}")
+            except Exception as e:
+                logger.warning(f"Failed to fetch sleep data for {date_str}: {e}")
+
+            # Fetch and store HRV data
+            try:
+                hrv_data = client.get_hrv_data(date_str)
+                if hrv_data:
+                    hrv_record = self._parse_hrv_data(date_str, hrv_data, user_id)
+                    if hrv_record:
+                        self.db.save_hrv_record(hrv_record)
+                        synced = True
+                        logger.info(f"Synced HRV data for {date_str}")
+            except Exception as e:
+                logger.warning(f"Failed to fetch HRV data for {date_str}: {e}")
+
+            # Fetch and store stress/body battery data
+            try:
+                stress_data = client.get_stress_data(date_str)
+                body_battery = client.get_body_battery(date_str)
+                if stress_data or body_battery:
+                    stress_record = self._parse_stress_data(
+                        date_str, stress_data, body_battery, user_id
+                    )
+                    if stress_record:
+                        self.db.save_stress_record(stress_record)
+                        synced = True
+                        logger.info(f"Synced stress data for {date_str}")
+            except Exception as e:
+                logger.warning(f"Failed to fetch stress data for {date_str}: {e}")
+
+            # Fetch and store resting heart rate
+            try:
+                hr_data = client.get_heart_rates(date_str)
+                if hr_data:
+                    resting_hr = hr_data.get("restingHeartRate")
+                    if resting_hr:
+                        rhr_record = WellnessRestingHRRecord(
+                            date=date_str,
+                            user_id=user_id,
+                            resting_hr=resting_hr,
+                        )
+                        self.db.save_resting_hr_record(rhr_record)
+                        synced = True
+                        logger.info(f"Synced resting HR for {date_str}: {resting_hr}")
+            except Exception as e:
+                logger.warning(f"Failed to fetch resting HR for {date_str}: {e}")
+
             result.success = True
-            result.wellness_days_synced = 1
+            result.wellness_days_synced = 1 if synced else 0
             result.completed_at = datetime.now()
 
         except Exception as e:
@@ -548,6 +611,163 @@ class GarminSyncService:
             result.completed_at = datetime.now()
 
         return result
+
+    def _parse_sleep_data(
+        self, date_str: str, sleep_data: dict, user_id: str
+    ) -> Optional[WellnessSleepRecord]:
+        """Parse Garmin sleep API response into WellnessSleepRecord."""
+        try:
+            daily_sleep = sleep_data.get("dailySleepDTO") or sleep_data
+            if not daily_sleep:
+                return None
+
+            # Get sleep times
+            sleep_start = daily_sleep.get("sleepStartTimestampLocal")
+            sleep_end = daily_sleep.get("sleepEndTimestampLocal")
+
+            # Get sleep stages in seconds
+            deep_sleep = daily_sleep.get("deepSleepSeconds", 0)
+            light_sleep = daily_sleep.get("lightSleepSeconds", 0)
+            rem_sleep = daily_sleep.get("remSleepSeconds", 0)
+            awake_time = daily_sleep.get("awakeSleepSeconds", 0)
+
+            # Calculate total sleep (excluding awake time)
+            total_sleep = deep_sleep + light_sleep + rem_sleep
+
+            # Get quality metrics
+            sleep_score = daily_sleep.get("sleepScores", {}).get("overall", {}).get("value")
+            if not sleep_score:
+                sleep_score = daily_sleep.get("overallScore")
+
+            # Get SpO2 and respiration if available
+            avg_spo2 = daily_sleep.get("averageSpO2Value")
+            avg_respiration = daily_sleep.get("averageRespirationValue")
+
+            # Calculate efficiency
+            sleep_efficiency = None
+            sleep_time_seconds = daily_sleep.get("sleepTimeSeconds")
+            if sleep_time_seconds and sleep_time_seconds > 0:
+                sleep_efficiency = round(total_sleep / sleep_time_seconds * 100, 1)
+
+            return WellnessSleepRecord(
+                date=date_str,
+                user_id=user_id,
+                sleep_start=sleep_start,
+                sleep_end=sleep_end,
+                total_sleep_seconds=total_sleep if total_sleep > 0 else None,
+                deep_sleep_seconds=deep_sleep if deep_sleep > 0 else None,
+                light_sleep_seconds=light_sleep if light_sleep > 0 else None,
+                rem_sleep_seconds=rem_sleep if rem_sleep > 0 else None,
+                awake_seconds=awake_time if awake_time > 0 else None,
+                sleep_score=sleep_score,
+                sleep_efficiency=sleep_efficiency,
+                avg_spo2=avg_spo2,
+                avg_respiration=avg_respiration,
+            )
+        except Exception as e:
+            logger.error(f"Error parsing sleep data: {e}")
+            return None
+
+    def _parse_hrv_data(
+        self, date_str: str, hrv_data: dict, user_id: str
+    ) -> Optional[WellnessHRVRecord]:
+        """Parse Garmin HRV API response into WellnessHRVRecord."""
+        try:
+            if not hrv_data:
+                return None
+
+            # Handle different response formats
+            hrv_summary = hrv_data.get("hrvSummary") or hrv_data
+
+            # Get HRV values
+            weekly_avg = hrv_summary.get("weeklyAvg")
+            last_night_avg = hrv_summary.get("lastNightAvg") or hrv_summary.get("lastNight")
+            last_night_5min = hrv_summary.get("lastNight5MinHigh")
+
+            # Get status and baselines
+            hrv_status = hrv_summary.get("status")
+            baseline = hrv_summary.get("baseline") or {}
+            baseline_low = baseline.get("lowUpper")
+            baseline_balanced_low = baseline.get("balancedLow")
+            baseline_balanced_upper = baseline.get("balancedUpper")
+
+            # Only create record if we have some HRV data
+            if not any([weekly_avg, last_night_avg, last_night_5min]):
+                return None
+
+            return WellnessHRVRecord(
+                date=date_str,
+                user_id=user_id,
+                hrv_weekly_avg=weekly_avg,
+                hrv_last_night_avg=last_night_avg,
+                hrv_last_night_5min_high=last_night_5min,
+                hrv_status=hrv_status,
+                baseline_low=baseline_low,
+                baseline_balanced_low=baseline_balanced_low,
+                baseline_balanced_upper=baseline_balanced_upper,
+            )
+        except Exception as e:
+            logger.error(f"Error parsing HRV data: {e}")
+            return None
+
+    def _parse_stress_data(
+        self,
+        date_str: str,
+        stress_data: Optional[dict],
+        body_battery: Optional[list],
+        user_id: str,
+    ) -> Optional[WellnessStressRecord]:
+        """Parse Garmin stress and body battery API responses."""
+        try:
+            avg_stress = None
+            max_stress = None
+            rest_duration = 0
+            low_duration = 0
+            medium_duration = 0
+            high_duration = 0
+
+            if stress_data:
+                avg_stress = stress_data.get("overallStressLevel")
+                max_stress = stress_data.get("maxStressLevel")
+                rest_duration = stress_data.get("restStressDuration", 0)
+                low_duration = stress_data.get("lowStressDuration", 0)
+                medium_duration = stress_data.get("mediumStressDuration", 0)
+                high_duration = stress_data.get("highStressDuration", 0)
+
+            # Parse body battery
+            bb_charged = None
+            bb_drained = None
+            bb_high = None
+            bb_low = None
+
+            if body_battery and isinstance(body_battery, list) and len(body_battery) > 0:
+                bb_data = body_battery[0] if isinstance(body_battery[0], dict) else {}
+                bb_charged = bb_data.get("charged")
+                bb_drained = bb_data.get("drained")
+                bb_high = bb_data.get("bodyBatteryHigh") or bb_data.get("high")
+                bb_low = bb_data.get("bodyBatteryLow") or bb_data.get("low")
+
+            # Only create record if we have some data
+            if not any([avg_stress, max_stress, bb_charged, bb_high]):
+                return None
+
+            return WellnessStressRecord(
+                date=date_str,
+                user_id=user_id,
+                avg_stress_level=avg_stress,
+                max_stress_level=max_stress,
+                rest_stress_duration=rest_duration if rest_duration > 0 else None,
+                low_stress_duration=low_duration if low_duration > 0 else None,
+                medium_stress_duration=medium_duration if medium_duration > 0 else None,
+                high_stress_duration=high_duration if high_duration > 0 else None,
+                body_battery_charged=bb_charged,
+                body_battery_drained=bb_drained,
+                body_battery_high=bb_high,
+                body_battery_low=bb_low,
+            )
+        except Exception as e:
+            logger.error(f"Error parsing stress data: {e}")
+            return None
 
     def sync_fitness_data(self, user_id: str, date: str) -> SyncResult:
         """Sync fitness data (VO2max, race predictions) for a specific date.

@@ -620,6 +620,84 @@ CREATE TABLE IF NOT EXISTS identity_statements (
 
 -- Create index for identity statement lookups
 CREATE INDEX IF NOT EXISTS idx_identity_statements_user ON identity_statements(user_id);
+
+-- =============================================================================
+-- Wellness Data Tables (Sleep, HRV, Stress from Garmin)
+-- =============================================================================
+
+-- Daily sleep data from Garmin
+CREATE TABLE IF NOT EXISTS wellness_sleep (
+    date TEXT PRIMARY KEY,
+    user_id TEXT DEFAULT 'default',
+    sleep_start TEXT,                          -- ISO timestamp
+    sleep_end TEXT,                            -- ISO timestamp
+    total_sleep_seconds INTEGER,               -- Total sleep duration
+    deep_sleep_seconds INTEGER,                -- Deep sleep stage
+    light_sleep_seconds INTEGER,               -- Light sleep stage
+    rem_sleep_seconds INTEGER,                 -- REM sleep stage
+    awake_seconds INTEGER,                     -- Time awake during period
+    sleep_score INTEGER,                       -- 0-100 quality score
+    sleep_efficiency REAL,                     -- Percentage
+    avg_spo2 REAL,                             -- Oxygen saturation
+    avg_respiration REAL,                      -- Breaths per minute
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create index for sleep queries
+CREATE INDEX IF NOT EXISTS idx_wellness_sleep_date ON wellness_sleep(date);
+CREATE INDEX IF NOT EXISTS idx_wellness_sleep_user ON wellness_sleep(user_id);
+
+-- Daily HRV data from Garmin
+CREATE TABLE IF NOT EXISTS wellness_hrv (
+    date TEXT PRIMARY KEY,
+    user_id TEXT DEFAULT 'default',
+    hrv_weekly_avg INTEGER,                    -- 7-day average (ms)
+    hrv_last_night_avg INTEGER,                -- Previous night average (ms)
+    hrv_last_night_5min_high INTEGER,          -- Peak 5-minute HRV
+    hrv_status TEXT,                           -- BALANCED, LOW, HIGH
+    baseline_low INTEGER,                      -- Personal baseline
+    baseline_balanced_low INTEGER,             -- Personal baseline
+    baseline_balanced_upper INTEGER,           -- Personal baseline
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create index for HRV queries
+CREATE INDEX IF NOT EXISTS idx_wellness_hrv_date ON wellness_hrv(date);
+CREATE INDEX IF NOT EXISTS idx_wellness_hrv_user ON wellness_hrv(user_id);
+
+-- Daily stress and Body Battery data from Garmin
+CREATE TABLE IF NOT EXISTS wellness_stress (
+    date TEXT PRIMARY KEY,
+    user_id TEXT DEFAULT 'default',
+    avg_stress_level INTEGER,                  -- 0-100 stress level
+    max_stress_level INTEGER,                  -- 0-100 max stress
+    rest_stress_duration INTEGER,              -- Seconds in rest stress
+    low_stress_duration INTEGER,               -- Seconds in low stress
+    medium_stress_duration INTEGER,            -- Seconds in medium stress
+    high_stress_duration INTEGER,              -- Seconds in high stress
+    body_battery_charged INTEGER,              -- Points charged
+    body_battery_drained INTEGER,              -- Points drained
+    body_battery_high INTEGER,                 -- Max body battery
+    body_battery_low INTEGER,                  -- Min body battery
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create index for stress queries
+CREATE INDEX IF NOT EXISTS idx_wellness_stress_date ON wellness_stress(date);
+CREATE INDEX IF NOT EXISTS idx_wellness_stress_user ON wellness_stress(user_id);
+
+-- Daily resting heart rate
+CREATE TABLE IF NOT EXISTS wellness_resting_hr (
+    date TEXT PRIMARY KEY,
+    user_id TEXT DEFAULT 'default',
+    resting_hr INTEGER,                        -- Resting heart rate BPM
+    measured_at TEXT,                          -- ISO timestamp
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create index for resting HR queries
+CREATE INDEX IF NOT EXISTS idx_wellness_rhr_date ON wellness_resting_hr(date);
+CREATE INDEX IF NOT EXISTS idx_wellness_rhr_user ON wellness_resting_hr(user_id);
 """
 
 # Separate schema for updating user profile

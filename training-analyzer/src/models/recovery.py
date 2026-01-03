@@ -129,23 +129,37 @@ class HRVTrendAnalysis(BaseModel):
     current_rmssd: Optional[float] = Field(None, description="Most recent RMSSD")
     current_date: Optional[date_type] = Field(None, description="Date of current measurement")
 
-    # Rolling averages
-    rolling_average_7d: Optional[float] = Field(None, description="7-day rolling average RMSSD")
-    rolling_average_30d: Optional[float] = Field(None, description="30-day rolling average RMSSD")
+    # Rolling averages (explicit aliases to ensure lowercase 'd' in JSON)
+    rolling_average_7d: Optional[float] = Field(
+        None,
+        description="7-day rolling average RMSSD",
+        serialization_alias="rollingAverage7d"
+    )
+    rolling_average_30d: Optional[float] = Field(
+        None,
+        description="30-day rolling average RMSSD",
+        serialization_alias="rollingAverage30d"
+    )
 
     # Coefficient of variation (more stable indicator)
     cv_7d: Optional[float] = Field(
         None,
-        description="7-day coefficient of variation (CV% = std_dev/mean * 100)"
+        description="7-day coefficient of variation (CV% = std_dev/mean * 100)",
+        serialization_alias="cv7d"
     )
     cv_30d: Optional[float] = Field(
         None,
-        description="30-day coefficient of variation"
+        description="30-day coefficient of variation",
+        serialization_alias="cv30d"
     )
 
     # LF/HF ratio if available
     current_lf_hf_ratio: Optional[float] = Field(None, description="Current LF/HF ratio")
-    average_lf_hf_ratio_7d: Optional[float] = Field(None, description="7-day average LF/HF ratio")
+    average_lf_hf_ratio_7d: Optional[float] = Field(
+        None,
+        description="7-day average LF/HF ratio",
+        serialization_alias="averageLfHfRatio7d"
+    )
 
     # Trend analysis
     trend_direction: HRVTrendDirection = Field(
@@ -166,8 +180,16 @@ class HRVTrendAnalysis(BaseModel):
 
     # Status interpretation
     interpretation: str = Field(default="", description="Human-readable interpretation")
-    data_points_7d: int = Field(default=0, description="Number of data points in 7-day window")
-    data_points_30d: int = Field(default=0, description="Number of data points in 30-day window")
+    data_points_7d: int = Field(
+        default=0,
+        description="Number of data points in 7-day window",
+        serialization_alias="dataPoints7d"
+    )
+    data_points_30d: int = Field(
+        default=0,
+        description="Number of data points in 30-day window",
+        serialization_alias="dataPoints30d"
+    )
 
 
 # =============================================================================

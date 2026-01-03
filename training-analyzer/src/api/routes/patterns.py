@@ -249,11 +249,13 @@ async def get_pattern_summary(
         timing = pattern_service.analyze_timing_patterns(user_id=user_id, days=days)
         tsb = pattern_service.find_optimal_tsb_range(user_id=user_id, days=days)
         correlations = pattern_service.get_performance_correlations(user_id=user_id, days=days)
+        fitness_pred = pattern_service.predict_peak_fitness(user_id=user_id, horizon_days=90)
 
         return CorrelationAnalysis(
             timing_correlations=timing,
             tsb_correlations=tsb,
             performance_correlations=correlations,
+            fitness_prediction=fitness_pred,
         )
 
     except Exception as e:

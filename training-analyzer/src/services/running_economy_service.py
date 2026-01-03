@@ -105,7 +105,11 @@ class RunningEconomyService:
 
     def _is_running_workout(self, activity: Dict[str, Any]) -> bool:
         """Check if an activity is a running workout."""
-        activity_type = activity.get("type", "").lower()
+        activity_type = (
+            activity.get("activity_type") or
+            activity.get("type") or
+            ""
+        ).lower()
         return activity_type in RUNNING_ACTIVITY_TYPES
 
     def _extract_workout_data(

@@ -70,8 +70,8 @@ async def get_current_economy(
         # Convert to dicts if needed
         activity_dicts = []
         for act in activities:
-            if hasattr(act, "__dict__"):
-                activity_dicts.append(act.__dict__)
+            if hasattr(act, "to_dict"):
+                activity_dicts.append(act.to_dict())
             elif isinstance(act, dict):
                 activity_dicts.append(act)
             else:
@@ -123,8 +123,8 @@ async def get_economy_trend(
         # Convert to dicts
         activity_dicts = []
         for act in activities:
-            if hasattr(act, "__dict__"):
-                activity_dicts.append(act.__dict__)
+            if hasattr(act, "to_dict"):
+                activity_dicts.append(act.to_dict())
             elif isinstance(act, dict):
                 activity_dicts.append(act)
             else:
@@ -174,7 +174,7 @@ async def get_cardiac_drift(
     """
     try:
         # Get the specific workout
-        activity = training_db.get_activity_by_id(workout_id)
+        activity = training_db.get_activity_metrics(workout_id)
 
         if not activity:
             raise HTTPException(
@@ -183,8 +183,8 @@ async def get_cardiac_drift(
             )
 
         # Convert to dict
-        if hasattr(activity, "__dict__"):
-            activity_dict = activity.__dict__
+        if hasattr(activity, "to_dict"):
+            activity_dict = activity.to_dict()
         elif isinstance(activity, dict):
             activity_dict = activity
         else:
@@ -263,8 +263,8 @@ async def get_pace_zones_economy(
         # Convert to dicts
         activity_dicts = []
         for act in activities:
-            if hasattr(act, "__dict__"):
-                activity_dicts.append(act.__dict__)
+            if hasattr(act, "to_dict"):
+                activity_dicts.append(act.to_dict())
             elif isinstance(act, dict):
                 activity_dicts.append(act)
             else:
@@ -328,8 +328,8 @@ async def get_cardiac_drift_trend(
         # Convert to dicts
         activity_dicts = []
         for act in activities:
-            if hasattr(act, "__dict__"):
-                activity_dicts.append(act.__dict__)
+            if hasattr(act, "to_dict"):
+                activity_dicts.append(act.to_dict())
             elif isinstance(act, dict):
                 activity_dicts.append(act)
             else:

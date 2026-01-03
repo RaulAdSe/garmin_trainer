@@ -46,22 +46,20 @@ def _get_sleep_records_from_db(
         wellness_data = db.get_wellness_data(days=days)
 
         sleep_records = []
-        for record in wellness_data:
-            if record.get("sleep_seconds") is not None:
-                sleep_hours = record.get("sleep_seconds", 0) / 3600
-                record_date = record.get("date")
-
+        for record in wellness_data.get("sleep", []):
+            if record.total_sleep_seconds is not None and record.total_sleep_seconds > 0:
+                record_date = record.date
                 if isinstance(record_date, str):
                     record_date = date.fromisoformat(record_date)
 
                 sleep_record = SleepRecord(
                     date=record_date,
-                    duration_hours=sleep_hours,
-                    quality_score=record.get("sleep_quality_score"),
-                    deep_sleep_hours=(record.get("deep_sleep_seconds") or 0) / 3600,
-                    rem_sleep_hours=(record.get("rem_sleep_seconds") or 0) / 3600,
-                    light_sleep_hours=(record.get("light_sleep_seconds") or 0) / 3600,
-                    awake_time_hours=(record.get("awake_seconds") or 0) / 3600,
+                    duration_hours=record.total_sleep_seconds / 3600,
+                    quality_score=record.sleep_score,
+                    deep_sleep_hours=(record.deep_sleep_seconds or 0) / 3600,
+                    rem_sleep_hours=(record.rem_sleep_seconds or 0) / 3600,
+                    light_sleep_hours=(record.light_sleep_seconds or 0) / 3600,
+                    awake_time_hours=(record.awake_seconds or 0) / 3600,
                 )
                 sleep_records.append(sleep_record)
 
@@ -84,25 +82,23 @@ def _get_hrv_records_from_db(
         wellness_data = db.get_wellness_data(days=days)
 
         hrv_records = []
-        for record in wellness_data:
-            if record.get("hrv_rmssd") is not None or record.get("resting_hr") is not None:
-                record_date = record.get("date")
-
+        for record in wellness_data.get("hrv", []):
+            # Use last_night_avg as the primary HRV value (RMSSD equivalent)
+            rmssd = record.hrv_last_night_avg or record.hrv_weekly_avg
+            if rmssd is not None and rmssd > 0:
+                record_date = record.date
                 if isinstance(record_date, str):
                     record_date = date.fromisoformat(record_date)
 
-                # Only create record if we have HRV data
-                rmssd = record.get("hrv_rmssd")
-                if rmssd is not None and rmssd > 0:
-                    hrv_record = HRVRecord(
-                        date=record_date,
-                        rmssd=rmssd,
-                        sdnn=record.get("hrv_sdnn"),
-                        lf_power=record.get("hrv_lf"),
-                        hf_power=record.get("hrv_hf"),
-                        lf_hf_ratio=record.get("hrv_lf_hf_ratio"),
-                    )
-                    hrv_records.append(hrv_record)
+                hrv_record = HRVRecord(
+                    date=record_date,
+                    rmssd=float(rmssd),
+                    sdnn=None,  # Not provided by Garmin
+                    lf_power=None,  # Not provided by Garmin
+                    hf_power=None,  # Not provided by Garmin
+                    lf_hf_ratio=None,  # Not provided by Garmin
+                )
+                hrv_records.append(hrv_record)
 
         return sorted(hrv_records, key=lambda r: r.date)
     except Exception as e:
@@ -113,12 +109,14 @@ def _get_hrv_records_from_db(
 def _get_last_workout_info(db: TrainingDatabase) -> Optional[dict]:
     """Get information about the last workout for recovery estimation."""
     try:
-        # Get most recent activity
-        activities = db.get_activity_metrics_range(days=7)
+        # Get most recent activity from last 7 days
+        end_date = date.today().isoformat()
+        start_date = (date.today() - timedelta(days=7)).isoformat()
+        activities = db.get_activities_range(start_date, end_date)
         if not activities:
             return None
 
-        last_activity = activities[0]  # Most recent
+        last_activity = activities[0]  # Most recent (sorted DESC)
         activity_dict = last_activity.to_dict()
 
         # Calculate intensity based on HR zones
