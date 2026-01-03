@@ -239,6 +239,88 @@ class LLMClient:
         """Get the model ID for a model type."""
         return self.model_map.get(model_type, self.model_map[ModelType.SMART])
 
+    def _try_repair_truncated_json(self, content: str) -> Optional[Dict[str, Any]]:
+        """
+        Attempt to repair truncated JSON by closing unclosed brackets/braces.
+
+        This is useful when the LLM response is truncated due to max_tokens limit.
+        The method tries to close any unclosed JSON structures to make it parseable.
+
+        Args:
+            content: The truncated JSON string
+
+        Returns:
+            Parsed JSON dictionary if repair successful, None otherwise
+        """
+        import json
+        import re
+
+        if not content or not content.strip():
+            return None
+
+        content = content.strip()
+
+        # First, try parsing as-is (maybe it's actually complete)
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError:
+            pass
+
+        # Try to repair by closing unclosed structures
+        # Count open brackets and braces
+        open_braces = content.count('{') - content.count('}')
+        open_brackets = content.count('[') - content.count(']')
+
+        # Check if we're inside a string (unclosed quote)
+        # Simple heuristic: count quotes
+        quote_count = content.count('"') - content.count('\\"')
+        in_string = quote_count % 2 == 1
+
+        repaired = content
+
+        # If inside a string, close it
+        if in_string:
+            repaired += '"'
+
+        # Close arrays first, then objects (reverse order of typical nesting)
+        repaired += ']' * open_brackets
+        repaired += '}' * open_braces
+
+        try:
+            result = json.loads(repaired)
+            return result
+        except json.JSONDecodeError:
+            pass
+
+        # More aggressive repair: try to find the last valid JSON object
+        # by progressively removing characters from the end and closing
+        for trim_amount in range(1, min(200, len(content))):
+            trimmed = content[:-trim_amount].strip()
+            if not trimmed:
+                break
+
+            # Recalculate after trimming
+            open_braces = trimmed.count('{') - trimmed.count('}')
+            open_brackets = trimmed.count('[') - trimmed.count(']')
+            quote_count = trimmed.count('"') - trimmed.count('\\"')
+            in_string = quote_count % 2 == 1
+
+            repaired = trimmed
+            if in_string:
+                repaired += '"'
+            repaired += ']' * open_brackets
+            repaired += '}' * open_braces
+
+            try:
+                result = json.loads(repaired)
+                # Validate it's a dict (not just a valid JSON primitive)
+                if isinstance(result, dict):
+                    return result
+            except json.JSONDecodeError:
+                continue
+
+        return None
+
     async def _execute_with_retry(
         self,
         operation: Callable[[], T],
@@ -464,7 +546,7 @@ class LLMClient:
         system: str,
         user: str,
         model: ModelType = ModelType.SMART,
-        max_tokens: int = 1000,
+        max_tokens: int = 2000,
         temperature: float = 0.7,
         timeout: Optional[float] = 60.0,
         user_id: Optional[str] = None,
@@ -533,6 +615,31 @@ class LLMClient:
 
             content = response.choices[0].message.content
             finish_reason = response.choices[0].finish_reason
+
+            # Handle truncated responses (finish_reason: length)
+            if finish_reason == "length":
+                self._logger.warning(
+                    f"LLM response truncated (max_tokens={max_tokens}, "
+                    f"output_tokens={output_tokens}). Consider increasing max_tokens."
+                )
+                # Try to salvage truncated JSON by attempting repairs
+                if content:
+                    repaired_json = self._try_repair_truncated_json(content)
+                    if repaired_json is not None:
+                        self._logger.info("Successfully repaired truncated JSON response")
+                        return repaired_json
+                # If repair failed, raise with helpful error
+                raise LLMResponseInvalidError(
+                    message=f"Response truncated (max_tokens={max_tokens} limit reached). "
+                            f"Used {output_tokens} tokens. Increase max_tokens or simplify the prompt.",
+                    details={
+                        "finish_reason": finish_reason,
+                        "max_tokens": max_tokens,
+                        "output_tokens": output_tokens,
+                        "truncated_content": content[:500] if content else None,
+                    }
+                )
+
             if content is None or content.strip() == "":
                 raise LLMResponseInvalidError(
                     message=f"Empty response from LLM (finish_reason: {finish_reason})",

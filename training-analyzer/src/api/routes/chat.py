@@ -3,6 +3,7 @@
 import json
 import logging
 import uuid
+from enum import Enum
 from typing import AsyncGenerator, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -27,6 +28,114 @@ from ...llm.prompt_sanitizer import sanitize_prompt, get_user_warning
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# Error Classification and User-Friendly Messages
+# ============================================================================
+
+class ChatErrorType(str, Enum):
+    """Classification of chat errors for user-friendly messaging."""
+    RATE_LIMITED = "rate_limited"
+    QUOTA_EXCEEDED = "quota_exceeded"
+    AI_UNAVAILABLE = "ai_unavailable"
+    NO_TRAINING_DATA = "no_training_data"
+    CONTEXT_ERROR = "context_error"
+    TOOL_FAILURE = "tool_failure"
+    NETWORK_ERROR = "network_error"
+    UNKNOWN = "unknown"
+
+
+def classify_error(error: Exception) -> tuple[ChatErrorType, str]:
+    """Classify an error and return a user-friendly message.
+
+    Returns:
+        Tuple of (error_type, user_friendly_message)
+    """
+    error_str = str(error).lower()
+
+    # Rate limiting errors
+    if "rate" in error_str and "limit" in error_str:
+        return (
+            ChatErrorType.RATE_LIMITED,
+            "You're sending messages too quickly. Please wait a moment and try again."
+        )
+
+    # Quota exceeded
+    if "quota" in error_str or "exceeded" in error_str:
+        return (
+            ChatErrorType.QUOTA_EXCEEDED,
+            "You've reached your AI usage limit for today. Please try again tomorrow or upgrade your plan."
+        )
+
+    # AI/LLM unavailable
+    if any(term in error_str for term in ["api key", "anthropic", "openai", "llm", "model"]):
+        return (
+            ChatErrorType.AI_UNAVAILABLE,
+            "The AI service is temporarily unavailable. Please try again in a few minutes."
+        )
+
+    # No training data
+    if any(term in error_str for term in ["no data", "no training", "no workouts", "empty"]):
+        return (
+            ChatErrorType.NO_TRAINING_DATA,
+            "I don't have enough training data to answer this question. Try syncing your workouts first."
+        )
+
+    # Context/service errors
+    if any(term in error_str for term in ["coach", "context", "profile"]):
+        return (
+            ChatErrorType.CONTEXT_ERROR,
+            "I couldn't load your training context. Please refresh the page and try again."
+        )
+
+    # Tool/function errors
+    if any(term in error_str for term in ["tool", "function", "query"]):
+        return (
+            ChatErrorType.TOOL_FAILURE,
+            "I had trouble accessing your training data. Please try rephrasing your question."
+        )
+
+    # Network errors
+    if any(term in error_str for term in ["connection", "timeout", "network", "refused"]):
+        return (
+            ChatErrorType.NETWORK_ERROR,
+            "A connection error occurred. Please check your internet and try again."
+        )
+
+    # Default unknown error
+    return (
+        ChatErrorType.UNKNOWN,
+        "I encountered an unexpected error. Please try again or rephrase your question."
+    )
+
+
+def create_error_response(
+    error: Exception,
+    session_id: str,
+    include_details: bool = False,
+) -> dict:
+    """Create a structured error response with user-friendly messaging.
+
+    Args:
+        error: The exception that occurred
+        session_id: The conversation session ID
+        include_details: Whether to include technical details (for debugging)
+
+    Returns:
+        Dict suitable for ChatMessageResponse or SSE error event
+    """
+    error_type, user_message = classify_error(error)
+
+    response = {
+        "error_type": error_type.value,
+        "message": user_message,
+    }
+
+    if include_details:
+        response["details"] = str(error)
+
+    return response
 
 
 # ============================================================================
@@ -93,6 +202,15 @@ class ChatMessageResponse(BaseModel):
     is_agentic: bool = Field(
         default=False,
         description="Whether this response was generated in agentic mode",
+    )
+    # Error handling fields (optional - only present when error occurred)
+    error_type: Optional[str] = Field(
+        default=None,
+        description="Type of error if one occurred (rate_limited, quota_exceeded, ai_unavailable, etc.)",
+    )
+    has_error: bool = Field(
+        default=False,
+        description="Whether an error occurred during processing",
     )
 
 
@@ -317,10 +435,21 @@ async def send_message(
             )
 
         except Exception as e:
-            logger.error(f"[chat] Error in agentic mode: {e}")
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to process chat message. Please try again later."
+            logger.error(f"[chat] Error in agentic mode: {e}", exc_info=True)
+
+            # Classify error and create user-friendly response
+            error_info = create_error_response(e, session_id)
+
+            # Return a response with error info instead of raising HTTPException
+            # This allows the frontend to show a more helpful message
+            return ChatMessageResponse(
+                response=error_info["message"],
+                data_sources=[],
+                intent="error",
+                conversation_id=session_id,
+                is_agentic=True,
+                error_type=error_info["error_type"],
+                has_error=True,
             )
 
     # =========================================================================
@@ -358,10 +487,19 @@ async def send_message(
         )
 
     except Exception as e:
-        logger.error(f"[chat] Error processing message: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to process chat message. Please try again later."
+        logger.error(f"[chat] Error processing message: {e}", exc_info=True)
+
+        # Classify error and create user-friendly response
+        error_info = create_error_response(e, session_id)
+
+        return ChatMessageResponse(
+            response=error_info["message"],
+            data_sources=[],
+            intent="error",
+            conversation_id=session_id,
+            is_agentic=False,
+            error_type=error_info["error_type"],
+            has_error=True,
         )
 
 
@@ -529,11 +667,15 @@ async def send_message_stream(
             yield "data: [DONE]\n\n"
 
         except Exception as e:
-            logger.error(f"[chat/stream] Error in stream: {e}")
+            logger.error(f"[chat/stream] Error in stream: {e}", exc_info=True)
+
+            # Classify error and create user-friendly response
+            error_info = create_error_response(e, session_id)
+
             error_event = {
                 "type": "error",
-                "error": str(e),
-                "message": "I encountered an error processing your request. Please try again.",
+                "error": error_info["error_type"],
+                "message": error_info["message"],
             }
             yield f"data: {json.dumps(error_event)}\n\n"
             yield "data: [DONE]\n\n"

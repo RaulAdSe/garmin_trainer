@@ -2,19 +2,17 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTranslations, useLocale } from "next-intl";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useUserProgress } from "@/hooks/useAchievements";
 import { Card } from "@/components/ui/Card";
-import { Button, IconButton } from "@/components/ui/Button";
-import { ErrorState } from "@/components/ui/ErrorState";
-import { LoadingSpinner, LoadingCenter } from "@/components/ui/LoadingSpinner";
+import { Button } from "@/components/ui/Button";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { SkeletonCard } from "@/components/ui/Skeleton";
 import {
-  sendChatMessage,
   getChatSuggestions,
   clearConversation,
-  type ChatMessageRequest,
-  type ChatMessageResponse,
+  sendChatMessageStream,
+  getToolDisplayName,
 } from "@/lib/api-client";
 import { clsx } from "clsx";
 
@@ -29,6 +27,17 @@ interface ChatMessage {
   timestamp: Date;
   dataSources?: string[];
   intent?: string;
+  // Error handling
+  isError?: boolean;
+  errorType?: string;
+}
+
+// Streaming state for showing status messages
+interface StreamingState {
+  isStreaming: boolean;
+  statusMessage: string;
+  activeTools: string[];
+  content: string;
 }
 
 // Message Bubble Components
@@ -47,14 +56,105 @@ function UserMessage({ content }: { content: string }) {
 function AssistantMessage({
   content,
   dataSources,
-  isLoading,
+  isError,
+  errorType,
   t,
 }: {
   content: string;
   dataSources?: string[];
-  isLoading?: boolean;
+  isError?: boolean;
+  errorType?: string;
   t: ReturnType<typeof useTranslations<"chat">>;
 }) {
+  return (
+    <div className="flex justify-start animate-slideUp">
+      <div className="max-w-[85%] sm:max-w-[75%]">
+        <div className="flex items-start gap-3">
+          {/* Avatar - different style for errors */}
+          <div className={clsx(
+            "shrink-0 w-8 h-8 rounded-full flex items-center justify-center shadow-md",
+            isError
+              ? "bg-gradient-to-br from-amber-500 to-amber-600"
+              : "bg-gradient-to-br from-teal-500 to-teal-600"
+          )}>
+            {isError ? (
+              <svg
+                className="w-4 h-4 text-white"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                />
+              </svg>
+            ) : (
+              <svg
+                className="w-4 h-4 text-white"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                />
+              </svg>
+            )}
+          </div>
+          {/* Message */}
+          <div className="flex-1">
+            <div className={clsx(
+              "rounded-2xl rounded-tl-md px-4 py-3 shadow-md border",
+              isError
+                ? "bg-amber-900/30 text-amber-100 border-amber-700/50"
+                : "bg-gray-800 text-gray-100 border-gray-700"
+            )}>
+              <p className="text-sm sm:text-base whitespace-pre-wrap">
+                {content}
+              </p>
+              {/* Error hint for user to try again */}
+              {isError && errorType && (
+                <p className="text-xs text-amber-400/70 mt-2">
+                  {t("errorHint")}
+                </p>
+              )}
+            </div>
+            {/* Data Sources */}
+            {dataSources && dataSources.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {dataSources.map((source, idx) => (
+                  <span
+                    key={idx}
+                    className="text-xs px-2 py-0.5 bg-gray-800/50 text-gray-500 rounded-full border border-gray-700"
+                  >
+                    {source}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Streaming assistant message with status updates
+function StreamingAssistantMessage({
+  streamingState,
+  t,
+}: {
+  streamingState: StreamingState;
+  t: ReturnType<typeof useTranslations<"chat">>;
+}) {
+  const { statusMessage, activeTools, content } = streamingState;
+
   return (
     <div className="flex justify-start animate-slideUp">
       <div className="max-w-[85%] sm:max-w-[75%]">
@@ -78,30 +178,51 @@ function AssistantMessage({
           {/* Message */}
           <div className="flex-1">
             <div className="bg-gray-800 text-gray-100 rounded-2xl rounded-tl-md px-4 py-3 shadow-md border border-gray-700">
-              {isLoading ? (
-                <div className="flex items-center gap-2">
+              {/* Status message with spinner */}
+              {!content && (
+                <div className="flex items-center gap-2 mb-2">
                   <LoadingSpinner size="sm" />
-                  <span className="text-gray-400 text-sm">{t("thinking")}</span>
+                  <span className="text-teal-400 text-sm font-medium">
+                    {statusMessage || t("thinking")}
+                  </span>
                 </div>
-              ) : (
+              )}
+
+              {/* Active tools being used */}
+              {activeTools.length > 0 && !content && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {activeTools.map((tool, idx) => (
+                    <span
+                      key={idx}
+                      className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-teal-600/20 text-teal-400 rounded-full border border-teal-600/30 animate-pulse"
+                    >
+                      <svg
+                        className="w-3 h-3"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                        />
+                      </svg>
+                      {getToolDisplayName(tool)}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Streamed content */}
+              {content && (
                 <p className="text-sm sm:text-base whitespace-pre-wrap">
                   {content}
+                  <span className="inline-block w-1 h-4 bg-teal-500 animate-pulse ml-0.5" />
                 </p>
               )}
             </div>
-            {/* Data Sources */}
-            {dataSources && dataSources.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {dataSources.map((source, idx) => (
-                  <span
-                    key={idx}
-                    className="text-xs px-2 py-0.5 bg-gray-800/50 text-gray-500 rounded-full border border-gray-700"
-                  >
-                    {source}
-                  </span>
-                ))}
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -259,6 +380,18 @@ export default function ChatPage() {
   const [conversationId, setConversationId] = useState<string | undefined>();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const abortControllerRef = useRef<(() => void) | null>(null);
+
+  // Streaming state
+  const [streamingState, setStreamingState] = useState<StreamingState>({
+    isStreaming: false,
+    statusMessage: "",
+    activeTools: [],
+    content: "",
+  });
+
+  // Track tools used during the current streaming session
+  const toolsUsedRef = useRef<string[]>([]);
 
   // Get user progress for level gating
   const { data: userProgress, isLoading: progressLoading } = useUserProgress();
@@ -269,7 +402,6 @@ export default function ChatPage() {
   const {
     data: suggestionsData,
     isLoading: suggestionsLoading,
-    refetch: refetchSuggestions,
   } = useQuery({
     queryKey: ["chatSuggestions"],
     queryFn: getChatSuggestions,
@@ -277,49 +409,16 @@ export default function ChatPage() {
     staleTime: 10 * 60 * 1000, // 10 minutes
   });
 
-  // Send message mutation
-  const sendMessageMutation = useMutation({
-    mutationFn: (request: ChatMessageRequest) => sendChatMessage(request),
-    onSuccess: (response: ChatMessageResponse) => {
-      // Update conversation ID if this is a new conversation
-      if (!conversationId) {
-        setConversationId(response.conversation_id);
-      }
-
-      // Add assistant message
-      const assistantMessage: ChatMessage = {
-        id: `assistant-${Date.now()}`,
-        role: "assistant",
-        content: response.response,
-        timestamp: new Date(),
-        dataSources: response.data_sources,
-        intent: response.intent,
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
-    },
-    onError: (error) => {
-      // Add error message
-      const errorMessage: ChatMessage = {
-        id: `error-${Date.now()}`,
-        role: "assistant",
-        content: t("errorMessage"),
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-      console.error("Chat error:", error);
-    },
-  });
-
-  // Scroll to bottom when messages change
+  // Scroll to bottom when messages or streaming state changes
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, streamingState.content]);
 
-  // Handle send message
+  // Handle send message with streaming
   const handleSendMessage = useCallback(
     (messageText?: string) => {
       const text = (messageText || inputValue).trim();
-      if (!text || sendMessageMutation.isPending) return;
+      if (!text || streamingState.isStreaming) return;
 
       // Add user message
       const userMessage: ChatMessage = {
@@ -331,14 +430,115 @@ export default function ChatPage() {
       setMessages((prev) => [...prev, userMessage]);
       setInputValue("");
 
-      // Send to API
-      sendMessageMutation.mutate({
-        message: text,
-        conversation_id: conversationId,
-        language: locale,
+      // Reset streaming state
+      setStreamingState({
+        isStreaming: true,
+        statusMessage: t("thinking"),
+        activeTools: [],
+        content: "",
       });
+      toolsUsedRef.current = [];
+
+      // Start streaming
+      const abort = sendChatMessageStream(
+        {
+          message: text,
+          conversation_id: conversationId,
+          language: locale,
+        },
+        {
+          onStatus: (message) => {
+            setStreamingState((prev) => ({
+              ...prev,
+              statusMessage: message,
+            }));
+          },
+          onToolStart: (tool, message) => {
+            toolsUsedRef.current.push(tool);
+            setStreamingState((prev) => ({
+              ...prev,
+              statusMessage: message,
+              activeTools: [...prev.activeTools, tool],
+            }));
+          },
+          onToolEnd: (tool) => {
+            setStreamingState((prev) => ({
+              ...prev,
+              activeTools: prev.activeTools.filter((t) => t !== tool),
+            }));
+          },
+          onToken: (token) => {
+            setStreamingState((prev) => ({
+              ...prev,
+              content: prev.content + token,
+              statusMessage: "", // Clear status when content starts
+            }));
+          },
+          onDone: (toolsUsed) => {
+            // Finalize the message
+            setStreamingState((prev) => {
+              // Add the complete message
+              const assistantMessage: ChatMessage = {
+                id: `assistant-${Date.now()}`,
+                role: "assistant",
+                content: prev.content,
+                timestamp: new Date(),
+                dataSources: toolsUsed.map(getToolDisplayName),
+              };
+              setMessages((msgs) => [...msgs, assistantMessage]);
+
+              return {
+                isStreaming: false,
+                statusMessage: "",
+                activeTools: [],
+                content: "",
+              };
+            });
+          },
+          onError: (error, errorMessage) => {
+            console.error("Chat streaming error:", error, errorMessage);
+
+            // Map backend error types to translation keys
+            const errorTypeMap: Record<string, string> = {
+              rate_limited: "errorRateLimited",
+              quota_exceeded: "errorQuotaExceeded",
+              ai_unavailable: "errorAiUnavailable",
+              no_training_data: "errorNoData",
+              context_error: "errorContext",
+              tool_failure: "errorToolFailure",
+              network_error: "errorNetwork",
+              unknown: "errorMessage",
+            };
+
+            // Get the error type from the backend error string (which is error_type) or default to network_error
+            const errorType = error && errorTypeMap[error] ? error : "network_error";
+            const translationKey = errorTypeMap[errorType] || "errorMessage";
+
+            // Use the message from the backend if provided, otherwise use the translation
+            const displayMessage = errorMessage || t(translationKey as keyof typeof errorTypeMap);
+
+            const chatErrorMessage: ChatMessage = {
+              id: `error-${Date.now()}`,
+              role: "assistant",
+              content: displayMessage,
+              timestamp: new Date(),
+              isError: true,
+              errorType: errorType,
+            };
+            setMessages((prev) => [...prev, chatErrorMessage]);
+            setStreamingState({
+              isStreaming: false,
+              statusMessage: "",
+              activeTools: [],
+              content: "",
+            });
+          },
+        }
+      );
+
+      abortControllerRef.current = abort;
     },
-    [inputValue, conversationId, locale, sendMessageMutation]
+    [inputValue, conversationId, locale, streamingState.isStreaming, t]
   );
 
   // Handle new conversation
@@ -465,13 +665,15 @@ export default function ChatPage() {
                     key={message.id}
                     content={message.content}
                     dataSources={message.dataSources}
+                    isError={message.isError}
+                    errorType={message.errorType}
                     t={t}
                   />
                 )
               )}
-              {/* Loading indicator */}
-              {sendMessageMutation.isPending && (
-                <AssistantMessage content="" isLoading t={t} />
+              {/* Streaming message with status updates */}
+              {streamingState.isStreaming && (
+                <StreamingAssistantMessage streamingState={streamingState} t={t} />
               )}
               <div ref={messagesEndRef} />
             </>
@@ -488,7 +690,7 @@ export default function ChatPage() {
                 onChange={handleInputChange}
                 onKeyDown={handleKeyPress}
                 placeholder={t("placeholder")}
-                disabled={sendMessageMutation.isPending}
+                disabled={streamingState.isStreaming}
                 rows={1}
                 className={clsx(
                   "w-full px-4 py-3 rounded-xl",
@@ -504,8 +706,8 @@ export default function ChatPage() {
             </div>
             <Button
               onClick={() => handleSendMessage()}
-              disabled={!inputValue.trim() || sendMessageMutation.isPending}
-              isLoading={sendMessageMutation.isPending}
+              disabled={!inputValue.trim() || streamingState.isStreaming}
+              isLoading={streamingState.isStreaming}
               className="shrink-0"
               aria-label={t("send")}
             >

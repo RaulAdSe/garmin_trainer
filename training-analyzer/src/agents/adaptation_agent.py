@@ -476,7 +476,7 @@ class AdaptationAgent:
                 system=system_prompt,
                 user=user_prompt,
                 model=ModelType.FAST,
-                max_tokens=800,
+                max_tokens=1500,
             )
 
             state["explanation"] = response.get("explanation", "")

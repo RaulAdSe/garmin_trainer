@@ -53,8 +53,11 @@ def get_available_llm(
     Returns:
         Tuple of (llm_instance, model_id, provider)
     """
+    from ..config import get_settings
+    settings = get_settings()
+
     anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-    openai_key = os.getenv("OPENAI_API_KEY")
+    openai_key = settings.openai_api_key or os.getenv("OPENAI_API_KEY")
 
     # Try Anthropic first
     if HAS_ANTHROPIC and anthropic_key:
@@ -72,6 +75,7 @@ def get_available_llm(
             model=model_id,
             temperature=temperature,
             max_tokens=max_tokens,
+            api_key=openai_key,
         ), model_id, "openai"
 
     # No LLM available

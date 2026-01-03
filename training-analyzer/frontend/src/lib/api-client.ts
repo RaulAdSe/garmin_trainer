@@ -1178,13 +1178,55 @@ export interface ChatMessageResponse {
   data_sources: string[];
   intent: string;
   conversation_id: string;
+  // Error handling fields (optional - only present when error occurred)
+  error_type?: string;  // rate_limited, quota_exceeded, ai_unavailable, etc.
+  has_error?: boolean;
 }
 
 export interface ChatSuggestionsResponse {
   questions: string[];
 }
 
-// Send a chat message
+// Streaming chat event types
+export type ChatStreamEventType = 'status' | 'tool_start' | 'tool_end' | 'token' | 'done' | 'error';
+
+export interface ChatStreamEvent {
+  type: ChatStreamEventType;
+  content?: string;
+  tool?: string;
+  message?: string;
+  tools_used?: string[];
+  token_usage?: {
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+  };
+  trace_id?: string;
+  error?: string;
+}
+
+// Human-friendly tool names for display
+export const TOOL_DISPLAY_NAMES: Record<string, string> = {
+  query_workouts: 'workouts',
+  get_athlete_profile: 'profile',
+  get_training_patterns: 'patterns',
+  query_wellness: 'wellness',
+  get_fitness_metrics: 'metrics',
+  get_garmin_data: 'garmin',
+  compare_workouts: 'compare',
+  get_workout_details: 'details',
+  create_training_plan: 'planning',
+  design_workout: 'design',
+  log_note: 'notes',
+  set_goal: 'goals',
+};
+
+// Get display name for a tool
+export function getToolDisplayName(toolName: string): string {
+  return TOOL_DISPLAY_NAMES[toolName] || toolName;
+}
+
+// Send a chat message (non-streaming)
 export async function sendChatMessage(
   request: ChatMessageRequest
 ): Promise<ChatMessageResponse> {
@@ -1200,6 +1242,125 @@ export async function sendChatMessage(
     }),
   });
   return handleResponse<ChatMessageResponse>(response);
+}
+
+// Streaming chat callbacks
+export interface ChatStreamCallbacks {
+  onStatus?: (message: string) => void;
+  onToolStart?: (tool: string, message: string) => void;
+  onToolEnd?: (tool: string) => void;
+  onToken?: (content: string) => void;
+  onDone?: (toolsUsed: string[], tokenUsage?: ChatStreamEvent['token_usage']) => void;
+  /** @param error - Error type from backend (rate_limited, quota_exceeded, etc.) or HTTP status */
+  /** @param message - User-friendly error message from backend */
+  onError?: (error: string, message?: string) => void;
+}
+
+// Send a chat message with streaming response
+export function sendChatMessageStream(
+  request: ChatMessageRequest,
+  callbacks: ChatStreamCallbacks
+): () => void {
+  const controller = new AbortController();
+
+  const fetchStream = async () => {
+    try {
+      const response = await authFetch(`${API_BASE}/chat/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream',
+        },
+        body: JSON.stringify({
+          message: request.message,
+          conversation_id: request.conversation_id,
+          language: request.language || 'en',
+        }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        // Map HTTP status to error types
+        const statusErrorType = response.status === 429 ? 'rate_limited'
+          : response.status === 503 ? 'ai_unavailable'
+          : 'network_error';
+        callbacks.onError?.(statusErrorType, errorText || `HTTP ${response.status}`);
+        return;
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        callbacks.onError?.('network_error', 'No response body');
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        buffer += chunk;
+
+        // Process SSE events
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+
+            if (data === '[DONE]') {
+              continue;
+            }
+
+            try {
+              const event: ChatStreamEvent = JSON.parse(data);
+
+              switch (event.type) {
+                case 'status':
+                  callbacks.onStatus?.(event.message || 'Processing...');
+                  break;
+                case 'tool_start':
+                  callbacks.onToolStart?.(event.tool || 'unknown', event.message || '');
+                  break;
+                case 'tool_end':
+                  callbacks.onToolEnd?.(event.tool || 'unknown');
+                  break;
+                case 'token':
+                  callbacks.onToken?.(event.content || '');
+                  break;
+                case 'done':
+                  callbacks.onDone?.(event.tools_used || [], event.token_usage);
+                  break;
+                case 'error':
+                  // Pass both error type and message to the callback
+                  callbacks.onError?.(event.error || 'unknown', event.message);
+                  break;
+              }
+            } catch {
+              // Not JSON, treat as raw content
+              callbacks.onToken?.(data);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name !== 'AbortError') {
+        // Network/fetch errors - pass error type and message
+        callbacks.onError?.('network_error', error.message);
+      }
+    }
+  };
+
+  fetchStream();
+
+  // Return abort function
+  return () => controller.abort();
 }
 
 // Get chat suggestions
