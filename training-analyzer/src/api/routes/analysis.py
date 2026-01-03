@@ -205,9 +205,9 @@ def _build_athlete_context_from_historical(historical_context: Dict) -> Dict:
 @router.post("/workout/{workout_id}", response_model=AnalysisResponse)
 @limiter.limit(RATE_LIMIT_AI)
 async def analyze_workout(
-    request_obj: Request,
+    request: Request,
     workout_id: str,
-    request: Optional[AnalysisRequest] = None,
+    analysis_request: Optional[AnalysisRequest] = None,
     stream: bool = Query(default=False, description="Stream the response"),
     include_details: bool = Query(default=True, description="Include detailed time-series analysis (HR dynamics, pace patterns, etc.)"),
     current_user: CurrentUser = Depends(require_quota("workout_analysis")),
@@ -248,7 +248,7 @@ async def analyze_workout(
 
     try:
         # Check DB first (unless force_refresh)
-        force_refresh = request.force_refresh if request else False
+        force_refresh = analysis_request.force_refresh if analysis_request else False
         if not force_refresh and not stream:
             existing = get_analysis(training_db, workout_id)
             if existing:
@@ -311,7 +311,7 @@ async def analyze_workout(
             athlete_context["target_time"] = first_goal.get("target_time_formatted")
 
         # Get similar workouts for comparison (from before the workout date)
-        include_similar = request.include_similar if request else True
+        include_similar = analysis_request.include_similar if analysis_request else True
         similar_workouts = []
         if include_similar:
             # Get activities from before the workout for fair comparison

@@ -3,6 +3,10 @@ Exception handlers for the FastAPI application.
 
 This module registers exception handlers that convert application
 exceptions to appropriate HTTP responses with consistent formatting.
+
+Note: Exception handlers explicitly add CORS headers because exception
+responses may bypass the CORS middleware in some Starlette/FastAPI
+configurations (particularly when BaseHTTPMiddleware is used).
 """
 
 from typing import Any, Dict
@@ -21,15 +25,30 @@ from ..exceptions import (
     FITError,
     DatabaseError,
 )
+from ..config import get_settings
+
+
+def _add_cors_headers(request: Request, response: JSONResponse) -> JSONResponse:
+    """Add CORS headers to response if request has a valid Origin."""
+    origin = request.headers.get("origin")
+    if origin:
+        settings = get_settings()
+        # Check if origin is allowed
+        if origin in settings.cors_origins:
+            response.headers["access-control-allow-origin"] = origin
+            response.headers["access-control-allow-credentials"] = "true"
+            response.headers["vary"] = "Origin"
+    return response
 
 
 def create_error_response(
+    request: Request,
     status_code: int,
     code: str,
     message: str,
     details: Dict[str, Any] | None = None,
 ) -> JSONResponse:
-    """Create a standardized error response."""
+    """Create a standardized error response with CORS headers."""
     content: Dict[str, Any] = {
         "error": {
             "code": code,
@@ -38,7 +57,8 @@ def create_error_response(
     }
     if details:
         content["error"]["details"] = details
-    return JSONResponse(status_code=status_code, content=content)
+    response = JSONResponse(status_code=status_code, content=content)
+    return _add_cors_headers(request, response)
 
 
 async def reactive_training_error_handler(
@@ -47,6 +67,7 @@ async def reactive_training_error_handler(
 ) -> JSONResponse:
     """Handle all ReactiveTrainingError exceptions."""
     return create_error_response(
+        request=request,
         status_code=exc.status_code,
         code=exc.code.value,
         message=exc.message,
@@ -69,6 +90,7 @@ async def pydantic_validation_error_handler(
         })
 
     return create_error_response(
+        request=request,
         status_code=422,
         code="VALIDATION_ERROR",
         message="Request validation failed",
@@ -90,6 +112,7 @@ async def generic_exception_handler(
     )
 
     return create_error_response(
+        request=request,
         status_code=500,
         code="INTERNAL_ERROR",
         message="An unexpected error occurred",
