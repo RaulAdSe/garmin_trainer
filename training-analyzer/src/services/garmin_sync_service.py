@@ -69,7 +69,9 @@ class GarminCredentialsRepository:
     def _get_encryption(self) -> CredentialEncryption:
         """Get or create the encryption service."""
         if self._encryption is None:
-            self._encryption = CredentialEncryption()
+            from ..config import get_settings
+            settings = get_settings()
+            self._encryption = CredentialEncryption(key=settings.credential_encryption_key)
         return self._encryption
 
     def save_credentials(
