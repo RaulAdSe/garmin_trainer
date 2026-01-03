@@ -29,7 +29,11 @@ export {
   useVO2MaxTrend,
 } from './useAthleteContext';
 
-export { useDataFreshness } from './useDataFreshness';
+export {
+  useDataFreshness,
+  type DataFreshnessState,
+  type FreshnessStatus,
+} from './useDataFreshness';
 
 export { useTouchChart } from './useTouchChart';
 
@@ -140,6 +144,17 @@ export {
   type WeatherAdjustmentRequest,
   type AvailableStrategiesResponse,
 } from './useRacePacing';
+
+export {
+  useSafetyAlerts,
+  useLoadAnalysis,
+  useActiveAlerts,
+  useCriticalAlerts,
+  safetyKeys,
+  type UseSafetyAlertsOptions,
+  type UseSafetyAlertsReturn,
+  type UseLoadAnalysisReturn,
+} from './useSafetyAlerts';
 
 // Re-export onboarding context hook for convenience
 export { useOnboarding } from '@/contexts/onboarding-context';

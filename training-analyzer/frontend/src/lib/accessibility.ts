@@ -8,7 +8,7 @@
  * - Screen reader announcements
  */
 
-import { KeyboardEvent, useCallback, useRef, useState } from 'react';
+import { KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
 
 // ============================================================================
 // KEYBOARD NAVIGATION
@@ -397,4 +397,202 @@ export function generateChartSummary(options: {
   }
 
   return summary;
+}
+
+// ============================================================================
+// FOCUS TRAP FOR MODALS
+// ============================================================================
+
+/**
+ * Get all focusable elements within a container
+ */
+export function getFocusableElements(container: HTMLElement): HTMLElement[] {
+  const focusableSelectors = [
+    'button:not([disabled]):not([aria-hidden="true"])',
+    'a[href]:not([aria-hidden="true"])',
+    'input:not([disabled]):not([type="hidden"]):not([aria-hidden="true"])',
+    'select:not([disabled]):not([aria-hidden="true"])',
+    'textarea:not([disabled]):not([aria-hidden="true"])',
+    '[tabindex]:not([tabindex="-1"]):not([aria-hidden="true"])',
+  ].join(',');
+
+  return Array.from(container.querySelectorAll<HTMLElement>(focusableSelectors));
+}
+
+/**
+ * Hook for managing focus trap within a modal or dialog
+ */
+export function useFocusTrap(containerRef: React.RefObject<HTMLElement | null>, isActive: boolean) {
+  const previousActiveElement = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!isActive || !containerRef.current) return;
+
+    // Store the currently focused element to restore later
+    previousActiveElement.current = document.activeElement as HTMLElement;
+
+    // Focus the first focusable element in the container
+    const focusableElements = getFocusableElements(containerRef.current);
+    if (focusableElements.length > 0) {
+      focusableElements[0].focus();
+    }
+
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Tab' || !containerRef.current) return;
+
+      const focusableElements = getFocusableElements(containerRef.current);
+      if (focusableElements.length === 0) return;
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+
+      if (event.shiftKey) {
+        // Shift + Tab: If on first element, go to last
+        if (document.activeElement === firstElement) {
+          event.preventDefault();
+          lastElement.focus();
+        }
+      } else {
+        // Tab: If on last element, go to first
+        if (document.activeElement === lastElement) {
+          event.preventDefault();
+          firstElement.focus();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      // Restore focus to the previously focused element
+      if (previousActiveElement.current && previousActiveElement.current.focus) {
+        previousActiveElement.current.focus();
+      }
+    };
+  }, [isActive, containerRef]);
+}
+
+// ============================================================================
+// FOCUS MANAGEMENT UTILITIES
+// ============================================================================
+
+/**
+ * Move focus to a specific element with optional delay
+ */
+export function moveFocusTo(element: HTMLElement | null, delay = 0): void {
+  if (!element) return;
+
+  if (delay > 0) {
+    setTimeout(() => {
+      element.focus();
+    }, delay);
+  } else {
+    element.focus();
+  }
+}
+
+/**
+ * Move focus to the first focusable element in a container
+ */
+export function moveFocusToFirst(container: HTMLElement | null): void {
+  if (!container) return;
+  const focusableElements = getFocusableElements(container);
+  if (focusableElements.length > 0) {
+    focusableElements[0].focus();
+  }
+}
+
+/**
+ * Check if an element is currently in the viewport
+ */
+export function isElementInViewport(element: HTMLElement): boolean {
+  const rect = element.getBoundingClientRect();
+  return (
+    rect.top >= 0 &&
+    rect.left >= 0 &&
+    rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+    rect.right <= (window.innerWidth || document.documentElement.clientWidth)
+  );
+}
+
+/**
+ * Scroll element into view if not visible
+ */
+export function ensureVisible(element: HTMLElement): void {
+  if (!isElementInViewport(element)) {
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
+// ============================================================================
+// CHART KEYBOARD NAVIGATION HOOK
+// ============================================================================
+
+export interface ChartKeyboardNavigationOptions {
+  dataLength: number;
+  onIndexChange: (index: number) => void;
+  onSelect?: (index: number) => void;
+  initialIndex?: number;
+}
+
+/**
+ * Hook for keyboard navigation in charts
+ * Supports arrow keys to navigate data points
+ */
+export function useChartKeyboardNavigation(options: ChartKeyboardNavigationOptions) {
+  const { dataLength, onIndexChange, onSelect, initialIndex = 0 } = options;
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+
+  const handleKeyDown = useCallback((event: KeyboardEvent) => {
+    let newIndex = currentIndex;
+    let handled = false;
+
+    switch (event.key) {
+      case Keys.ARROW_LEFT:
+        newIndex = Math.max(0, currentIndex - 1);
+        handled = true;
+        break;
+      case Keys.ARROW_RIGHT:
+        newIndex = Math.min(dataLength - 1, currentIndex + 1);
+        handled = true;
+        break;
+      case Keys.HOME:
+        newIndex = 0;
+        handled = true;
+        break;
+      case Keys.END:
+        newIndex = dataLength - 1;
+        handled = true;
+        break;
+      case Keys.ENTER:
+      case Keys.SPACE:
+        if (onSelect) {
+          onSelect(currentIndex);
+          handled = true;
+        }
+        break;
+    }
+
+    if (handled) {
+      event.preventDefault();
+      if (newIndex !== currentIndex) {
+        setCurrentIndex(newIndex);
+        onIndexChange(newIndex);
+      }
+    }
+  }, [currentIndex, dataLength, onIndexChange, onSelect]);
+
+  const getChartKeyboardProps = useCallback(() => ({
+    tabIndex: 0,
+    role: 'application' as const,
+    'aria-roledescription': 'interactive chart',
+    onKeyDown: handleKeyDown,
+  }), [handleKeyDown]);
+
+  return {
+    currentIndex,
+    setCurrentIndex,
+    getChartKeyboardProps,
+  };
 }

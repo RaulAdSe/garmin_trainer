@@ -12,6 +12,7 @@ import { useRecoveryScore } from "@/hooks/useRecovery";
 import { usePatternSummary } from "@/hooks/usePatterns";
 import { useCurrentEconomy } from "@/hooks/useRunningEconomy";
 import { useAuth } from "@/contexts/auth-context";
+import { useBeginnerMode } from "@/contexts/preferences-context";
 import { hasAuthToken } from "@/lib/auth-fetch";
 import { ReadinessGauge } from "@/components/athlete/ReadinessGauge";
 import { VO2MaxCard } from "@/components/athlete/VO2MaxCard";
@@ -27,12 +28,15 @@ import {
   FocusViewSkeleton,
   DashboardToggle,
   useDashboardViewMode,
+  SimplifiedDashboard,
+  SimplifiedDashboardSkeleton,
 } from "@/components/dashboard";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { SkeletonCard } from "@/components/ui/Skeleton";
 import { DataFreshnessIndicator } from "@/components/ui/DataFreshnessIndicator";
 import { TooltipTriggers } from "@/components/onboarding";
+import { SafetyAlertBanner } from "@/components/safety";
 
 export default function Dashboard() {
   const t = useTranslations("dashboard");
@@ -46,7 +50,8 @@ export default function Dashboard() {
   const { total: workoutCount } = useWorkouts({ pageSize: 1 });
   const dataFreshness = useDataFreshness({ staleThresholdHours: 72 });
   const [viewMode, setViewMode, isViewModeLoaded] = useDashboardViewMode();
-  
+  const { isBeginnerMode, isLoading: beginnerModeLoading } = useBeginnerMode();
+
   // Phase 5 widgets
   const { data: recoveryScore } = useRecoveryScore();
   const { data: patternSummary } = usePatternSummary(90);
@@ -72,8 +77,8 @@ export default function Dashboard() {
     }
   }, [is401Error, router]);
 
-  // Show loading state while auth or view mode is being checked
-  if (authLoading || !isViewModeLoaded) {
+  // Show loading state while auth, view mode, or beginner mode is being checked
+  if (authLoading || !isViewModeLoaded || beginnerModeLoading) {
     return (
       <div className="space-y-4 sm:space-y-6">
         <div>
@@ -125,7 +130,10 @@ export default function Dashboard() {
   }
 
   if (isLoading) {
-    // Show appropriate skeleton based on view mode
+    // Show appropriate skeleton based on view mode and beginner mode
+    if (isBeginnerMode) {
+      return <SimplifiedDashboardSkeleton />;
+    }
     if (viewMode === "focus") {
       return <FocusViewSkeleton />;
     }
@@ -183,6 +191,21 @@ export default function Dashboard() {
     );
   }
 
+  // Render Simplified Dashboard when in beginner mode
+  if (isBeginnerMode && context) {
+    return (
+      <SimplifiedDashboard
+        context={context}
+        userProgress={userProgress}
+        onExpandDashboard={() => {
+          // Temporarily show full dashboard without changing beginner mode preference
+          // User can disable beginner mode in settings if they want it permanent
+          setViewMode("full");
+        }}
+      />
+    );
+  }
+
   // Render Focus View when in focus mode
   if (viewMode === "focus" && context) {
     return (
@@ -218,7 +241,7 @@ export default function Dashboard() {
             <h1 className="text-xl sm:text-2xl font-bold text-gray-100">
               {t("title")}
             </h1>
-            <p className="text-sm sm:text-base text-gray-400 mt-1">
+            <p className="text-sm sm:text-base text-gray-300 mt-1">
               {t("subtitle")}
             </p>
           </div>
@@ -237,6 +260,8 @@ export default function Dashboard() {
                 isRefreshing={dataFreshness.isSyncing}
                 canRefresh={dataFreshness.hasCredentials}
                 staleThresholdHours={72}
+                criticalThresholdHours={168}
+                showPullHint={true}
               />
             )}
           </div>
@@ -247,6 +272,12 @@ export default function Dashboard() {
       <div data-onboarding="level-badge">
         <GamificationHeader userProgress={userProgress} />
       </div>
+
+      {/* Safety Alerts - Show if there are any active alerts */}
+      <SafetyAlertBanner
+        className="animate-slideUp"
+        maxAlerts={2}
+      />
 
       {/* Readiness Hero - Full Width */}
       <Card className="animate-slideUp" data-onboarding="readiness-gauge">

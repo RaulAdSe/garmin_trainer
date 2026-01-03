@@ -2100,4 +2100,107 @@ export async function getPaceZonesEconomy(days: number = 90): Promise<any> {
   return handleResponse(response);
 }
 
+// ============================================
+// Safety Alerts API (ACWR Spike Detection)
+// ============================================
+
+import type {
+  SafetyAlertsResponse,
+  AcknowledgeAlertResponse,
+  LoadAnalysisData,
+  SpikeAnalysis,
+  MonotonyStrainAnalysis,
+} from './types';
+
+export interface GetSafetyAlertsOptions {
+  status?: 'active' | 'acknowledged' | 'resolved' | 'dismissed';
+  severity?: 'info' | 'moderate' | 'critical';
+  days?: number;
+}
+
+/**
+ * Get safety alerts for the current user.
+ */
+export async function getSafetyAlerts(
+  options: GetSafetyAlertsOptions = {}
+): Promise<SafetyAlertsResponse> {
+  const params = new URLSearchParams();
+
+  if (options.status) params.set('status', options.status);
+  if (options.severity) params.set('severity', options.severity);
+  if (options.days) params.set('days', String(options.days));
+
+  const queryString = params.toString();
+  const url = `${API_BASE}/safety/alerts${queryString ? `?${queryString}` : ''}`;
+
+  const response = await authFetch(url);
+
+  // Return empty response for 401 errors (not logged in)
+  if (response.status === 401) {
+    return {
+      alerts: [],
+      total: 0,
+      activeCount: 0,
+      criticalCount: 0,
+    };
+  }
+
+  return handleResponse<SafetyAlertsResponse>(response);
+}
+
+/**
+ * Acknowledge a safety alert.
+ */
+export async function acknowledgeAlert(
+  alertId: string
+): Promise<AcknowledgeAlertResponse> {
+  const response = await authFetch(`${API_BASE}/safety/alerts/${alertId}/acknowledge`, {
+    method: 'POST',
+  });
+  return handleResponse<AcknowledgeAlertResponse>(response);
+}
+
+/**
+ * Dismiss a safety alert.
+ */
+export async function dismissAlert(
+  alertId: string
+): Promise<AcknowledgeAlertResponse> {
+  const response = await authFetch(`${API_BASE}/safety/alerts/${alertId}/dismiss`, {
+    method: 'POST',
+  });
+  return handleResponse<AcknowledgeAlertResponse>(response);
+}
+
+/**
+ * Get comprehensive training load analysis with spike detection.
+ */
+export async function getLoadAnalysis(): Promise<LoadAnalysisData> {
+  const response = await authFetch(`${API_BASE}/safety/load-analysis`);
+  return handleResponse<LoadAnalysisData>(response);
+}
+
+/**
+ * Quick check for ACWR spike between two load values.
+ */
+export async function checkSpike(
+  currentLoad: number,
+  previousLoad: number
+): Promise<SpikeAnalysis> {
+  const params = new URLSearchParams();
+  params.set('current_load', String(currentLoad));
+  params.set('previous_load', String(previousLoad));
+
+  const response = await authFetch(`${API_BASE}/safety/spike-check?${params.toString()}`);
+  return handleResponse<SpikeAnalysis>(response);
+}
+
+/**
+ * Get monotony and strain analysis for the current week.
+ */
+export async function getMonotonyStrain(): Promise<MonotonyStrainAnalysis> {
+  const response = await authFetch(`${API_BASE}/safety/monotony`);
+  return handleResponse<MonotonyStrainAnalysis>(response);
+}
+
 export { ApiClientError };

@@ -7,11 +7,17 @@ import {
 } from '@/lib/api-client';
 import type { GarminSyncHistoryEntry } from '@/lib/types';
 
+export type FreshnessStatus = 'fresh' | 'stale' | 'critical' | 'never';
+
 export interface DataFreshnessState {
   /** The last sync time as a Date object, or null if never synced */
   lastSyncTime: Date | null;
   /** Whether the data is considered stale based on threshold */
   isStale: boolean;
+  /** Whether the data is critically out of date (7+ days) */
+  isCritical: boolean;
+  /** Current freshness status */
+  freshnessStatus: FreshnessStatus;
   /** Whether a sync is currently in progress */
   isSyncing: boolean;
   /** Whether the user has credentials configured for sync */
@@ -27,8 +33,10 @@ export interface DataFreshnessState {
 }
 
 interface UseDataFreshnessOptions {
-  /** Threshold in hours after which data is considered stale (default: 72 = 3 days) */
+  /** Threshold in hours after which data is considered stale/yellow (default: 72 = 3 days) */
   staleThresholdHours?: number;
+  /** Threshold in hours after which data is considered critical/red (default: 168 = 7 days) */
+  criticalThresholdHours?: number;
   /** Whether to auto-refresh the relative time string */
   autoRefreshInterval?: number;
 }
@@ -40,6 +48,7 @@ interface UseDataFreshnessOptions {
 export function useDataFreshness(options: UseDataFreshnessOptions = {}): DataFreshnessState {
   const {
     staleThresholdHours = 72, // 3 days default
+    criticalThresholdHours = 168, // 7 days default
     autoRefreshInterval = 60000, // Update relative time every minute
   } = options;
 
@@ -80,10 +89,24 @@ export function useDataFreshness(options: UseDataFreshnessOptions = {}): DataFre
     ? new Date(lastSyncEntry.started_at)
     : null;
 
-  // Check if data is stale
-  const isStale = lastSyncTime
-    ? Date.now() - lastSyncTime.getTime() > staleThresholdHours * 60 * 60 * 1000
-    : true; // No sync = stale
+  // Calculate freshness status
+  const getFreshnessStatus = (): FreshnessStatus => {
+    if (!lastSyncTime) return 'never';
+
+    const hoursSinceSync = (Date.now() - lastSyncTime.getTime()) / (60 * 60 * 1000);
+
+    if (hoursSinceSync >= criticalThresholdHours) return 'critical';
+    if (hoursSinceSync >= staleThresholdHours) return 'stale';
+    return 'fresh';
+  };
+
+  const freshnessStatus = getFreshnessStatus();
+
+  // Check if data is stale (includes critical)
+  const isStale = freshnessStatus === 'stale' || freshnessStatus === 'critical' || freshnessStatus === 'never';
+
+  // Check if data is critically out of date
+  const isCritical = freshnessStatus === 'critical' || freshnessStatus === 'never';
 
   // Check if credentials are configured
   const hasCredentials = credentialStatus?.connected ?? false;
@@ -118,6 +141,8 @@ export function useDataFreshness(options: UseDataFreshnessOptions = {}): DataFre
   return {
     lastSyncTime,
     isStale,
+    isCritical,
+    freshnessStatus,
     isSyncing,
     hasCredentials,
     error: syncError,

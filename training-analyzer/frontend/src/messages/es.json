@@ -563,10 +563,15 @@
     "lastSync": "Ultima sincronizacion",
     "neverSynced": "Los datos nunca se han sincronizado",
     "staleWarning": "Los datos tienen mas de {hours} horas. Considera actualizarlos.",
+    "criticalWarning": "Los datos estan criticamente desactualizados (mas de {hours} horas). Por favor sincroniza inmediatamente.",
     "connectToSync": "Conecta Garmin para sincronizar",
     "syncing": "Sincronizando...",
     "syncFailed": "Error de sincronizacion",
-    "syncSuccess": "Sincronizacion completa"
+    "syncSuccess": "Sincronizacion completa",
+    "pullToRefreshHint": "Desliza hacia abajo para actualizar en movil",
+    "freshAriaLabel": "Datos sincronizados hace {time}",
+    "staleAriaLabel": "Advertencia: Datos desactualizados, ultima sincronizacion hace {time}",
+    "criticalAriaLabel": "Alerta: Datos criticamente desactualizados, ultima sincronizacion hace {time}"
   },
   "purpose": {
     "title": "Que te motiva?",
@@ -1275,6 +1280,232 @@
   },
   "racePacing": {
     "title": "Planificador de Ritmo de Carrera",
-    "subtitle": "Genera estrategias de ritmo optimas"
+    "subtitle": "Genera estrategias de ritmo optimas",
+    "raceDistance": "Distancia de Carrera",
+    "distances": {
+      "5K": "5K",
+      "10K": "10K",
+      "halfMarathon": "Media Maraton",
+      "marathon": "Maraton",
+      "custom": "Personalizada"
+    },
+    "targetTime": "Tiempo Objetivo",
+    "raceName": "Nombre de Carrera",
+    "optional": "(opcional)",
+    "raceNamePlaceholder": "ej., Maraton de Boston 2024",
+    "pacingStrategy": "Estrategia de Ritmo",
+    "autoSelectStrategy": "Seleccion automatica segun distancia",
+    "strategies": {
+      "even": "Parciales Iguales",
+      "negativeSplit": "Negativo Split",
+      "positiveSplit": "Positivo Split",
+      "courseSpecific": "Especifico del Circuito"
+    },
+    "autoSelectHint": "Recomendaremos la mejor estrategia para tu carrera",
+    "addWeatherConditions": "Agregar Condiciones Climaticas",
+    "weatherConditions": {
+      "title": "Condiciones Climaticas",
+      "temperature": "Temperatura",
+      "humidity": "Humedad",
+      "wind": "Velocidad del Viento"
+    },
+    "courseProfile": {
+      "title": "Perfil del Circuito",
+      "flat": "Plano",
+      "hilly": "Ondulado",
+      "mountainous": "Montanoso",
+      "netDownhill": "Neto Cuesta Abajo"
+    },
+    "generate": "Generar Plan de Ritmo",
+    "generatePlan": "Generar Plan de Ritmo",
+    "generating": "Generando...",
+    "results": {
+      "title": "Tu Plan de Ritmo",
+      "averagePace": "Ritmo Promedio",
+      "splits": "Parciales por Milla",
+      "km": "km",
+      "mile": "milla",
+      "finishTime": "Llegada Predicha",
+      "export": "Exportar Plan",
+      "share": "Compartir",
+      "saveToGoals": "Guardar en Metas"
+    },
+    "tips": {
+      "title": "Consejos para el Dia de Carrera",
+      "hydration": "Comienza a hidratarte 48 horas antes de la carrera",
+      "warmup": "Haz un calentamiento de 10-15 minutos",
+      "pacing": "Comienza conservador - evita salir muy rapido"
+    }
+  },
+  "simplifiedDashboard": {
+    "title": "Panel de Entrenamiento",
+    "subtitle": "Tu entrenamiento diario de un vistazo",
+    "beginnerMode": "Modo Principiante",
+    "readinessTitle": "Disposicion de Hoy",
+    "readinessHelp": "Que es la disposicion?",
+    "readinessHelpText": "La disposicion muestra que tan recuperado esta tu cuerpo. Verde significa entrenar duro, amarillo moderado, rojo descansar.",
+    "nextWorkoutTitle": "Entrenamiento Sugerido",
+    "streakTitle": "Racha de Entrenamiento",
+    "days": "dias",
+    "protected": "Protegida",
+    "viewWorkouts": "Entrenamientos",
+    "viewAchievements": "Logros",
+    "viewFullDashboard": "Ver Panel Completo",
+    "disableBeginnerMode": "Desactivar modo principiante en Ajustes",
+    "recommendations": {
+      "quality": "Sesion de Calidad",
+      "qualityDuration": "45-60 min",
+      "qualityDescription": "Tu cuerpo esta listo para un entrenamiento intenso",
+      "moderate": "Carrera Suave",
+      "moderateDuration": "30-45 min",
+      "moderateDescription": "Manten un ritmo comodo y conversacional",
+      "recovery": "Descanso o Actividad Ligera",
+      "recoveryDuration": "0-30 min",
+      "recoveryDescription": "Enfocate en recuperar - tu cuerpo lo necesita"
+    }
+  },
+  "paceZones": {
+    "calculator": {
+      "title": "Calculadora VDOT",
+      "subtitle": "Calcula tus ritmos de entrenamiento a partir de una carrera reciente",
+      "vdotTitle": "Que es VDOT?",
+      "vdotDescription": "VDOT es una medida de tu condicion fisica desarrollada por Jack Daniels. Tiene en cuenta tanto el VO2max como la economia de carrera para proporcionar ritmos de entrenamiento precisos.",
+      "distanceLabel": "Distancia de Carrera",
+      "customDistanceLabel": "Distancia Personalizada (km)",
+      "timeLabel": "Tiempo de Carrera",
+      "calculateButton": "Calcular VDOT",
+      "calculating": "Calculando...",
+      "yourVdot": "Tu VDOT",
+      "currentSaved": "Guardado actualmente",
+      "saveZones": "Guardar Mis Zonas de Ritmo"
+    },
+    "zones": {
+      "title": "Zonas de Ritmo de Entrenamiento",
+      "subtitle": "Tus ritmos de entrenamiento personalizados basados en VDOT",
+      "zone": "Zona",
+      "typicalDuration": "Duracion tipica",
+      "maxHr": "FC max",
+      "yourVdot": "Tu VDOT",
+      "moreZones": "zonas mas",
+      "aerobic": "Aerobico",
+      "threshold": "Umbral",
+      "vo2max": "VO2max",
+      "anaerobic": "Anaerobico"
+    },
+    "predictions": {
+      "title": "Predicciones de Carrera",
+      "subtitle": "Tiempos de llegada predichos basados en tu VDOT",
+      "basedOn": "Basado en VDOT"
+    },
+    "errors": {
+      "invalidInput": "Por favor ingresa un tiempo de carrera valido",
+      "calculationFailed": "Error al calcular VDOT. Por favor revisa tu entrada e intenta de nuevo.",
+      "saveFailed": "Error al guardar zonas de ritmo. Por favor intenta de nuevo."
+    },
+    "card": {
+      "title": "Tus Zonas de Ritmo",
+      "subtitle": "Calcula tus ritmos de entrenamiento a partir de resultados de carreras",
+      "noZones": "Aun no hay zonas de ritmo calculadas",
+      "noZonesDesc": "Ingresa un resultado de carrera reciente para calcular tus ritmos de entrenamiento personalizados",
+      "calculateButton": "Calcular Zonas de Ritmo",
+      "recalculate": "Recalcular",
+      "lastUpdated": "Ultima actualizacion",
+      "basedOnRace": "Basado en {distance} en {time}"
+    }
+  },
+  "mileageCap": {
+    "title": "Limite de Kilometraje Semanal",
+    "weeklyProgress": "Progreso Semanal",
+    "of": "de",
+    "lastWeek": "Semana Pasada",
+    "limit": "Limite 10%",
+    "remaining": "Restante",
+    "learnAboutRule": "Aprende sobre la regla del 10%",
+    "status": {
+      "safe": "En Camino",
+      "warning": "Acercandose al Limite",
+      "near_limit": "Cerca del Limite",
+      "exceeded": "Limite Excedido"
+    },
+    "tenPercentRule": {
+      "title": "La Regla del 10%",
+      "description": "Para prevenir lesiones por sobreuso, aumenta tu kilometraje semanal no mas del 10% comparado con la semana anterior.",
+      "benefits": {
+        "title": "Por que importa",
+        "injury": "Reduce el riesgo de lesiones por sobreuso",
+        "adaptation": "Permite que tu cuerpo se adapte",
+        "consistency": "Promueve un entrenamiento consistente y sostenible"
+      },
+      "tips": {
+        "title": "Consejos",
+        "tip1": "Rastrea tus totales semanales consistentemente",
+        "tip2": "Incluye semanas de descanso cada 3-4 semanas",
+        "tip3": "Escucha a tu cuerpo - toma descanso extra si es necesario"
+      }
+    },
+    "plannedRun": {
+      "title": "Verificar Carrera Planificada",
+      "placeholder": "Distancia planificada (km)",
+      "check": "Verificar",
+      "safe": "Esta carrera esta dentro de tu limite",
+      "wouldExceed": "Esta carrera excederia tu limite semanal por {excess} km",
+      "suggestion": "Considera correr {safe} km o menos"
+    }
+  },
+  "safetyAlerts": {
+    "title": "Alertas de Seguridad",
+    "noAlerts": "Sin alertas de seguridad activas - tu carga de entrenamiento esta dentro de rangos seguros.",
+    "activeAlerts": "{count} Alerta Activa",
+    "activeAlertsPlural": "{count} Alertas Activas",
+    "critical": "Critico",
+    "criticalCount": "{count} Criticas",
+    "showMore": "Mostrar {count} alerta mas",
+    "showMorePlural": "Mostrar {count} alertas mas",
+    "showLess": "Mostrar menos",
+    "acknowledge": "Entendido",
+    "acknowledging": "Confirmando...",
+    "dismiss": "Descartar",
+    "dismissing": "Descartando...",
+    "recommendation": "Recomendacion",
+    "types": {
+      "acwr_spike": "Pico de Carga de Entrenamiento",
+      "high_monotony": "Alta Monotonia",
+      "high_strain": "Alta Tension",
+      "acute_chronic_ratio": "Advertencia ACWR",
+      "consecutive_hard": "Dias Duros Consecutivos",
+      "insufficient_recovery": "Recuperacion Insuficiente"
+    },
+    "severity": {
+      "info": "Informacion",
+      "moderate": "Advertencia",
+      "critical": "Critico"
+    },
+    "metrics": {
+      "currentWeekLoad": "Carga Semana Actual",
+      "previousWeekLoad": "Carga Semana Anterior",
+      "changePct": "Cambio",
+      "monotony": "Monotonia",
+      "strain": "Tension",
+      "meanLoad": "Carga Media",
+      "stdDev": "Desv. Est.",
+      "totalLoad": "Carga Total"
+    }
+  },
+  "charts": {
+    "touchHint": {
+      "title": "Toca para explorar",
+      "description": "Toca para fijar valores, desliza para navegar, pellizca para zoom",
+      "dismiss": "Entendido"
+    },
+    "zoom": {
+      "reset": "Restablecer",
+      "pinchToZoom": "Pellizca para zoom"
+    },
+    "navigation": {
+      "ariaLabel": "Area de navegacion de grafico interactivo",
+      "ariaRoleDescription": "Grafico interactivo. Usa las flechas para navegar entre puntos de datos.",
+      "cleared": "Navegacion del grafico eliminada",
+      "dataPoint": "Punto de datos {index} de {total}, {percent}% del grafico"
+    }
   }
 }

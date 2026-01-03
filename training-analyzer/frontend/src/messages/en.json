@@ -563,10 +563,15 @@
     "lastSync": "Last sync",
     "neverSynced": "Data has never been synced",
     "staleWarning": "Data is older than {hours} hours. Consider refreshing.",
+    "criticalWarning": "Data is critically outdated (over {hours} hours). Please sync immediately.",
     "connectToSync": "Connect Garmin to enable sync",
     "syncing": "Syncing...",
     "syncFailed": "Sync failed",
-    "syncSuccess": "Sync complete"
+    "syncSuccess": "Sync complete",
+    "pullToRefreshHint": "Pull down to refresh on mobile",
+    "freshAriaLabel": "Data synced {time}",
+    "staleAriaLabel": "Warning: Data is stale, last synced {time}",
+    "criticalAriaLabel": "Alert: Data is critically outdated, last synced {time}"
   },
   "purpose": {
     "title": "What drives you?",
@@ -1310,6 +1315,232 @@
   },
   "racePacing": {
     "title": "Race Pacing Planner",
-    "subtitle": "Generate optimal pacing strategies"
+    "subtitle": "Generate optimal pacing strategies",
+    "raceDistance": "Race Distance",
+    "distances": {
+      "5K": "5K",
+      "10K": "10K",
+      "halfMarathon": "Half Marathon",
+      "marathon": "Marathon",
+      "custom": "Custom"
+    },
+    "targetTime": "Target Time",
+    "raceName": "Race Name",
+    "optional": "(optional)",
+    "raceNamePlaceholder": "e.g., Boston Marathon 2024",
+    "pacingStrategy": "Pacing Strategy",
+    "autoSelectStrategy": "Auto-select based on distance",
+    "strategies": {
+      "even": "Even Splits",
+      "negativeSplit": "Negative Split",
+      "positiveSplit": "Positive Split",
+      "courseSpecific": "Course Specific"
+    },
+    "autoSelectHint": "We'll recommend the best strategy for your race",
+    "addWeatherConditions": "Add Weather Conditions",
+    "weatherConditions": {
+      "title": "Weather Conditions",
+      "temperature": "Temperature",
+      "humidity": "Humidity",
+      "wind": "Wind Speed"
+    },
+    "courseProfile": {
+      "title": "Course Profile",
+      "flat": "Flat",
+      "hilly": "Hilly",
+      "mountainous": "Mountainous",
+      "netDownhill": "Net Downhill"
+    },
+    "generate": "Generate Pacing Plan",
+    "generatePlan": "Generate Pacing Plan",
+    "generating": "Generating...",
+    "results": {
+      "title": "Your Pacing Plan",
+      "averagePace": "Average Pace",
+      "splits": "Mile Splits",
+      "km": "km",
+      "mile": "mile",
+      "finishTime": "Predicted Finish",
+      "export": "Export Plan",
+      "share": "Share",
+      "saveToGoals": "Save to Goals"
+    },
+    "tips": {
+      "title": "Race Day Tips",
+      "hydration": "Start hydrating 48 hours before race day",
+      "warmup": "Do a 10-15 minute warmup",
+      "pacing": "Start conservatively - avoid going out too fast"
+    }
+  },
+  "simplifiedDashboard": {
+    "title": "Training Dashboard",
+    "subtitle": "Your daily training at a glance",
+    "beginnerMode": "Beginner Mode",
+    "readinessTitle": "Today's Readiness",
+    "readinessHelp": "What is readiness?",
+    "readinessHelpText": "Readiness shows how recovered your body is. Green means go hard, yellow means moderate, red means rest.",
+    "nextWorkoutTitle": "Suggested Workout",
+    "streakTitle": "Training Streak",
+    "days": "days",
+    "protected": "Protected",
+    "viewWorkouts": "Workouts",
+    "viewAchievements": "Achievements",
+    "viewFullDashboard": "View Full Dashboard",
+    "disableBeginnerMode": "Disable beginner mode in Settings",
+    "recommendations": {
+      "quality": "Quality Session",
+      "qualityDuration": "45-60 min",
+      "qualityDescription": "Your body is ready for a harder workout",
+      "moderate": "Easy Run",
+      "moderateDuration": "30-45 min",
+      "moderateDescription": "Keep it comfortable and conversational",
+      "recovery": "Rest or Light Activity",
+      "recoveryDuration": "0-30 min",
+      "recoveryDescription": "Focus on recovery - your body needs it"
+    }
+  },
+  "paceZones": {
+    "calculator": {
+      "title": "VDOT Calculator",
+      "subtitle": "Calculate your training paces from a recent race result",
+      "vdotTitle": "What is VDOT?",
+      "vdotDescription": "VDOT is a measure of your running fitness developed by Jack Daniels. It accounts for both VO2max and running economy to provide accurate training paces.",
+      "distanceLabel": "Race Distance",
+      "customDistanceLabel": "Custom Distance (km)",
+      "timeLabel": "Race Time",
+      "calculateButton": "Calculate VDOT",
+      "calculating": "Calculating...",
+      "yourVdot": "Your VDOT",
+      "currentSaved": "Currently saved",
+      "saveZones": "Save My Pace Zones"
+    },
+    "zones": {
+      "title": "Training Pace Zones",
+      "subtitle": "Your personalized training paces based on VDOT",
+      "zone": "Zone",
+      "typicalDuration": "Typical duration",
+      "maxHr": "max HR",
+      "yourVdot": "Your VDOT",
+      "moreZones": "more zones",
+      "aerobic": "Aerobic",
+      "threshold": "Threshold",
+      "vo2max": "VO2max",
+      "anaerobic": "Anaerobic"
+    },
+    "predictions": {
+      "title": "Race Predictions",
+      "subtitle": "Predicted finish times based on your VDOT",
+      "basedOn": "Based on VDOT"
+    },
+    "errors": {
+      "invalidInput": "Please enter a valid race time",
+      "calculationFailed": "Failed to calculate VDOT. Please check your input and try again.",
+      "saveFailed": "Failed to save pace zones. Please try again."
+    },
+    "card": {
+      "title": "Your Pace Zones",
+      "subtitle": "Calculate your training paces from race results",
+      "noZones": "No pace zones calculated yet",
+      "noZonesDesc": "Enter a recent race result to calculate your personalized training paces",
+      "calculateButton": "Calculate Pace Zones",
+      "recalculate": "Recalculate",
+      "lastUpdated": "Last updated",
+      "basedOnRace": "Based on {distance} in {time}"
+    }
+  },
+  "mileageCap": {
+    "title": "Weekly Mileage Cap",
+    "weeklyProgress": "Weekly Progress",
+    "of": "of",
+    "lastWeek": "Last Week",
+    "limit": "10% Limit",
+    "remaining": "Remaining",
+    "learnAboutRule": "Learn about the 10% rule",
+    "status": {
+      "safe": "On Track",
+      "warning": "Approaching Limit",
+      "near_limit": "Near Limit",
+      "exceeded": "Limit Exceeded"
+    },
+    "tenPercentRule": {
+      "title": "The 10% Rule",
+      "description": "To prevent overuse injuries, increase your weekly mileage by no more than 10% compared to the previous week.",
+      "benefits": {
+        "title": "Why it matters",
+        "injury": "Reduces risk of overuse injuries",
+        "adaptation": "Allows your body time to adapt",
+        "consistency": "Promotes consistent, sustainable training"
+      },
+      "tips": {
+        "title": "Tips",
+        "tip1": "Track your weekly totals consistently",
+        "tip2": "Include rest weeks every 3-4 weeks",
+        "tip3": "Listen to your body - take extra rest if needed"
+      }
+    },
+    "plannedRun": {
+      "title": "Check Planned Run",
+      "placeholder": "Planned distance (km)",
+      "check": "Check",
+      "safe": "This run is within your limit",
+      "wouldExceed": "This run would exceed your weekly cap by {excess} km",
+      "suggestion": "Consider running {safe} km or less"
+    }
+  },
+  "safetyAlerts": {
+    "title": "Safety Alerts",
+    "noAlerts": "No active safety alerts - your training load is within safe ranges.",
+    "activeAlerts": "{count} Active Alert",
+    "activeAlertsPlural": "{count} Active Alerts",
+    "critical": "Critical",
+    "criticalCount": "{count} Critical",
+    "showMore": "Show {count} more alert",
+    "showMorePlural": "Show {count} more alerts",
+    "showLess": "Show less",
+    "acknowledge": "Got it",
+    "acknowledging": "Acknowledging...",
+    "dismiss": "Dismiss",
+    "dismissing": "Dismissing...",
+    "recommendation": "Recommendation",
+    "types": {
+      "acwr_spike": "Training Load Spike",
+      "high_monotony": "High Monotony",
+      "high_strain": "High Strain",
+      "acute_chronic_ratio": "ACWR Warning",
+      "consecutive_hard": "Consecutive Hard Days",
+      "insufficient_recovery": "Insufficient Recovery"
+    },
+    "severity": {
+      "info": "Information",
+      "moderate": "Warning",
+      "critical": "Critical"
+    },
+    "metrics": {
+      "currentWeekLoad": "Current Week Load",
+      "previousWeekLoad": "Previous Week Load",
+      "changePct": "Change",
+      "monotony": "Monotony",
+      "strain": "Strain",
+      "meanLoad": "Mean Load",
+      "stdDev": "Std Dev",
+      "totalLoad": "Total Load"
+    }
+  },
+  "charts": {
+    "touchHint": {
+      "title": "Tap to explore",
+      "description": "Tap to pin values, swipe to scrub timeline, pinch to zoom",
+      "dismiss": "Got it"
+    },
+    "zoom": {
+      "reset": "Reset",
+      "pinchToZoom": "Pinch to zoom"
+    },
+    "navigation": {
+      "ariaLabel": "Interactive chart navigation area",
+      "ariaRoleDescription": "Interactive chart. Use arrow keys to navigate data points.",
+      "cleared": "Chart navigation cleared",
+      "dataPoint": "Data point {index} of {total}, {percent}% through chart"
+    }
   }
 }

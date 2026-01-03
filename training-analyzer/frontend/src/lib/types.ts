@@ -1571,3 +1571,122 @@ export const HRV_TREND_COLORS: Record<HRVTrendDirection, {
     text: 'text-gray-500',
   },
 };
+
+// ============================================
+// Safety Alert Types (ACWR Spike Detection)
+// ============================================
+
+export type AlertSeverity = 'info' | 'moderate' | 'critical';
+
+export type AlertType =
+  | 'acwr_spike'
+  | 'high_monotony'
+  | 'high_strain'
+  | 'acute_chronic_ratio'
+  | 'consecutive_hard'
+  | 'insufficient_recovery';
+
+export type AlertStatus = 'active' | 'acknowledged' | 'resolved' | 'dismissed';
+
+export interface SafetyAlert {
+  id: string;
+  alertType: AlertType;
+  severity: AlertSeverity;
+  status: AlertStatus;
+  title: string;
+  message: string;
+  recommendation: string;
+  metrics: Record<string, number | string>;
+  createdAt: string;
+  acknowledgedAt: string | null;
+  weekStart: string | null;
+}
+
+export interface SafetyAlertsResponse {
+  alerts: SafetyAlert[];
+  total: number;
+  activeCount: number;
+  criticalCount: number;
+}
+
+export interface AcknowledgeAlertResponse {
+  success: boolean;
+  alertId: string;
+  newStatus: string;
+}
+
+export interface SpikeAnalysis {
+  currentWeekStart: string;
+  previousWeekStart: string;
+  currentWeekLoad: number;
+  previousWeekLoad: number;
+  changePct: number;
+  spikeDetected: boolean;
+  severity: AlertSeverity | null;
+}
+
+export interface MonotonyStrainAnalysis {
+  weekStart: string;
+  weekEnd: string;
+  dailyLoads: number[];
+  totalLoad: number;
+  meanLoad: number;
+  stdDev: number;
+  monotony: number;
+  strain: number;
+  monotonyRisk: AlertSeverity;
+  strainRisk: AlertSeverity;
+}
+
+export interface LoadAnalysisData {
+  analysisDate: string;
+  currentWeekLoad: number;
+  previousWeekLoad: number;
+  spikeResult: SpikeAnalysis;
+  monotonyStrain: MonotonyStrainAnalysis | null;
+  alerts: SafetyAlert[];
+  overallRisk: AlertSeverity;
+  riskFactors: string[];
+  recommendations: string[];
+}
+
+// Safety alert severity colors
+export const SAFETY_ALERT_COLORS: Record<AlertSeverity, {
+  bg: string;
+  bgLight: string;
+  text: string;
+  border: string;
+  icon: string;
+}> = {
+  info: {
+    bg: 'bg-blue-500',
+    bgLight: 'bg-blue-500/10',
+    text: 'text-blue-400',
+    border: 'border-blue-500/30',
+    icon: 'text-blue-400',
+  },
+  moderate: {
+    bg: 'bg-yellow-500',
+    bgLight: 'bg-yellow-500/10',
+    text: 'text-yellow-400',
+    border: 'border-yellow-500/30',
+    icon: 'text-yellow-400',
+  },
+  critical: {
+    bg: 'bg-red-500',
+    bgLight: 'bg-red-500/10',
+    text: 'text-red-400',
+    border: 'border-red-500/30',
+    icon: 'text-red-400',
+  },
+};
+
+// Alert type display names
+export const ALERT_TYPE_NAMES: Record<AlertType, string> = {
+  acwr_spike: 'Training Load Spike',
+  high_monotony: 'High Monotony',
+  high_strain: 'High Strain',
+  acute_chronic_ratio: 'ACWR Warning',
+  consecutive_hard: 'Consecutive Hard Days',
+  insufficient_recovery: 'Insufficient Recovery',
+};

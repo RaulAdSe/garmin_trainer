@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type {
   TouchState,
   PinnedTooltip,
@@ -18,6 +18,18 @@ const DEFAULT_CONFIG: Required<TouchChartConfig> = {
   minZoom: 0.1, // 10% of total range minimum
   maxZoom: 1.0, // 100% of total range maximum
   touchMoveDebounce: 16, // ~60fps
+};
+
+// Haptic feedback for supported devices
+const triggerHapticFeedback = (type: 'light' | 'medium' | 'heavy' = 'light') => {
+  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+    const patterns = {
+      light: [5],
+      medium: [10],
+      heavy: [20],
+    };
+    navigator.vibrate(patterns[type]);
+  }
 };
 
 const INITIAL_TOUCH_STATE: TouchState = {
@@ -59,14 +71,26 @@ function getTouchCenter(touch1: React.Touch, touch2: React.Touch): { x: number; 
 /**
  * Hook for managing touch interactions on Recharts components
  * Supports tap-to-pin tooltips, swipe scrubbing, and pinch-to-zoom
+ *
+ * @param dataLength - Total number of data points
+ * @param fullTimeRange - Full time range of the data
+ * @param config - Configuration options
+ * @param hintStorageKey - LocalStorage key for hint dismissal
+ * @param syncedIndex - External active index for synced charts
+ * @param onSyncedIndexChange - Callback when index changes for sync
  */
 export function useTouchChart(
   dataLength: number,
   fullTimeRange: TimeRange,
   config: TouchChartConfig = {},
-  hintStorageKey = 'touch-chart-hint-dismissed'
+  hintStorageKey = 'touch-chart-hint-dismissed',
+  syncedIndex?: number | null,
+  onSyncedIndexChange?: (index: number | null) => void
 ): UseTouchChartReturn {
   const mergedConfig = { ...DEFAULT_CONFIG, ...config };
+
+  // Determine if we're in synced mode
+  const isSynced = syncedIndex !== undefined && onSyncedIndexChange !== undefined;
 
   // State
   const [touchState, setTouchState] = useState<TouchState>(INITIAL_TOUCH_STATE);
@@ -75,6 +99,7 @@ export function useTouchChart(
   const [timeRange, setTimeRange] = useState<TimeRange | null>(null);
   const [scrubIndex, setScrubIndex] = useState<number | null>(null);
   const [showHint, setShowHint] = useState(false);
+  const [internalActiveIndex, setInternalActiveIndex] = useState<number | null>(null);
 
   // Refs for tracking gesture state
   const touchStartTime = useRef<number>(0);
@@ -82,6 +107,18 @@ export function useTouchChart(
   const containerRef = useRef<DOMRect | null>(null);
   const lastMoveTime = useRef<number>(0);
   const initialTimeRange = useRef<TimeRange | null>(null);
+
+  // Use synced index if provided, otherwise use internal state
+  const activeIndex = isSynced ? syncedIndex : internalActiveIndex;
+
+  // Function to update active index (handles both synced and non-synced modes)
+  const setActiveIndex = useCallback((index: number | null) => {
+    if (isSynced && onSyncedIndexChange) {
+      onSyncedIndexChange(index);
+    } else {
+      setInternalActiveIndex(index);
+    }
+  }, [isSynced, onSyncedIndexChange]);
 
   // Check localStorage for hint dismissal on mount
   useEffect(() => {
@@ -110,14 +147,19 @@ export function useTouchChart(
   const pinTooltip = useCallback((dataIndex: number, x: number, y: number) => {
     if (!mergedConfig.enableTapToPin) return;
     setPinnedTooltip({ dataIndex, x, y });
-  }, [mergedConfig.enableTapToPin]);
+    setActiveIndex(dataIndex);
+    // Haptic feedback on pin
+    triggerHapticFeedback('medium');
+  }, [mergedConfig.enableTapToPin, setActiveIndex]);
 
   /**
    * Unpin current tooltip
    */
   const unpinTooltip = useCallback(() => {
     setPinnedTooltip(null);
-  }, []);
+    setActiveIndex(null);
+    triggerHapticFeedback('light');
+  }, [setActiveIndex]);
 
   /**
    * Reset zoom to full range
@@ -241,6 +283,7 @@ export function useTouchChart(
           // Calculate data index from X position
           const index = xToDataIndex(x, rect.width);
           setScrubIndex(index);
+          setActiveIndex(index);
 
           // Unpin tooltip during scrub
           if (pinnedTooltip) {
@@ -347,6 +390,10 @@ export function useTouchChart(
 
     // Reset scrub index on touch end
     setScrubIndex(null);
+    // Clear active index if we were scrubbing (not pinned)
+    if (!pinnedTooltip) {
+      setActiveIndex(null);
+    }
 
     // Check remaining touches
     if (e.touches.length === 0) {
@@ -406,6 +453,9 @@ export function useTouchChart(
     dismissHint,
     scrubIndex,
     setZoomRange,
+    activeIndex,
+    setActiveIndex,
+    isSynced,
   };
 }
 

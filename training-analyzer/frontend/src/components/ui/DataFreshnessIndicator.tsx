@@ -15,18 +15,24 @@ export interface DataFreshnessIndicatorProps {
   isRefreshing?: boolean;
   /** Whether the user has credentials to refresh */
   canRefresh?: boolean;
-  /** Hours after which data is considered stale (default: 72 = 3 days) */
+  /** Hours after which data is considered stale/yellow (default: 72 = 3 days) */
   staleThresholdHours?: number;
+  /** Hours after which data is considered critical/red (default: 168 = 7 days) */
+  criticalThresholdHours?: number;
   /** Additional CSS classes */
   className?: string;
   /** Show in compact mode (icon only when not stale) */
   compact?: boolean;
+  /** Show pull-to-refresh hint on mobile */
+  showPullHint?: boolean;
 }
 
 /**
  * Data freshness indicator component that shows when data was last synced
  * and provides a refresh button with loading state and stale data warning.
  */
+export type FreshnessStatus = 'fresh' | 'stale' | 'critical' | 'never';
+
 export function DataFreshnessIndicator({
   lastSyncTime,
   relativeTimeString,
@@ -34,37 +40,61 @@ export function DataFreshnessIndicator({
   isRefreshing = false,
   canRefresh = true,
   staleThresholdHours = 72,
+  criticalThresholdHours = 168,
   className,
   compact = false,
+  showPullHint = false,
 }: DataFreshnessIndicatorProps) {
   const t = useTranslations('dataFreshness');
 
-  // Calculate if data is stale
-  const isStale = lastSyncTime
-    ? Date.now() - lastSyncTime.getTime() > staleThresholdHours * 60 * 60 * 1000
-    : true;
+  // Calculate freshness status
+  const getFreshnessStatus = (): FreshnessStatus => {
+    if (!lastSyncTime) return 'never';
 
-  // Determine status color
-  const statusColor = isStale
+    const hoursSinceSync = (Date.now() - lastSyncTime.getTime()) / (60 * 60 * 1000);
+
+    if (hoursSinceSync >= criticalThresholdHours) return 'critical';
+    if (hoursSinceSync >= staleThresholdHours) return 'stale';
+    return 'fresh';
+  };
+
+  const freshnessStatus = getFreshnessStatus();
+  const isStale = freshnessStatus === 'stale' || freshnessStatus === 'critical';
+  const isCritical = freshnessStatus === 'critical' || freshnessStatus === 'never';
+
+  // Determine status color - yellow for stale (3 days), red for critical (7 days)
+  const statusColor = isCritical
+    ? 'text-red-400'
+    : isStale
     ? 'text-amber-400'
-    : 'text-gray-400';
+    : 'text-gray-300'; // Changed from text-gray-400 for better contrast
 
   const tooltipContent = (
     <div className="max-w-xs space-y-1">
-      <p className="font-medium">{t('lastSync')}</p>
-      <p className="text-gray-300">
+      <p className="font-medium text-gray-100">{t('lastSync')}</p>
+      <p className="text-gray-200">
         {lastSyncTime
           ? lastSyncTime.toLocaleString()
           : t('neverSynced')}
       </p>
-      {isStale && (
+      {isCritical && (
+        <p className="text-red-300 text-xs mt-2">
+          {t('criticalWarning', { hours: criticalThresholdHours })}
+        </p>
+      )}
+      {isStale && !isCritical && (
         <p className="text-amber-300 text-xs mt-2">
           {t('staleWarning', { hours: staleThresholdHours })}
         </p>
       )}
       {!canRefresh && (
-        <p className="text-gray-400 text-xs mt-2">
+        <p className="text-gray-300 text-xs mt-2">
           {t('connectToSync')}
+        </p>
+      )}
+      {showPullHint && canRefresh && (
+        <p className="text-teal-300 text-xs mt-2 md:hidden">
+          {t('pullToRefreshHint')}
         </p>
       )}
     </div>
@@ -107,14 +137,26 @@ export function DataFreshnessIndicator({
           className={cn(
             'inline-flex items-center gap-1.5',
             statusColor,
-            isStale && 'animate-pulse-subtle'
+            isCritical && 'animate-pulse',
+            isStale && !isCritical && 'animate-pulse-subtle'
           )}
+          role="status"
+          aria-live="polite"
+          aria-label={
+            isCritical
+              ? t('criticalAriaLabel', { time: relativeTimeString })
+              : isStale
+              ? t('staleAriaLabel', { time: relativeTimeString })
+              : t('freshAriaLabel', { time: relativeTimeString })
+          }
         >
-          {/* Clock or warning icon */}
-          {isStale ? (
-            <WarningIcon className="w-3.5 h-3.5" />
+          {/* Clock, warning, or critical icon */}
+          {isCritical ? (
+            <CriticalIcon className="w-3.5 h-3.5" aria-hidden="true" />
+          ) : isStale ? (
+            <WarningIcon className="w-3.5 h-3.5" aria-hidden="true" />
           ) : (
-            <ClockIcon className="w-3.5 h-3.5" />
+            <ClockIcon className="w-3.5 h-3.5" aria-hidden="true" />
           )}
           <span className="text-xs">
             {t('updated')} {relativeTimeString}
@@ -192,6 +234,24 @@ function WarningIcon({ className }: { className?: string }) {
         strokeLinecap="round"
         strokeLinejoin="round"
         d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+      />
+    </svg>
+  );
+}
+
+function CriticalIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
       />
     </svg>
   );

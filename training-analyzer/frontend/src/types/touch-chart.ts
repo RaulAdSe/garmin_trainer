@@ -109,6 +109,30 @@ export interface UseTouchChartReturn {
   scrubIndex: number | null;
   /** Set zoom level programmatically */
   setZoomRange: (range: TimeRange) => void;
+  /** Current active index (from scrub or pinned tooltip) for syncing */
+  activeIndex: number | null;
+  /** Set active index externally (for synced charts) */
+  setActiveIndex: (index: number | null) => void;
+  /** Whether the chart is in synced mode */
+  isSynced: boolean;
+}
+
+/**
+ * Context for synchronizing multiple charts
+ */
+export interface ChartSyncContextValue {
+  /** Current active index across all synced charts */
+  activeIndex: number | null;
+  /** Set the active index (called when any chart changes) */
+  setActiveIndex: (index: number | null) => void;
+  /** Current time range for synced zoom */
+  timeRange: TimeRange | null;
+  /** Set time range (called when any chart zooms) */
+  setTimeRange: (range: TimeRange | null) => void;
+  /** Register a chart for sync */
+  registerChart: (id: string) => void;
+  /** Unregister a chart */
+  unregisterChart: (id: string) => void;
 }
 
 /**
