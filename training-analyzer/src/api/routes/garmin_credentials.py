@@ -140,8 +140,8 @@ class SchedulerStatusResponse(BaseModel):
 @router.post("/credentials", response_model=SaveCredentialsResponse)
 @limiter.limit(RATE_LIMIT_CREDENTIALS_SAVE)
 async def save_garmin_credentials(
-    request_obj: Request,
-    request: SaveCredentialsRequest,
+    request: Request,
+    credentials: SaveCredentialsRequest,
     current_user: CurrentUser = Depends(get_current_user),
     training_db: TrainingDatabase = Depends(get_training_db),
 ):
@@ -170,7 +170,7 @@ async def save_garmin_credentials(
 
     # Validate credentials by attempting login
     is_valid, display_name, error = sync_service.validate_credentials(
-        request.email, request.password
+        credentials.email, credentials.password
     )
 
     if not is_valid:
@@ -192,8 +192,8 @@ async def save_garmin_credentials(
     try:
         repo.save_credentials(
             user_id=user_id,
-            email=request.email,
-            password=request.password,
+            email=credentials.email,
+            password=credentials.password,
             garmin_display_name=display_name,
         )
 
@@ -428,8 +428,8 @@ async def get_sync_history(
 @router.post("/sync/trigger", response_model=TriggerSyncResponse)
 @limiter.limit(RATE_LIMIT_SYNC_TRIGGER)
 async def trigger_manual_sync(
-    request_obj: Request,
-    request: TriggerSyncRequest = None,
+    request: Request,
+    sync_request: TriggerSyncRequest = None,
     current_user: CurrentUser = Depends(get_current_user),
     training_db: TrainingDatabase = Depends(get_training_db),
 ):
@@ -447,7 +447,7 @@ async def trigger_manual_sync(
     user_id = current_user.id
     scheduler = get_scheduler(training_db)
 
-    days = request.days if request else None
+    days = sync_request.days if sync_request else None
 
     # Audit log: sync trigger attempt
     logger.info(

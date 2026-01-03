@@ -166,8 +166,8 @@ def get_chat_service_instance(
 @router.post("", response_model=ChatMessageResponse)
 @limiter.limit(RATE_LIMIT_AI)
 async def send_message(
-    request_obj: Request,
-    request: ChatMessageRequest,
+    request: Request,
+    chat_request: ChatMessageRequest,
     use_agentic: bool = Query(
         False,
         description="Use agentic LangChain mode with tool calling for dynamic data access",
@@ -216,10 +216,10 @@ async def send_message(
             training_db=training_db,
         )
 
-    logger.info(f"[chat] Processing message: {request.message[:50]}... (agentic={use_agentic})")
+    logger.info(f"[chat] Processing message: {chat_request.message[:50]}... (agentic={use_agentic})")
 
     user_id = current_user.id
-    session_id = request.conversation_id or str(uuid.uuid4())
+    session_id = chat_request.conversation_id or str(uuid.uuid4())
 
     # =========================================================================
     # CONSENT CHECK: Verify user has consented to LLM data sharing
@@ -235,7 +235,7 @@ async def send_message(
     # PROMPT SANITIZATION: Detect and log potential injection patterns
     # =========================================================================
     sanitization_result = sanitize_prompt(
-        message=request.message,
+        message=chat_request.message,
         user_id=user_id,
         session_id=session_id,
         log_suspicious=True,
@@ -262,10 +262,10 @@ async def send_message(
 
             # Process through the agentic agent
             result = await agent.chat(
-                message=request.message,
+                message=chat_request.message,
                 chat_history=[],  # TODO: Load from conversation history if needed
                 session_id=session_id,
-                language=request.language or "en",
+                language=chat_request.language or "en",
             )
 
             # Log token usage to ai_usage_logs
@@ -336,9 +336,9 @@ async def send_message(
 
         # Create internal request
         chat_request = ChatRequest(
-            message=request.message,
-            conversation_id=request.conversation_id,
-            language=request.language,
+            message=chat_request.message,
+            conversation_id=chat_request.conversation_id,
+            language=chat_request.language,
         )
 
         # Process through service
@@ -372,8 +372,8 @@ async def send_message(
 @router.post("/stream")
 @limiter.limit(RATE_LIMIT_AI)
 async def send_message_stream(
-    request_obj: Request,
-    request: ChatMessageRequest,
+    request: Request,
+    chat_request: ChatMessageRequest,
     current_user: CurrentUser = Depends(require_quota("chat")),
     coach_service=Depends(get_coach_service),
     training_db=Depends(get_training_db),
@@ -411,10 +411,10 @@ async def send_message_stream(
     Returns:
         StreamingResponse with SSE events
     """
-    logger.info(f"[chat/stream] Processing message: {request.message[:50]}...")
+    logger.info(f"[chat/stream] Processing message: {chat_request.message[:50]}...")
 
     user_id = current_user.id
-    session_id = request.conversation_id or str(uuid.uuid4())
+    session_id = chat_request.conversation_id or str(uuid.uuid4())
 
     # =========================================================================
     # CONSENT CHECK: Verify user has consented to LLM data sharing
@@ -430,7 +430,7 @@ async def send_message_stream(
     # PROMPT SANITIZATION: Detect and log potential injection patterns
     # =========================================================================
     sanitization_result = sanitize_prompt(
-        message=request.message,
+        message=chat_request.message,
         user_id=user_id,
         session_id=session_id,
         log_suspicious=True,
@@ -459,10 +459,10 @@ async def send_message_stream(
 
             # Stream events from the agent
             async for event in agent.chat_stream(
-                message=request.message,
+                message=chat_request.message,
                 chat_history=[],  # TODO: Load from conversation history if needed
                 session_id=session_id,
-                language=request.language or "en",
+                language=chat_request.language or "en",
             ):
                 # Convert StreamEvent to SSE format
                 event_data = event.to_dict()
