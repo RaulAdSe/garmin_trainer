@@ -207,19 +207,27 @@ export function ComparisonSelector({
 
         {/* Clear button or chevron */}
         {selectedWorkout ? (
-          <button
-            type="button"
+          <span
+            role="button"
+            tabIndex={0}
             onClick={(e) => {
               e.stopPropagation();
               onClear();
             }}
-            className="p-0.5 hover:bg-gray-700 rounded transition-colors"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.stopPropagation();
+                e.preventDefault();
+                onClear();
+              }
+            }}
+            className="p-0.5 hover:bg-gray-700 rounded transition-colors cursor-pointer"
             aria-label={t('selector.clear')}
           >
             <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
-          </button>
+          </span>
         ) : (
           <svg
             className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}

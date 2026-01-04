@@ -113,7 +113,7 @@ class ComparisonService:
             return []
 
         # Get all user activities
-        all_activities = self._training_db.get_all_activity_metrics(user_id)
+        all_activities = self._training_db.get_all_activity_metrics()
         if not all_activities:
             return []
 

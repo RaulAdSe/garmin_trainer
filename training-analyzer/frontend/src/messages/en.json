@@ -1580,6 +1580,40 @@
       "dataPoint": "Data point {index} of {total}, {percent}% through chart"
     }
   },
+  "comparison": {
+    "selector": {
+      "placeholder": "Select a workout to compare",
+      "clear": "Clear selection",
+      "quickSelections": "Quick Selections",
+      "searchPlaceholder": "Search workouts...",
+      "normalizeBy": "Normalize By",
+      "noResults": "No workouts match your search",
+      "noWorkouts": "No comparable workouts available"
+    },
+    "quickSelect": {
+      "lastSimilar": "Last Similar",
+      "bestPace": "Best Pace",
+      "best5k": "Best 5K",
+      "best10k": "Best 10K",
+      "bestHalf": "Best Half Marathon",
+      "bestMarathon": "Best Marathon"
+    },
+    "normalizeMode": {
+      "percentage": "Percentage",
+      "time": "Time",
+      "distance": "Distance"
+    },
+    "metrics": {
+      "heartRate": "Heart Rate",
+      "pace": "Pace",
+      "power": "Power",
+      "cadence": "Cadence",
+      "elevation": "Elevation"
+    },
+    "tooltip": {
+      "ofWorkout": "of workout"
+    }
+  },
   "recovery": {
     "title": "Recovery",
     "noData": "No recovery data available",
